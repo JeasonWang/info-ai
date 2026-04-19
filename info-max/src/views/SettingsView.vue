@@ -7,6 +7,7 @@ import {
   getAdminCategories,
   getAdminChannels,
   rebuildEvents,
+  triggerCrawl,
   updateCategory,
   updateChannel,
 } from '@/services/api'
@@ -17,6 +18,7 @@ const channels = ref<Channel[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const rebuilding = ref(false)
+const crawlingChannelCode = ref('')
 const message = ref('')
 const error = ref('')
 const editingCategoryId = ref<number | null>(null)
@@ -182,6 +184,21 @@ async function handleRebuildEvents() {
     error.value = err instanceof Error ? err.message : '事件重建失败'
   } finally {
     rebuilding.value = false
+  }
+}
+
+async function handleTriggerCrawl(channelCode: string) {
+  crawlingChannelCode.value = channelCode
+  message.value = ''
+  error.value = ''
+  try {
+    const result = await triggerCrawl(channelCode)
+    message.value =
+      `${result.channel} 抓取完成：原始 ${result.raw_count} 条，清洗后 ${result.cleaned_count} 条，详情补全 ${result.detail_fetched} 条`
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '手动抓取失败'
+  } finally {
+    crawlingChannelCode.value = ''
   }
 }
 
@@ -409,6 +426,15 @@ onMounted(loadData)
                 <span>{{ channel.is_active === 1 ? '已启用' : '已停用' }}</span>
               </div>
               <div class="info-card__actions">
+                <button
+                  class="button button--primary"
+                  type="button"
+                  :data-testid="`trigger-crawl-${channel.code}`"
+                  :disabled="crawlingChannelCode === channel.code"
+                  @click="handleTriggerCrawl(channel.code)"
+                >
+                  {{ crawlingChannelCode === channel.code ? '抓取中...' : '立即抓取' }}
+                </button>
                 <button class="button button--ghost" @click="startEditChannel(channel)">编辑</button>
               </div>
             </template>
