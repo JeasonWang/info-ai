@@ -10,7 +10,17 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from database import get_session, Category, Channel, Info
+from database import (
+    get_session,
+    Category,
+    Channel,
+    Event,
+    EventItemLink,
+    EventSummarySnapshot,
+    EventTimelineEntry,
+    Info,
+)
+from services import rebuild_events
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +81,21 @@ def list_categories():
         }
     finally:
         session.close()
+
+
+@app.get("/api/event-categories")
+def list_event_categories():
+    return {
+        "code": 0,
+        "message": "success",
+        "data": [
+            {"code": "all", "name": "全网", "display_order": 0},
+            {"code": "tech", "name": "科技", "display_order": 1},
+            {"code": "economy", "name": "财经", "display_order": 2},
+            {"code": "sports", "name": "体育", "display_order": 3},
+            {"code": "international", "name": "国际", "display_order": 4},
+        ],
+    }
 
 
 @app.get("/api/channels")
@@ -292,6 +317,66 @@ def list_infos(
         session.close()
 
 
+@app.get("/api/events")
+def list_events(
+    category_code: str = Query("all", description="按分类编码筛选"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=50, description="每页数量"),
+):
+    session = get_session()
+    try:
+        query = session.query(Event)
+        if category_code != "all":
+            query = query.join(Category, Category.id == Event.primary_category_id).filter(Category.code == category_code)
+
+        total = query.count()
+        items = (
+            query.order_by(Event.composite_score.desc(), Event.last_updated_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        def build_badges(event_id: int) -> list[str]:
+            rows = (
+                session.query(Channel.name)
+                .join(Info, Info.channel_id == Channel.id)
+                .join(EventItemLink, EventItemLink.item_id == Info.id)
+                .filter(EventItemLink.event_id == event_id)
+                .limit(3)
+                .all()
+            )
+            return [name for (name,) in rows]
+
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "items": [
+                    {
+                        "id": item.id,
+                        "title": item.title,
+                        "one_line_summary": item.one_line_summary,
+                        "primary_category": {"code": item.category.code, "name": item.category.name},
+                        "heat_score": item.heat_score,
+                        "freshness_score": item.freshness_score,
+                        "composite_score": item.composite_score,
+                        "last_updated_at": item.last_updated_at.strftime("%Y-%m-%d %H:%M:%S") if item.last_updated_at else None,
+                        "source_count": item.source_count,
+                        "source_badges": build_badges(item.id),
+                        "new_update_count": max(0, item.source_count - 1),
+                    }
+                    for item in items
+                ],
+            },
+        }
+    finally:
+        session.close()
+
+
 @app.get("/api/infos/{info_id}")
 def get_info(info_id: int):
     """
@@ -309,6 +394,75 @@ def get_info(info_id: int):
             "code": 0,
             "message": "success",
             "data": info.to_dict(),
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/events/{event_id}")
+def get_event_detail(event_id: int):
+    session = get_session()
+    try:
+        event = session.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="事件不存在")
+
+        summaries = {
+            item.summary_type: item.content
+            for item in session.query(EventSummarySnapshot).filter(EventSummarySnapshot.event_id == event_id).all()
+        }
+        timeline = (
+            session.query(EventTimelineEntry)
+            .filter(EventTimelineEntry.event_id == event_id)
+            .order_by(EventTimelineEntry.occurred_at.asc())
+            .all()
+        )
+        source_rows = (
+            session.query(EventItemLink, Info, Channel)
+            .join(Info, Info.id == EventItemLink.item_id)
+            .join(Channel, Channel.id == Info.channel_id)
+            .filter(EventItemLink.event_id == event_id)
+            .order_by(EventItemLink.weight.desc())
+            .all()
+        )
+
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "event": {
+                    "id": event.id,
+                    "title": event.title,
+                    "one_line_summary": event.one_line_summary,
+                    "primary_category": {"code": event.category.code, "name": event.category.name},
+                    "heat_score": event.heat_score,
+                    "last_updated_at": event.last_updated_at.strftime("%Y-%m-%d %H:%M:%S") if event.last_updated_at else None,
+                },
+                "timeline": [
+                    {
+                        "id": item.id,
+                        "occurred_at": item.occurred_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        "summary": item.summary,
+                        "confidence": item.confidence,
+                    }
+                    for item in timeline
+                ],
+                "summaries": summaries,
+                "source_views": [
+                    {"channel_name": channel.name, "summary": info.content[:120]}
+                    for _, info, channel in source_rows[:3]
+                ],
+                "representative_sources": [
+                    {
+                        "info_id": info.id,
+                        "title": info.title,
+                        "channel_name": channel.name,
+                        "source_url": info.source_url,
+                        "event_time": info.event_time.strftime("%Y-%m-%d %H:%M:%S") if info.event_time else None,
+                    }
+                    for _, info, channel in source_rows[:6]
+                ],
+            },
         }
     finally:
         session.close()
