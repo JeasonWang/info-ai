@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 
 from database import (
     get_session,
@@ -320,6 +321,7 @@ def list_infos(
 @app.get("/api/events")
 def list_events(
     category_code: str = Query("all", description="按分类编码筛选"),
+    keyword: Optional[str] = Query(None, description="按关键词筛选事件"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=50, description="每页数量"),
 ):
@@ -328,6 +330,13 @@ def list_events(
         query = session.query(Event)
         if category_code != "all":
             query = query.join(Category, Category.id == Event.primary_category_id).filter(Category.code == category_code)
+        if keyword:
+            query = query.filter(
+                or_(
+                    Event.title.contains(keyword),
+                    Event.one_line_summary.contains(keyword),
+                )
+            )
 
         total = query.count()
         items = (

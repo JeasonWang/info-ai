@@ -100,3 +100,16 @@ def test_get_event_returns_timeline_and_summaries(session):
     assert len(payload["timeline"]) >= 1
     assert payload["summaries"]["why_it_matters"]
     assert len(payload["representative_sources"]) >= 1
+
+
+def test_list_events_supports_keyword_filtering(session):
+    seed_event_data(session)
+    rebuild_events(session)
+    client = TestClient(app)
+
+    response = client.get("/api/events?category_code=all&keyword=OpenAI&page=1&page_size=10")
+    assert response.status_code == 200
+
+    payload = response.json()["data"]
+    assert len(payload["items"]) == 1
+    assert "OpenAI" in payload["items"][0]["title"]
