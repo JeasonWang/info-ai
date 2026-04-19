@@ -1,0 +1,7 @@
+services:
+  info-max:
+    image: info-max:latest
+    container_name: info-max
+    restart: unless-stopped
+    ports:
+      - "80:80"
