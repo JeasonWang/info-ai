@@ -5,6 +5,7 @@ import type {
   Channel,
   ChannelPayload,
   CrawlTriggerResult,
+  EventRebuildResult,
   EventDetail,
   EventCategory,
   EventPage,
@@ -144,6 +145,13 @@ export async function getStats() {
 export async function triggerCrawl(channelCode: string) {
   const query = buildQuery({ channel_code: channelCode })
   const response = await request<ApiResponse<CrawlTriggerResult>>(`/api/crawl/trigger${query}`, {
+    method: 'POST',
+  })
+  return response.data
+}
+
+export async function rebuildEvents() {
+  const response = await request<ApiResponse<EventRebuildResult>>('/api/admin/rebuild-events', {
     method: 'POST',
   })
   return response.data

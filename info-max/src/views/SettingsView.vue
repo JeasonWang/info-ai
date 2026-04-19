@@ -6,6 +6,7 @@ import {
   createChannel,
   getAdminCategories,
   getAdminChannels,
+  rebuildEvents,
   updateCategory,
   updateChannel,
 } from '@/services/api'
@@ -15,6 +16,7 @@ const categories = ref<Category[]>([])
 const channels = ref<Channel[]>([])
 const loading = ref(false)
 const saving = ref(false)
+const rebuilding = ref(false)
 const message = ref('')
 const error = ref('')
 const editingCategoryId = ref<number | null>(null)
@@ -59,6 +61,7 @@ async function loadData() {
     const [categoryData, channelData] = await Promise.all([getAdminCategories(), getAdminChannels()])
     categories.value = categoryData
     channels.value = channelData
+
     if (!channelForm.category_id && categoryData.length > 0) {
       channelForm.category_id = categoryData[0].id
     }
@@ -81,6 +84,7 @@ function resetChannelForm() {
   channelForm.base_url = ''
   channelForm.crawl_interval = 60
   channelForm.is_active = 1
+
   if (categories.value.length > 0) {
     channelForm.category_id = categories.value[0].id
   }
@@ -167,6 +171,20 @@ async function handleUpdateChannel(id: number) {
   }
 }
 
+async function handleRebuildEvents() {
+  rebuilding.value = true
+  message.value = ''
+  error.value = ''
+  try {
+    const result = await rebuildEvents()
+    message.value = `事件已重建，共生成 ${result.event_count} 个事件`
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '事件重建失败'
+  } finally {
+    rebuilding.value = false
+  }
+}
+
 onMounted(loadData)
 </script>
 
@@ -186,6 +204,27 @@ onMounted(loadData)
 
     <div v-if="loading" class="panel empty-state">正在加载配置...</div>
     <template v-else>
+      <section class="panel">
+        <div class="panel__header">
+          <div>
+            <p class="panel__eyebrow">Event</p>
+            <h2>重建事件流</h2>
+          </div>
+        </div>
+        <p class="panel__meta">当抓取源有更新、规则有调整，或者你想刷新首页事件流时，可以手动触发一次事件重建。</p>
+        <div class="info-card__actions">
+          <button
+            class="button button--primary"
+            type="button"
+            data-testid="rebuild-events"
+            :disabled="rebuilding"
+            @click="handleRebuildEvents"
+          >
+            {{ rebuilding ? '正在重建...' : '立即重建事件' }}
+          </button>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel__header">
           <div>

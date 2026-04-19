@@ -137,6 +137,10 @@ export interface CrawlTriggerResult {
   detail_fetched: number
 }
 
+export interface EventRebuildResult {
+  event_count: number
+}
+
 export interface CategoryPayload {
   name: string
   code: string
