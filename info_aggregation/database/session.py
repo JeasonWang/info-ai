@@ -11,15 +11,25 @@ from .models import Base
 
 logger = logging.getLogger(__name__)
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    connect_args={"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {},
-)
+engine = None
+SessionFactory = None
+Session = None
 
-SessionFactory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-Session = scoped_session(SessionFactory)
+
+def configure_engine(database_url: str):
+    """Rebuild SQLAlchemy engine/session bindings for the given database URL."""
+    global engine, SessionFactory, Session
+    engine = create_engine(
+        database_url,
+        echo=False,
+        pool_pre_ping=True,
+        connect_args={"check_same_thread": False} if "sqlite" in database_url else {},
+    )
+    SessionFactory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    Session = scoped_session(SessionFactory)
+
+
+configure_engine(SQLALCHEMY_DATABASE_URL)
 
 
 def get_session():

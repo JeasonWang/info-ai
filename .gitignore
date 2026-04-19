@@ -8,6 +8,8 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.venv/
+.venvs/
 
 # Node
 node_modules/

@@ -3,7 +3,7 @@
 使用SQLAlchemy ORM定义渠道表、分类表、信息主表
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -140,3 +140,85 @@ class Info(Base):
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None,
         }
+
+
+class Event(Base):
+    """事件主表：面向前端输出的事件对象。"""
+
+    __tablename__ = "event"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件ID")
+    title = Column(String(200), nullable=False, comment="事件标题")
+    one_line_summary = Column(String(255), default="", comment="一句话看懂")
+    primary_category_id = Column(Integer, ForeignKey("category.id"), nullable=False, comment="主分类ID")
+    status = Column(String(20), default="active", comment="事件状态")
+    heat_score = Column(Integer, default=0, comment="热度分")
+    freshness_score = Column(Integer, default=0, comment="时效分")
+    composite_score = Column(Integer, default=0, comment="综合分")
+    source_count = Column(Integer, default=0, comment="来源数")
+    started_at = Column(DateTime, comment="事件开始时间")
+    last_updated_at = Column(DateTime, comment="事件最后更新时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    category = relationship("Category", lazy="joined")
+
+    __table_args__ = (
+        Index("idx_event_category_score", "primary_category_id", "composite_score", "last_updated_at"),
+        Index("idx_event_status_updated", "status", "last_updated_at"),
+    )
+
+
+class EventItemLink(Base):
+    """事件与内容项的关联表。"""
+
+    __tablename__ = "event_item_link"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="关联ID")
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False, comment="事件ID")
+    item_id = Column(Integer, ForeignKey("info.id"), nullable=False, comment="内容项ID")
+    role = Column(String(20), default="media", comment="内容角色")
+    is_primary = Column(Integer, default=0, comment="是否主来源")
+    weight = Column(Integer, default=0, comment="权重")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "item_id", name="uq_event_item"),
+        Index("idx_event_item_item_id", "item_id"),
+    )
+
+
+class EventTimelineEntry(Base):
+    """事件时间线节点表。"""
+
+    __tablename__ = "event_timeline_entry"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="时间线节点ID")
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False, comment="事件ID")
+    occurred_at = Column(DateTime, nullable=False, comment="发生时间")
+    summary = Column(String(255), nullable=False, comment="节点摘要")
+    source_item_id = Column(Integer, ForeignKey("info.id"), nullable=False, comment="来源内容项ID")
+    confidence = Column(Float, default=0.0, comment="置信度")
+    display_order = Column(Integer, default=0, comment="展示顺序")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_timeline_event_time", "event_id", "occurred_at"),
+    )
+
+
+class EventSummarySnapshot(Base):
+    """事件摘要快照表，用于保存不同类型的摘要。"""
+
+    __tablename__ = "event_summary_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="摘要快照ID")
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False, comment="事件ID")
+    summary_type = Column(String(30), nullable=False, comment="摘要类型")
+    content = Column(Text, default="", comment="摘要内容")
+    version = Column(Integer, default=1, comment="版本号")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_summary_lookup", "event_id", "summary_type", "version"),
+    )
