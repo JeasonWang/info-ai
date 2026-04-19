@@ -133,6 +133,19 @@ describe('SettingsView', () => {
         )
       }
 
+      if (url.endsWith('/api/admin/rebuild-events')) {
+        expect(init?.method).toBe('POST')
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: {
+              event_count: 21,
+            },
+          }),
+        )
+      }
+
       return new Response('not found', { status: 404 })
     })
 
@@ -157,6 +170,12 @@ describe('SettingsView', () => {
         method: 'POST',
       }),
     )
-    expect(wrapper.text()).toContain('36kr 抓取完成：原始 16 条，清洗后 9 条，详情补全 6 条')
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/rebuild-events'),
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    )
+    expect(wrapper.text()).toContain('36kr 抓取完成：原始 16 条，清洗后 9 条，详情补全 6 条；事件流已刷新，共生成 21 个事件')
   })
 })

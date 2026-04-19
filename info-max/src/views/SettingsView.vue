@@ -192,9 +192,10 @@ async function handleTriggerCrawl(channelCode: string) {
   message.value = ''
   error.value = ''
   try {
-    const result = await triggerCrawl(channelCode)
+    const crawlResult = await triggerCrawl(channelCode)
+    const rebuildResult = await rebuildEvents()
     message.value =
-      `${result.channel} 抓取完成：原始 ${result.raw_count} 条，清洗后 ${result.cleaned_count} 条，详情补全 ${result.detail_fetched} 条`
+      `${crawlResult.channel} 抓取完成：原始 ${crawlResult.raw_count} 条，清洗后 ${crawlResult.cleaned_count} 条，详情补全 ${crawlResult.detail_fetched} 条；事件流已刷新，共生成 ${rebuildResult.event_count} 个事件`
   } catch (err) {
     error.value = err instanceof Error ? err.message : '手动抓取失败'
   } finally {
@@ -211,7 +212,7 @@ onMounted(loadData)
       <div>
         <p class="panel__eyebrow">Admin</p>
         <h1>配置管理</h1>
-        <p class="panel__meta">管理分类和渠道配置，修改结果会直接影响前端筛选与定时爬取行为。</p>
+        <p class="panel__meta">管理分类和渠道配置，并在需要时手动触发抓取与事件重建。</p>
       </div>
       <RouterLink class="button button--ghost" to="/">返回首页</RouterLink>
     </div>
