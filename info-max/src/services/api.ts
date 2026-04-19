@@ -5,8 +5,12 @@ import type {
   Channel,
   ChannelPayload,
   CrawlTriggerResult,
+  EventDetail,
+  EventCategory,
+  EventPage,
   InfoItem,
   InfoPage,
+  ListEventParams,
   ListInfoParams,
   StatsData,
 } from '@/types'
@@ -36,7 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (!response.ok) {
-    throw new Error(`请求失败：${response.status} ${response.statusText}`)
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`)
   }
 
   return response.json() as Promise<T>
@@ -44,6 +48,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getCategories() {
   const response = await request<ApiResponse<Category[]>>('/api/categories')
+  return response.data
+}
+
+export async function getEventCategories() {
+  const response = await request<ApiResponse<EventCategory[]>>('/api/event-categories')
   return response.data
 }
 
@@ -107,6 +116,21 @@ export async function getInfos(params: ListInfoParams) {
   return response.data
 }
 
+export async function getEvents(params: ListEventParams) {
+  const query = buildQuery({
+    category_code: params.category_code ?? 'all',
+    page: params.page,
+    page_size: params.page_size,
+  })
+  const response = await request<ApiResponse<EventPage>>(`/api/events${query}`)
+  return response.data
+}
+
+export async function getEventById(id: number) {
+  const response = await request<ApiResponse<EventDetail>>(`/api/events/${id}`)
+  return response.data
+}
+
 export async function getInfoById(id: number) {
   const response = await request<ApiResponse<InfoItem>>(`/api/infos/${id}`)
   return response.data
@@ -119,11 +143,8 @@ export async function getStats() {
 
 export async function triggerCrawl(channelCode: string) {
   const query = buildQuery({ channel_code: channelCode })
-  const response = await request<ApiResponse<CrawlTriggerResult>>(
-    `/api/crawl/trigger${query}`,
-    {
-      method: 'POST',
-    },
-  )
+  const response = await request<ApiResponse<CrawlTriggerResult>>(`/api/crawl/trigger${query}`, {
+    method: 'POST',
+  })
   return response.data
 }

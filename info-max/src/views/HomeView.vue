@@ -1,183 +1,115 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import ChannelBoard from '@/components/ChannelBoard.vue'
-import FilterBar from '@/components/FilterBar.vue'
-import InfoList from '@/components/InfoList.vue'
-import { useFavorites } from '@/composables/useFavorites'
-import { getCategories, getChannels, getInfos } from '@/services/api'
-import type { Category, Channel, InfoPage } from '@/types'
+import EventCategoryTabs from '@/components/EventCategoryTabs.vue'
+import EventList from '@/components/EventList.vue'
+import { getEventCategories, getEvents } from '@/services/api'
+import type { EventCategory, EventPage } from '@/types'
 
-const categories = ref<Category[]>([])
-const channels = ref<Channel[]>([])
-const infoPage = ref<InfoPage>({
-  total: 0,
-  page: 1,
-  page_size: 20,
-  items: [],
-})
+const pageSize = 10
 const loading = ref(false)
 const error = ref('')
-const pageSize = 12
-const menuOpen = ref(false)
-const query = ref<{
-  categoryId?: number
-  channelId?: number
-  keyword?: string
-  page: number
-}>({
+const categories = ref<EventCategory[]>([])
+const activeCategoryCode = ref('all')
+const eventPage = ref<EventPage>({
+  total: 0,
   page: 1,
+  page_size: pageSize,
+  items: [],
 })
-const { favoritesSet, favoritesCount, toggleFavorite } = useFavorites()
 
-const hasFilters = computed(() => Boolean(query.value.categoryId || query.value.channelId || query.value.keyword))
-const activeChannelName = computed(
-  () => channels.value.find((item) => item.id === query.value.channelId)?.name ?? '全部渠道',
-)
 const activeCategoryName = computed(
-  () => categories.value.find((item) => item.id === query.value.categoryId)?.name ?? '全部分类',
+  () => categories.value.find((item) => item.code === activeCategoryCode.value)?.name ?? '全网',
 )
 
-async function loadMeta() {
-  const [categoryData, channelData] = await Promise.all([getCategories(), getChannels()])
-  categories.value = categoryData
-  channels.value = channelData
+async function loadCategories() {
+  categories.value = await getEventCategories()
 }
 
-async function loadInfos() {
+async function loadEvents(page = 1) {
   loading.value = true
   error.value = ''
+
   try {
-    infoPage.value = await getInfos({
-      category_id: query.value.categoryId,
-      channel_id: query.value.channelId,
-      keyword: query.value.keyword,
-      page: query.value.page,
+    eventPage.value = await getEvents({
+      category_code: activeCategoryCode.value,
+      page,
       page_size: pageSize,
     })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载失败'
+    error.value = err instanceof Error ? err.message : '加载热点事件失败'
   } finally {
     loading.value = false
   }
 }
 
-async function applyFilters(payload: {
-  categoryId?: number
-  channelId?: number
-  keyword?: string
-}) {
-  query.value = {
-    ...payload,
-    page: 1,
-  }
-  await loadInfos()
+async function selectCategory(code: string) {
+  if (code === activeCategoryCode.value) return
+  activeCategoryCode.value = code
+  await loadEvents(1)
 }
 
-async function handlePageChange(page: number) {
-  query.value = {
-    ...query.value,
-    page,
-  }
-  await loadInfos()
-}
-
-watch(
-  () => query.value.categoryId,
-  async (categoryId) => {
-    channels.value = await getChannels(categoryId)
-    if (query.value.channelId && !channels.value.some((item) => item.id === query.value.channelId)) {
-      query.value = {
-        ...query.value,
-        channelId: undefined,
-      }
-      await loadInfos()
-    }
-  },
-)
-
-onMounted(async () => {
+async function loadHome() {
   try {
-    await loadMeta()
-    await loadInfos()
+    await loadCategories()
+    await loadEvents()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '初始化失败'
+    error.value = err instanceof Error ? err.message : '首页初始化失败'
   }
-})
+}
+
+onMounted(loadHome)
 </script>
 
 <template>
-  <div class="dashboard">
-    <div class="dashboard__filter-shell">
-      <FilterBar
+  <div class="dashboard dashboard--events">
+    <section class="panel event-hero">
+      <div class="event-hero__copy">
+        <p class="panel__eyebrow">Info Daren</p>
+        <h1>一句话刷懂全网热点</h1>
+        <p class="event-hero__summary">
+          默认按热度和时效混合排序，把同一件事在多个平台的更新聚成一个事件，让你不用来回切平台。
+        </p>
+      </div>
+
+      <div class="event-hero__actions">
+        <div class="event-hero__metric">
+          <span>当前频道</span>
+          <strong>{{ activeCategoryName }}</strong>
+        </div>
+        <div class="event-hero__metric">
+          <span>事件数量</span>
+          <strong>{{ eventPage.total }}</strong>
+        </div>
+        <RouterLink class="button button--ghost" to="/settings">管理配置</RouterLink>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <div>
+          <p class="panel__eyebrow">Categories</p>
+          <h2>热点频道</h2>
+        </div>
+        <span class="panel__meta">先刷全网，再按兴趣切频道</span>
+      </div>
+      <EventCategoryTabs
         :categories="categories"
-        :channels="channels"
-        :category-id="query.categoryId"
-        :channel-id="query.channelId"
-        :keyword="query.keyword"
-        :busy="loading"
-        :active-category-name="activeCategoryName"
-        :active-channel-name="activeChannelName"
-        @search="applyFilters"
-        @open-menu="menuOpen = true"
+        :active-code="activeCategoryCode"
+        @select="selectCategory"
       />
-    </div>
+    </section>
 
     <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <div class="dashboard__main">
-      <InfoList
-        class="dashboard__list"
-        :items="infoPage.items"
-        :loading="loading"
-        :total="infoPage.total"
-        :page="infoPage.page"
-        :page-size="infoPage.page_size"
-        :favorites-set="favoritesSet"
-        :has-filters="hasFilters"
-        @page-change="handlePageChange"
-        @toggle-favorite="toggleFavorite"
-        @retry="loadInfos"
-      />
-    </div>
-
-    <div v-if="menuOpen" class="drawer-backdrop" @click="menuOpen = false"></div>
-    <aside :class="['drawer', menuOpen ? 'drawer--open' : '']" aria-label="更多内容">
-      <div class="drawer__header">
-        <div>
-          <p class="panel__eyebrow">More</p>
-          <h2>更多内容</h2>
-        </div>
-        <button class="button button--ghost button--small" type="button" @click="menuOpen = false">
-          关闭
-        </button>
-      </div>
-
-      <div class="drawer__content">
-        <section class="panel">
-          <div class="panel__header">
-            <div>
-              <p class="panel__eyebrow">Admin</p>
-              <h2>管理入口</h2>
-            </div>
-          </div>
-          <RouterLink class="button button--primary" to="/settings" @click="menuOpen = false">
-            打开配置管理
-          </RouterLink>
-        </section>
-
-        <section class="panel panel--compact dashboard__summary dashboard__summary--inside">
-          <div>
-            <p class="panel__eyebrow">Personal</p>
-            <h2>我的阅读状态</h2>
-          </div>
-          <div class="dashboard__summary-stats">
-            <span class="tag tag--soft">已收藏 {{ favoritesCount }} 条</span>
-            <span class="panel__meta">收藏保存在当前浏览器，本地可持续保留。</span>
-          </div>
-        </section>
-        <ChannelBoard :channels="channels" />
-      </div>
-    </aside>
+    <EventList
+      :items="eventPage.items"
+      :loading="loading"
+      :total="eventPage.total"
+      :page="eventPage.page"
+      :page-size="eventPage.page_size"
+      @page-change="loadEvents"
+      @retry="loadEvents(eventPage.page)"
+    />
   </div>
 </template>

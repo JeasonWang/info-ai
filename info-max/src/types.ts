@@ -54,6 +54,74 @@ export interface InfoPage {
   items: InfoItem[]
 }
 
+export interface EventCategory {
+  code: string
+  name: string
+  display_order: number
+}
+
+export interface EventListItem {
+  id: number
+  title: string
+  one_line_summary: string
+  primary_category: {
+    code: string
+    name: string
+  }
+  heat_score: number
+  freshness_score: number
+  composite_score: number
+  last_updated_at: string | null
+  source_count: number
+  source_badges: string[]
+  new_update_count: number
+}
+
+export interface EventPage {
+  total: number
+  page: number
+  page_size: number
+  items: EventListItem[]
+}
+
+export interface EventTimelineItem {
+  id: number
+  occurred_at: string
+  summary: string
+  confidence: number
+}
+
+export interface EventSourceView {
+  channel_name: string
+  summary: string
+}
+
+export interface EventRepresentativeSource {
+  info_id: number
+  title: string
+  channel_name: string
+  source_url: string
+  event_time: string | null
+}
+
+export interface EventDetail {
+  event: {
+    id: number
+    title: string
+    one_line_summary: string
+    primary_category: {
+      code: string
+      name: string
+    }
+    heat_score: number
+    last_updated_at: string | null
+  }
+  timeline: EventTimelineItem[]
+  summaries: Record<string, string>
+  source_views: EventSourceView[]
+  representative_sources: EventRepresentativeSource[]
+}
+
 export interface StatsData {
   total: number
   categories: Array<{
@@ -88,6 +156,12 @@ export interface ListInfoParams {
   category_id?: number
   channel_id?: number
   keyword?: string
+  page?: number
+  page_size?: number
+}
+
+export interface ListEventParams {
+  category_code?: string
   page?: number
   page_size?: number
 }

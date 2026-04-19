@@ -13,6 +13,12 @@ export const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
+    path: '/events/:id',
+    name: 'event-detail',
+    component: () => import('./views/EventDetailView.vue'),
+    props: true,
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('./views/SettingsView.vue'),
