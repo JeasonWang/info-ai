@@ -25,6 +25,7 @@ from config import (
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
 from database import get_session, Channel, Info
+from services import rebuild_events
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,12 @@ def crawl_by_category(category_name: str):
         cleaned_items = clean_info_list(raw_items)
         saved_ids = _save_crawled_data(code, cleaned_items)
         _fetch_details_for_items(code, saved_ids)
+
+    session = get_session()
+    try:
+        rebuild_events(session)
+    finally:
+        session.close()
 
     logger.info(f"分类 [{category_name}] 爬取任务完成")
 

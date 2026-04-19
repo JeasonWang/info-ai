@@ -503,6 +503,21 @@ def get_stats():
         session.close()
 
 
+@app.post("/api/admin/rebuild-events")
+def admin_rebuild_events():
+    session = get_session()
+    try:
+        rebuild_events(session)
+        event_count = session.query(Event).count()
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {"event_count": event_count},
+        }
+    finally:
+        session.close()
+
+
 @app.post("/api/crawl/trigger")
 def trigger_crawl(channel_code: str = Query(..., description="渠道编码")):
     """

@@ -8,6 +8,7 @@ import random
 
 from database import get_session, init_db, Category, Channel, Info
 from config import CATEGORIES, CHANNELS, CATEGORY_HOT, CATEGORY_ECONOMY, CATEGORY_INTERNATIONAL, CATEGORY_TECH, CATEGORY_AI
+from services import rebuild_events
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,7 @@ def init_all_data():
         category_map = init_categories(session)
         channel_map = init_channels(session, category_map)
         init_mock_data(session, category_map, channel_map)
+        rebuild_events(session)
         logger.info("数据初始化完成")
     except Exception as e:
         session.rollback()
