@@ -41,8 +41,12 @@ export interface InfoItem {
   location: string
   indicator_name: string
   indicator_value: string
-  detail_fetch_status: 'pending' | 'success' | 'failed' | string
+  detail_fetch_status: 'pending' | 'list_only' | 'partial' | 'complete' | 'failed' | string
   detail_fetch_error: string
+  detail_strategy: string
+  detail_score: number
+  detail_content_length: number
+  detail_fetched_at: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -62,6 +66,7 @@ export interface EventCategory {
 
 export interface EventListItem {
   id: number
+  representative_info_id: number | null
   title: string
   one_line_summary: string
   primary_category: {
@@ -166,6 +171,7 @@ export interface ListInfoParams {
 
 export interface ListEventParams {
   category_code?: string
+  keyword?: string
   page?: number
   page_size?: number
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import DetailContent from '@/components/DetailContent.vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
@@ -10,6 +10,7 @@ import type { InfoItem } from '@/types'
 import { formatDateTime, getStatusTone } from '@/utils'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const error = ref('')
 const info = ref<InfoItem | null>(null)
@@ -55,12 +56,22 @@ async function handleShare() {
   }
 }
 
+function handleBack() {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  router.push('/')
+}
+
 onMounted(loadDetail)
 </script>
 
 <template>
   <div class="detail-page">
-    <RouterLink class="button button--ghost detail-page__back" to="/">返回看板</RouterLink>
+    <button class="button button--ghost detail-page__back" type="button" data-testid="back-button" @click="handleBack">
+      返回看板
+    </button>
 
     <section v-if="loading" class="panel">
       <SkeletonBlock :lines="5" />

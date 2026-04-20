@@ -6,15 +6,17 @@ import {
   createChannel,
   getAdminCategories,
   getAdminChannels,
+  getInfos,
   rebuildEvents,
   triggerCrawl,
   updateCategory,
   updateChannel,
 } from '@/services/api'
-import type { Category, CategoryPayload, Channel, ChannelPayload } from '@/types'
+import type { Category, CategoryPayload, Channel, ChannelPayload, InfoItem } from '@/types'
 
 const categories = ref<Category[]>([])
 const channels = ref<Channel[]>([])
+const acquisitionInfos = ref<InfoItem[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const rebuilding = ref(false)
@@ -55,14 +57,92 @@ const editChannelForm = reactive<ChannelPayload>({
 })
 
 const hasCategoryOptions = computed(() => categories.value.length > 0)
+const acquisitionStatusSummary = computed(() => {
+  const summaryMap = {
+    complete: 0,
+    partial: 0,
+    list_only: 0,
+    failed: 0,
+  }
+
+  acquisitionInfos.value.forEach((info) => {
+    if (info.detail_fetch_status in summaryMap) {
+      summaryMap[info.detail_fetch_status as keyof typeof summaryMap] += 1
+    }
+  })
+
+  return [
+    { key: 'complete', label: '完整详情', count: summaryMap.complete, tone: 'success' },
+    { key: 'partial', label: '部分详情', count: summaryMap.partial, tone: 'warning' },
+    { key: 'list_only', label: '仅列表摘要', count: summaryMap.list_only, tone: 'soft' },
+    { key: 'failed', label: '抓取失败', count: summaryMap.failed, tone: 'danger' },
+  ]
+})
+const acquisitionAverageScore = computed(() => {
+  if (acquisitionInfos.value.length === 0) {
+    return '0.0'
+  }
+
+  const totalScore = acquisitionInfos.value.reduce((sum, info) => sum + (info.detail_score || 0), 0)
+  return (totalScore / acquisitionInfos.value.length).toFixed(1)
+})
+const acquisitionTopError = computed(() => {
+  if (acquisitionErrorDistribution.value.length === 0) {
+    return null
+  }
+  return acquisitionErrorDistribution.value[0]
+})
+const acquisitionTopStrategy = computed(() => {
+  if (acquisitionStrategyDistribution.value.length === 0) {
+    return null
+  }
+  return acquisitionStrategyDistribution.value[0]
+})
+const acquisitionErrorDistribution = computed(() => {
+  const errorCounter = new Map<string, number>()
+
+  acquisitionInfos.value.forEach((info) => {
+    if (!info.detail_fetch_error) {
+      return
+    }
+
+    errorCounter.set(info.detail_fetch_error, (errorCounter.get(info.detail_fetch_error) || 0) + 1)
+  })
+
+  // 只展示前几项高频失败原因，方便快速诊断当前最值得优先处理的问题。
+  return [...errorCounter.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([errorCode, count]) => ({ errorCode, count }))
+})
+const acquisitionStrategyDistribution = computed(() => {
+  const strategyCounter = new Map<string, number>()
+
+  acquisitionInfos.value.forEach((info) => {
+    const strategy = info.detail_strategy || '未记录'
+    strategyCounter.set(strategy, (strategyCounter.get(strategy) || 0) + 1)
+  })
+
+  // 保留主力策略外，再展示次级策略，帮助判断当前回退是否过于频繁。
+  return [...strategyCounter.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([strategy, count]) => ({ strategy, count }))
+})
 
 async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    const [categoryData, channelData] = await Promise.all([getAdminCategories(), getAdminChannels()])
+    // 管理页同时拉取一批最近采集结果，方便快速观察质量趋势和失败主因。
+    const [categoryData, channelData, infoData] = await Promise.all([
+      getAdminCategories(),
+      getAdminChannels(),
+      getInfos({ page: 1, page_size: 20 }),
+    ])
     categories.value = categoryData
     channels.value = channelData
+    acquisitionInfos.value = infoData.items
 
     if (!channelForm.category_id && categoryData.length > 0) {
       channelForm.category_id = categoryData[0].id
@@ -203,6 +283,30 @@ async function handleTriggerCrawl(channelCode: string) {
   }
 }
 
+function formatQualityStatus(status: string) {
+  const statusMap: Record<string, string> = {
+    pending: '待抓取',
+    list_only: '仅列表摘要',
+    partial: '部分详情',
+    complete: '完整详情',
+    failed: '抓取失败',
+  }
+  return statusMap[status] ?? status
+}
+
+function formatQualityError(errorCode: string) {
+  const errorMap: Record<string, string> = {
+    anti_crawl_blocked: '反爬拦截',
+    shell_page: '壳页面',
+    content_too_short: '正文过短',
+    weak_relevance: '内容弱相关',
+    detail_unavailable: '详情不可用',
+    invalid_topic_payload: '话题数据异常',
+    network_timeout: '请求超时',
+  }
+  return errorMap[errorCode] ?? errorCode
+}
+
 onMounted(loadData)
 </script>
 
@@ -240,6 +344,86 @@ onMounted(loadData)
           >
             {{ rebuilding ? '正在重建...' : '立即重建事件' }}
           </button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <div>
+            <p class="panel__eyebrow">Quality</p>
+            <h2>采集质量看板</h2>
+          </div>
+          <span class="panel__meta">最近 20 条内容的详情状态、策略分布与失败主因</span>
+        </div>
+        <div class="stats-grid">
+          <article
+            v-for="item in acquisitionStatusSummary"
+            :key="item.key"
+            class="metric-card"
+            :data-testid="`quality-summary-${item.key}`"
+          >
+            <span class="metric-card__label">{{ item.label }}</span>
+            <strong>{{ item.count }}</strong>
+          </article>
+        </div>
+        <div class="summary-grid">
+          <article class="summary-card" data-testid="quality-average-score">
+            <h3>平均质量分</h3>
+            <p>{{ acquisitionAverageScore }}</p>
+          </article>
+          <article class="summary-card" data-testid="quality-top-strategy">
+            <h3>主力策略</h3>
+            <p v-if="acquisitionTopStrategy">{{ acquisitionTopStrategy.strategy }} · {{ acquisitionTopStrategy.count }} 条</p>
+            <p v-else>暂无策略记录</p>
+          </article>
+          <article class="summary-card" data-testid="quality-top-error">
+            <h3>失败主因</h3>
+            <p v-if="acquisitionTopError">{{ acquisitionTopError.errorCode }}（{{ formatQualityError(acquisitionTopError.errorCode) }}）· {{ acquisitionTopError.count }} 次</p>
+            <p v-else>当前批次没有失败原因</p>
+          </article>
+        </div>
+        <div class="summary-grid">
+          <article class="summary-card" data-testid="quality-error-distribution">
+            <h3>失败分布 Top 3</h3>
+            <ul v-if="acquisitionErrorDistribution.length > 0" class="summary-card__list">
+              <li v-for="item in acquisitionErrorDistribution" :key="item.errorCode">
+                <span>{{ item.errorCode }}（{{ formatQualityError(item.errorCode) }}）</span>
+                <strong>{{ item.count }} 次</strong>
+              </li>
+            </ul>
+            <p v-else>当前批次没有失败原因</p>
+          </article>
+          <article class="summary-card" data-testid="quality-strategy-distribution">
+            <h3>策略分布 Top 3</h3>
+            <ul v-if="acquisitionStrategyDistribution.length > 0" class="summary-card__list">
+              <li v-for="item in acquisitionStrategyDistribution" :key="item.strategy">
+                <span>{{ item.strategy }}</span>
+                <strong>{{ item.count }} 条</strong>
+              </li>
+            </ul>
+            <p v-else>暂无策略记录</p>
+          </article>
+        </div>
+        <div v-if="acquisitionInfos.length === 0" class="empty-state">暂时还没有可展示的采集记录。</div>
+        <div v-else class="card-stack">
+          <article v-for="info in acquisitionInfos" :key="info.id" class="info-card">
+            <div class="info-card__top">
+              <div class="tags">
+                <span class="tag">{{ info.channel_name }}</span>
+                <span class="tag tag--soft">{{ formatQualityStatus(info.detail_fetch_status) }}</span>
+              </div>
+              <span class="panel__meta">{{ info.detail_fetched_at || info.updated_at || '暂无时间' }}</span>
+            </div>
+            <h3>{{ info.title }}</h3>
+            <div class="info-card__meta">
+              <span>策略：{{ info.detail_strategy || '未记录' }}</span>
+              <span>评分：{{ info.detail_score }}</span>
+              <span>长度：{{ info.detail_content_length }}</span>
+            </div>
+            <p class="info-card__summary">
+              {{ info.detail_fetch_error || '当前记录没有失败原因，表示本次详情抓取已通过质量校验。' }}
+            </p>
+          </article>
         </div>
       </section>
 

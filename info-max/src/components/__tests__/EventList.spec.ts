@@ -9,6 +9,7 @@ describe('EventList', () => {
         items: [
           {
             id: 7,
+            representative_info_id: 27,
             title: 'OpenAI 新模型能力引发全网讨论',
             one_line_summary: '一句话先看懂这件事发生了什么。',
             primary_category: { code: 'tech', name: '科技' },
@@ -35,10 +36,18 @@ describe('EventList', () => {
 
     expect(wrapper.text()).toContain('OpenAI 新模型能力引发全网讨论')
     expect(wrapper.text()).toContain('一句话先看懂这件事发生了什么。')
+    expect(wrapper.text()).toContain('一句话看懂')
+    expect(wrapper.text()).toContain('来源')
     expect(wrapper.text()).toContain('微博')
     expect(wrapper.text()).toContain('36氪')
-    expect(wrapper.text()).toContain('3 条新进展')
-    expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe('/events/7')
+    expect(wrapper.text()).toContain('进展')
+    expect(wrapper.text()).toContain('3 条')
+    const links = wrapper.findAllComponents(RouterLinkStub)
+    expect(links).toHaveLength(2)
+    expect(links[0].props('to')).toBe('/events/7')
+    expect(links[1].props('to')).toBe('/info/27')
+    expect(wrapper.text()).toContain('查看时间线')
+    expect(wrapper.text()).toContain('查看详情')
   })
 
   it('renders an empty state and emits retry', async () => {

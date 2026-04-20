@@ -7,6 +7,7 @@ from .models import (
     EventSummarySnapshot,
     EventTimelineEntry,
     Info,
+    InfoAcquisitionLog,
 )
 from .session import configure_engine, get_session, init_db
 
@@ -19,6 +20,7 @@ __all__ = [
     "EventSummarySnapshot",
     "EventTimelineEntry",
     "Info",
+    "InfoAcquisitionLog",
     "configure_engine",
     "get_session",
     "init_db",

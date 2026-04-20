@@ -152,7 +152,11 @@ def init_mock_data(session, category_map: dict, channel_map: dict):
             location=item.get("location", ""),
             indicator_name=item.get("indicator_name", ""),
             indicator_value=item.get("indicator_value", ""),
-            detail_fetch_status="success",
+            detail_fetch_status="complete",
+            detail_strategy="seed",
+            detail_score=100,
+            detail_content_length=len(item["content"]),
+            detail_fetched_at=now,
         )
         session.add(info)
 

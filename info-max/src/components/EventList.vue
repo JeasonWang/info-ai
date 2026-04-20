@@ -40,31 +40,47 @@ const emit = defineEmits<{
     <div v-else class="card-stack">
       <article v-for="item in items" :key="item.id" class="info-card">
         <div class="info-card__top">
-          <div class="tags">
-            <span class="tag">{{ item.primary_category.name }}</span>
-            <span class="tag tag--soft">热度 {{ item.heat_score }}</span>
-            <span class="tag tag--soft">时效 {{ item.freshness_score }}</span>
-          </div>
+          <span class="tag">{{ item.primary_category.name }}热点</span>
           <span class="panel__meta">{{ formatDateTime(item.last_updated_at) }}</span>
         </div>
 
         <h3>{{ item.title }}</h3>
-        <p class="info-card__summary">{{ item.one_line_summary }}</p>
-
-        <div class="info-card__meta">
-          <span>来源 {{ item.source_count }} 个</span>
-          <span v-if="item.new_update_count > 0">{{ item.new_update_count }} 条新进展</span>
+        <div class="event-card__digest">
+          <span class="event-card__digest-label">一句话看懂</span>
+          <p class="info-card__summary">{{ item.one_line_summary }}</p>
         </div>
 
-        <div class="tags">
+        <div class="event-card__stats">
+          <div class="event-card__stat">
+            <span>热度</span>
+            <strong>{{ item.heat_score }}</strong>
+          </div>
+          <div class="event-card__stat">
+            <span>来源</span>
+            <strong>{{ item.source_count }} 个</strong>
+          </div>
+          <div class="event-card__stat">
+            <span>进展</span>
+            <strong>{{ item.new_update_count > 0 ? `${item.new_update_count} 条` : '持续跟进' }}</strong>
+          </div>
+        </div>
+
+        <div class="tags event-card__sources">
           <span v-for="badge in item.source_badges" :key="badge" class="tag tag--soft">
             {{ badge }}
           </span>
         </div>
 
-        <div class="info-card__actions">
+        <div class="info-card__actions event-card__actions">
           <RouterLink class="button button--primary" :to="`/events/${item.id}`">
-            看时间线
+            查看时间线
+          </RouterLink>
+          <RouterLink
+            v-if="item.representative_info_id"
+            class="button button--ghost"
+            :to="`/info/${item.representative_info_id}`"
+          >
+            查看详情
           </RouterLink>
         </div>
       </article>

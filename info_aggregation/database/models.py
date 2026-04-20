@@ -97,8 +97,12 @@ class Info(Base):
     location = Column(String(100), default="", comment="地点")
     indicator_name = Column(String(100), default="", comment="指标名称(经济数据类)")
     indicator_value = Column(String(100), default="", comment="指标数值(经济数据类)")
-    detail_fetch_status = Column(String(20), default="pending", comment="详情爬取状态: pending/success/failed")
+    detail_fetch_status = Column(String(20), default="pending", comment="详情爬取状态: pending/list_only/partial/complete/failed")
     detail_fetch_error = Column(String(500), default="", comment="详情爬取失败原因")
+    detail_strategy = Column(String(50), default="", comment="详情抓取策略")
+    detail_score = Column(Integer, default=0, comment="详情完整度得分")
+    detail_content_length = Column(Integer, default=0, comment="详情正文长度")
+    detail_fetched_at = Column(DateTime, comment="详情抓取完成时间")
     is_deleted = Column(Integer, default=0, comment="逻辑删除 0-正常 1-删除")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
@@ -137,9 +141,36 @@ class Info(Base):
             "indicator_value": self.indicator_value,
             "detail_fetch_status": self.detail_fetch_status,
             "detail_fetch_error": self.detail_fetch_error,
+            "detail_strategy": self.detail_strategy,
+            "detail_score": self.detail_score,
+            "detail_content_length": self.detail_content_length,
+            "detail_fetched_at": self.detail_fetched_at.strftime("%Y-%m-%d %H:%M:%S") if self.detail_fetched_at else None,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None,
         }
+
+
+class InfoAcquisitionLog(Base):
+    """信息详情采集执行日志。"""
+
+    __tablename__ = "info_acquisition_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="采集日志ID")
+    info_id = Column(Integer, ForeignKey("info.id"), nullable=False, comment="信息ID")
+    channel_code = Column(String(50), default="", nullable=False, comment="渠道编码")
+    strategy = Column(String(50), default="", nullable=False, comment="详情策略")
+    status = Column(String(20), default="", nullable=False, comment="详情结果状态")
+    score = Column(Integer, default=0, comment="完整度得分")
+    content_length = Column(Integer, default=0, comment="正文长度")
+    failure_reason = Column(String(255), default="", comment="失败原因")
+    matched_rules = Column(String(500), default="", comment="命中规则")
+    raw_excerpt = Column(Text, default="", comment="内容摘要")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_info_acquisition_info_created", "info_id", "created_at"),
+        Index("idx_info_acquisition_channel_strategy", "channel_code", "strategy"),
+    )
 
 
 class Event(Base):

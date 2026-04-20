@@ -5,6 +5,7 @@ from database import (
     Channel,
     Event,
     EventItemLink,
+    InfoAcquisitionLog,
     EventSummarySnapshot,
     EventTimelineEntry,
     Info,
@@ -88,3 +89,57 @@ def test_event_models_can_persist_relationships(session):
     assert session.query(EventItemLink).count() == 1
     assert session.query(EventSummarySnapshot).count() == 1
     assert session.query(EventTimelineEntry).count() == 1
+
+
+def test_info_quality_fields_and_acquisition_logs_can_persist(session):
+    category = Category(name="热点事件", code="hot", description="热点")
+    session.add(category)
+    session.flush()
+
+    channel = Channel(
+        name="微博",
+        code="weibo",
+        base_url="https://weibo.com",
+        category_id=category.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add(channel)
+    session.flush()
+
+    info = Info(
+        title="微博热搜样例",
+        content="列表摘要",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="wb-1",
+        source_url="https://example.com/wb-1",
+        detail_fetch_status="partial",
+        detail_fetch_error="content_too_short",
+        detail_strategy="topic_search",
+        detail_score=72,
+        detail_content_length=168,
+    )
+    session.add(info)
+    session.flush()
+
+    session.add(
+        InfoAcquisitionLog(
+            info_id=info.id,
+            channel_code="weibo",
+            strategy="topic_search",
+            status="partial",
+            score=72,
+            content_length=168,
+            failure_reason="content_too_short",
+            matched_rules="short_content",
+            raw_excerpt="微博正文样例",
+        )
+    )
+    session.commit()
+
+    saved = session.query(Info).first()
+    assert saved.detail_fetch_status == "partial"
+    assert saved.detail_strategy == "topic_search"
+    assert saved.detail_score == 72
+    assert session.query(InfoAcquisitionLog).count() == 1

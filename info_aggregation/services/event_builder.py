@@ -18,6 +18,29 @@ def _build_why_it_matters(items: list[Info]) -> str:
     return f"这条事件已扩散到 {source_count} 个来源，说明它不再只是单个平台的零散讨论。"
 
 
+def _normalize_summary_text(text: str) -> str:
+    return " ".join((text or "").split()).strip()
+
+
+def _build_latest_update(items: list[Info]) -> str:
+    latest_item = items[-1]
+    lead_item = items[0]
+    latest_content = _normalize_summary_text(latest_item.content[:180])
+    lead_content = _normalize_summary_text(lead_item.content[:180])
+
+    # 如果事件首条和最新一条内容几乎一致，说明还没有提炼出真正的增量进展，
+    # 这里返回更明确的状态语句，避免前端出现“重点结论”和“最新进展”完全重复。
+    if not latest_content:
+        return "当前暂无明确新增进展，事件仍在持续发酵。"
+
+    if latest_content == lead_content:
+        if len(items) > 1:
+            return f"最新一轮更新来自 {latest_item.title}，当前讨论仍围绕同一核心事实延伸。"
+        return "当前暂无明确新增进展，事件仍在持续发酵。"
+
+    return latest_content
+
+
 def rebuild_events(session, limit: int = 200):
     items = (
         session.query(Info)
@@ -79,7 +102,7 @@ def rebuild_events(session, limit: int = 200):
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="latest_update",
-                    content=latest_item.content[:180],
+                    content=_build_latest_update(group),
                     version=1,
                 ),
             ]

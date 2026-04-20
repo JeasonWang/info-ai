@@ -5,8 +5,10 @@
 import hashlib
 import re
 from datetime import datetime
+from urllib.parse import quote
 
 from .base import BaseCrawler
+from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class ToutiaoCrawler(BaseCrawler):
@@ -22,6 +24,26 @@ class ToutiaoCrawler(BaseCrawler):
 
     def __init__(self):
         super().__init__("toutiao", "今日头条")
+
+    def _merge_distinct_parts(self, parts: list[str], prefix: str = "") -> str:
+        """按顺序合并正文片段，并去掉重复内容。"""
+        merged_parts = []
+        seen = set()
+
+        if prefix:
+            normalized_prefix = prefix.strip()
+            if normalized_prefix:
+                merged_parts.append(normalized_prefix)
+                seen.add(normalized_prefix)
+
+        for part in parts:
+            normalized = re.sub(r"\s+", " ", str(part or "")).strip()
+            if not normalized or normalized in seen:
+                continue
+            merged_parts.append(normalized)
+            seen.add(normalized)
+
+        return " ".join(merged_parts).strip()
 
     def crawl(self) -> list:
         results = []
@@ -63,66 +85,115 @@ class ToutiaoCrawler(BaseCrawler):
         return results
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        result = self.resolve_detail(item)
+        return result.content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+
+        hot_board_detail = self._fetch_hot_board_detail(item)
+        if hot_board_detail:
+            candidates.append(hot_board_detail)
+
+        search_content = self._fetch_search_content(item)
+        if search_content:
+            candidates.append(search_content)
+
+        web_fallback = self._fetch_web_fallback(item)
+        if web_fallback:
+            candidates.append(web_fallback)
+
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+        )
+
+    def _build_detail_headers(self) -> dict:
+        headers = self._build_headers()
+        headers["Referer"] = "https://www.toutiao.com/"
+        headers["Accept"] = "application/json, text/plain, */*"
+        return headers
+
+    def _extract_cluster_id(self, item: dict) -> str:
+        cluster_id = str(item.get("_cluster_id", "")).strip()
+        if cluster_id:
+            return cluster_id
+        source_url = item.get("source_url", "")
+        cluster_id_match = re.search(r"/trending/(\d+)", source_url)
+        if cluster_id_match:
+            return cluster_id_match.group(1)
+        return ""
+
+    def _fetch_hot_board_detail(self, item: dict):
+        cluster_id = self._extract_cluster_id(item)
+        if not cluster_id:
+            return None
+
         try:
-            headers = self._build_headers()
-            headers["Referer"] = "https://www.toutiao.com/"
-            headers["Accept"] = "application/json, text/plain, */*"
+            detail_api = f"{self.DETAIL_API}&cluster_id={cluster_id}"
+            detail_data = self.fetch_json(detail_api, headers=self._build_detail_headers())
+            articles = detail_data.get("data", [])
+            target_item = None
+            for article in articles:
+                if str(article.get("ClusterId", "")) == str(cluster_id):
+                    target_item = article
+                    break
+            if not target_item and articles:
+                target_item = articles[0]
 
-            cluster_id = item.get("_cluster_id", "")
-            if not cluster_id:
-                cluster_id_match = re.search(r'/trending/(\d+)', source_url)
-                if cluster_id_match:
-                    cluster_id = cluster_id_match.group(1)
+            if not target_item:
+                return None
 
-            if cluster_id:
-                try:
-                    detail_api = f"{self.DETAIL_API}&cluster_id={cluster_id}"
-                    detail_data = self.fetch_json(detail_api, headers=headers)
-                    articles = detail_data.get("data", [])
-                    target_item = None
-                    for art in articles:
-                        if str(art.get("ClusterId", "")) == str(cluster_id):
-                            target_item = art
-                            break
-                    if not target_item and articles:
-                        target_item = articles[0]
+            content_parts = []
+            for key in ("Title", "HotDesc", "Abstract"):
+                value = str(target_item.get(key, "")).strip()
+                if value:
+                    content_parts.append(value)
+            label = str(target_item.get("Label", "")).strip()
+            if label:
+                content_parts.append(f"标签：{label}")
 
-                    if target_item:
-                        title = target_item.get("Title", "")
-                        hot_desc = target_item.get("HotDesc", "")
-                        abstract = target_item.get("Abstract", "")
-                        label = target_item.get("Label", "")
-                        content_parts = []
-                        if title:
-                            content_parts.append(title)
-                        if hot_desc and hot_desc != title:
-                            content_parts.append(hot_desc)
-                        if abstract and abstract != title and abstract != hot_desc:
-                            content_parts.append(abstract)
-                        if label and label != title and label != hot_desc:
-                            content_parts.append(f"标签: {label}")
-                        combined = "。".join(content_parts)
-                        if len(combined) >= 50:
-                            return combined[:500]
-                except Exception:
-                    pass
+            combined = self._merge_distinct_parts(content_parts)
+            if combined:
+                return DetailStrategyResult(strategy="hot_board_detail", content=combined[:500])
+        except Exception:
+            return None
+        return None
 
-            try:
-                search_url = f"https://www.toutiao.com/api/search/content/?keyword={item.get('title', '')}&count=5"
-                search_data = self.fetch_json(search_url, headers=headers)
-                search_items = search_data.get("data", [])
-                if search_items:
-                    for s_item in search_items[:3]:
-                        s_content = s_item.get("abstract", s_item.get("content", ""))
-                        if s_content:
-                            s_content = re.sub(r'<[^>]+>', '', s_content)
-                            s_content = re.sub(r'\s+', ' ', s_content).strip()
-                            if len(s_content) >= 50:
-                                return s_content[:500]
-            except Exception:
-                pass
+    def _fetch_search_content(self, item: dict):
+        word = str(item.get("title", "")).strip()
+        if not word:
+            return None
 
-            return ""
-        except Exception as e:
-            self.logger.warning(f"头条详情爬取失败: {e}")
-            return ""
+        try:
+            search_url = f"https://www.toutiao.com/api/search/content/?keyword={quote(word)}&count=5"
+            search_data = self.fetch_json(search_url, headers=self._build_detail_headers())
+            search_items = search_data.get("data", [])
+            merged_parts = []
+            for search_item in search_items[:3]:
+                for key in ("title", "abstract", "content"):
+                    value = re.sub(r"<[^>]+>", "", str(search_item.get(key, "")))
+                    value = re.sub(r"\s+", " ", value).strip()
+                    if value:
+                        merged_parts.append(value)
+            combined = self._merge_distinct_parts(merged_parts)
+            if combined:
+                return DetailStrategyResult(strategy="search_content", content=combined[:500])
+        except Exception:
+            return None
+        return None
+
+    def _fetch_web_fallback(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+
+        try:
+            response = self.fetch(source_url, headers=self._build_headers(), timeout=15)
+            text = self._extract_text_from_html(response.text)
+            if text:
+                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+        except Exception:
+            return None
+        return None

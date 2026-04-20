@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 import EventCategoryTabs from '@/components/EventCategoryTabs.vue'
 import EventList from '@/components/EventList.vue'
 import { getEventCategories, getEvents } from '@/services/api'
@@ -11,6 +10,8 @@ const loading = ref(false)
 const error = ref('')
 const categories = ref<EventCategory[]>([])
 const activeCategoryCode = ref('all')
+const keyword = ref('')
+const appliedKeyword = ref('')
 const eventPage = ref<EventPage>({
   total: 0,
   page: 1,
@@ -33,6 +34,7 @@ async function loadEvents(page = 1) {
   try {
     eventPage.value = await getEvents({
       category_code: activeCategoryCode.value,
+      keyword: appliedKeyword.value,
       page,
       page_size: pageSize,
     })
@@ -46,6 +48,11 @@ async function loadEvents(page = 1) {
 async function selectCategory(code: string) {
   if (code === activeCategoryCode.value) return
   activeCategoryCode.value = code
+  await loadEvents(1)
+}
+
+async function submitSearch() {
+  appliedKeyword.value = keyword.value.trim()
   await loadEvents(1)
 }
 
@@ -81,8 +88,17 @@ onMounted(loadHome)
           <span>事件数量</span>
           <strong>{{ eventPage.total }}</strong>
         </div>
-        <RouterLink class="button button--ghost" to="/settings">管理配置</RouterLink>
       </div>
+
+      <form class="event-hero__search search-box" @submit.prevent="submitSearch">
+        <input
+          v-model="keyword"
+          type="search"
+          placeholder="搜索当前频道的热点事件"
+          aria-label="搜索当前频道的热点事件"
+        />
+        <button class="button button--primary" type="submit">搜索</button>
+      </form>
     </section>
 
     <section class="panel">

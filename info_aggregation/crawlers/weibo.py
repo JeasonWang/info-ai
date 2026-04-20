@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class WeiboCrawler(BaseCrawler):
@@ -140,6 +141,205 @@ class WeiboCrawler(BaseCrawler):
         return results
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        result = self.resolve_detail(item)
+        return result.content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+
+        topic_search = self._fetch_topic_search(item)
+        if topic_search:
+            candidates.append(topic_search)
+
+        hot_band_context = self._fetch_hot_band_context(item)
+        if hot_band_context:
+            candidates.append(hot_band_context)
+
+        mobile_search = self._fetch_mobile_search(item)
+        if mobile_search:
+            candidates.append(mobile_search)
+
+        web_fallback = self._fetch_web_fallback(item)
+        if web_fallback:
+            candidates.append(web_fallback)
+
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+        )
+
+    def _clean_weibo_text(self, text: str) -> str:
+        """清洗微博正文文本，去掉标签和多余空白。"""
+        cleaned = re.sub(r"<[^>]+>", "", text or "")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
+
+    def _merge_distinct_parts(self, parts: list[str], prefix: str = "") -> str:
+        """按顺序合并多段正文，并去掉重复内容。"""
+        merged_parts = []
+        seen = set()
+
+        if prefix:
+            normalized_prefix = prefix.strip()
+            if normalized_prefix:
+                merged_parts.append(normalized_prefix)
+                seen.add(normalized_prefix)
+
+        for part in parts:
+            normalized = part.strip()
+            if not normalized or normalized in seen:
+                continue
+            merged_parts.append(normalized)
+            seen.add(normalized)
+
+        return " ".join(merged_parts).strip()
+
+    def _extract_mobile_mblog_parts(self, mblog: dict) -> list[str]:
+        """提取微博移动端卡片里的主贴、长文和转发补充正文。"""
+        parts = []
+
+        text = self._clean_weibo_text(mblog.get("text", ""))
+        if text:
+            parts.append(text.replace("全文", "").strip())
+
+        long_text = mblog.get("longText", {}) if isinstance(mblog.get("longText"), dict) else {}
+        long_text_content = self._clean_weibo_text(long_text.get("longTextContent", ""))
+        if long_text_content:
+            parts.append(long_text_content)
+
+        retweeted_status = mblog.get("retweeted_status", {})
+        if isinstance(retweeted_status, dict):
+            retweet_text = self._clean_weibo_text(retweeted_status.get("text", ""))
+            if retweet_text:
+                parts.append(retweet_text)
+
+            retweet_long_text = retweeted_status.get("longText", {})
+            if isinstance(retweet_long_text, dict):
+                retweet_long_text_content = self._clean_weibo_text(retweet_long_text.get("longTextContent", ""))
+                if retweet_long_text_content:
+                    parts.append(retweet_long_text_content)
+
+        return parts
+
+    def _extract_status_parts(self, status: dict) -> list[str]:
+        """统一提取微博状态对象里的正文、长文和转发补充，供多种详情策略复用。"""
+        if not isinstance(status, dict):
+            return []
+        return self._extract_mobile_mblog_parts(status)
+
+    def _extract_web_fallback_content(self, html: str, title: str) -> str:
+        """
+        从微博网页搜索结果中优先抽取正文块，避免把整页导航噪声当成详情内容。
+        """
+        block_patterns = [
+            r"<article[^>]*>(.*?)</article>",
+            r'<div[^>]*class="[^"]*(?:card-wrap|content|article|detail|body)[^"]*"[^>]*>(.*?)</div>',
+            r"<main[^>]*>(.*?)</main>",
+        ]
+
+        cleaned_blocks = []
+        for pattern in block_patterns:
+            for match in re.findall(pattern, html, re.DOTALL | re.IGNORECASE):
+                cleaned = self._clean_weibo_text(match)
+                if cleaned:
+                    cleaned_blocks.append(cleaned)
+
+        # 优先选择包含标题且长度足够的正文块，减少导航、页头、推荐区对兜底结果的污染。
+        for block in cleaned_blocks:
+            if title and title in block and len(block) >= 40:
+                return block
+
+        for block in cleaned_blocks:
+            if len(block) >= 80:
+                return block
+
+        fallback_text = self._extract_text_from_html(html)
+        if title and title in fallback_text:
+            return fallback_text
+        return fallback_text
+
+    def _fetch_topic_search(self, item: dict):
+        headers = self._build_headers()
+        headers["Referer"] = "https://weibo.com/"
+        headers["Accept"] = "application/json, text/plain, */*"
+        headers["X-Requested-With"] = "XMLHttpRequest"
+        word = item.get("title", "")
+        if not word:
+            return None
+
+        try:
+            search_detail = f"https://weibo.com/ajax/search/topic?query={word}&page=1"
+            data = self.fetch_json(search_detail, headers=headers)
+            statuses = data.get("data", {}).get("statuses", [])
+            text_parts = []
+            for status in statuses[:5]:
+                # 话题搜索结果里也可能包含长文和转发补充，不能只拿表层短文本。
+                text_parts.extend(self._extract_status_parts(status))
+            combined = self._merge_distinct_parts(text_parts)
+            if combined:
+                return DetailStrategyResult(strategy="topic_search", content=combined)
+        except Exception:
+            return None
+        return None
+
+    def _fetch_hot_band_context(self, item: dict):
+        headers = self._build_headers()
+        headers["Referer"] = "https://weibo.com/"
+        headers["Accept"] = "application/json, text/plain, */*"
+        headers["X-Requested-With"] = "XMLHttpRequest"
+        word = item.get("title", "").strip()
+        if not word:
+            return None
+
+        try:
+            data = self.fetch_json(self.HOT_BAND_API, headers=headers)
+            band_list = data.get("data", {}).get("band_list", [])
+            for band in band_list:
+                if band.get("word", "").strip() != word:
+                    continue
+                content_parts = []
+                for key in ("note", "raw_text", "desc"):
+                    value = str(band.get(key, "")).strip()
+                    if value and value not in content_parts:
+                        content_parts.append(value)
+                # 热榜上下文通常偏短，补上标题作为事件锚点，减少被判成弱相关或部分详情。
+                combined = self._merge_distinct_parts(content_parts, prefix=word)
+                if combined and len(combined) < 40:
+                    combined = f"微博热搜 {word} 正在持续发酵，当前背景包括：{'；'.join(content_parts)}。"
+                if combined:
+                    return DetailStrategyResult(strategy="hot_band_context", content=combined)
+        except Exception:
+            return None
+        return None
+
+    def _fetch_mobile_search(self, item: dict):
+        headers = self._build_headers()
+        headers["Referer"] = "https://m.weibo.cn/"
+        headers["Accept"] = "application/json, text/plain, */*"
+        word = item.get("title", "")
+        if not word:
+            return None
+
+        try:
+            mobile_url = f"https://m.weibo.cn/api/container/getIndex?containerid=100103type%3D1%26q%3D{word}"
+            data = self.fetch_json(mobile_url, headers=headers)
+            cards = data.get("data", {}).get("cards", [])
+            text_parts = []
+            for card in cards[:5]:
+                mblog = card.get("mblog", {})
+                if not mblog:
+                    continue
+                # 移动端结果优先拼接长文和转发补充，避免只拿到“全文”前的残缺摘要。
+                text_parts.extend(self._extract_mobile_mblog_parts(mblog))
+            combined = self._merge_distinct_parts(text_parts)
+            if combined:
+                return DetailStrategyResult(strategy="mobile_search", content=combined)
+        except Exception:
+            return None
+        return None
+
+    def _fetch_web_fallback(self, item: dict):
         try:
             headers = self._build_headers()
             headers["Referer"] = "https://weibo.com/"
@@ -147,45 +347,14 @@ class WeiboCrawler(BaseCrawler):
             headers["X-Requested-With"] = "XMLHttpRequest"
 
             word = item.get("title", "")
-
-            try:
-                search_detail = f"https://weibo.com/ajax/search/topic?query={word}&page=1"
-                data = self.fetch_json(search_detail, headers=headers)
-                statuses = data.get("data", {}).get("statuses", [])
-                if statuses:
-                    text_parts = []
-                    for status in statuses[:3]:
-                        text_data = status.get("text", "")
-                        text_data = re.sub(r'<[^>]+>', '', text_data)
-                        text_data = re.sub(r'\s+', ' ', text_data).strip()
-                        if text_data:
-                            text_parts.append(text_data)
-                    combined = " ".join(text_parts)
-                    if len(combined) >= 50:
-                        return combined[:500]
-            except Exception:
-                pass
-
-            try:
-                mobile_url = f"https://m.weibo.cn/api/container/getIndex?containerid=100103type%3D1%26q%3D{word}"
-                data = self.fetch_json(mobile_url, headers=headers)
-                cards = data.get("data", {}).get("cards", [])
-                text_parts = []
-                for card in cards[:3]:
-                    mblog = card.get("mblog", {})
-                    if mblog:
-                        text = mblog.get("text", "")
-                        text = re.sub(r'<[^>]+>', '', text)
-                        text = re.sub(r'\s+', ' ', text).strip()
-                        if text:
-                            text_parts.append(text)
-                combined = " ".join(text_parts)
-                if len(combined) >= 50:
-                    return combined[:500]
-            except Exception:
-                pass
-
-            return ""
+            if not word:
+                return None
+            response = self.fetch(f"https://s.weibo.com/weibo?q={word}", headers=headers)
+            # 网页兜底只抽正文相关区块，不直接使用整页文本，避免把导航壳页面误当成详情。
+            text = self._extract_web_fallback_content(response.text, word)
+            if text:
+                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+            return None
         except Exception as e:
             self.logger.warning(f"微博详情爬取失败: {e}")
-            return ""
+            return None

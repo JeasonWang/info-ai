@@ -24,7 +24,7 @@ from config import (
 )
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
-from database import get_session, Channel, Info
+from database import get_session, Channel, Info, InfoAcquisitionLog
 from services import rebuild_events
 
 logger = logging.getLogger(__name__)
@@ -142,19 +142,36 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
 
             original_content = info.content or ""
 
-            detail_content, status, error_msg = crawler.safe_fetch_detail(
+            detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
                 info.source_url, info.to_dict()
             )
 
-            if status == "success" and detail_content:
+            if detail_content:
                 info.content = detail_content
-                info.detail_fetch_status = "success"
-                info.detail_fetch_error = ""
-                logger.info(f"详情爬取成功 [ID={info_id}]: 内容{len(detail_content)}字")
+            info.detail_fetch_status = status
+            info.detail_fetch_error = error_msg
+            info.detail_strategy = pipeline.strategy
+            info.detail_score = pipeline.score
+            info.detail_content_length = pipeline.content_length
+            info.detail_fetched_at = datetime.now()
+            session.add(
+                InfoAcquisitionLog(
+                    info_id=info.id,
+                    channel_code=channel_code,
+                    strategy=pipeline.strategy,
+                    status=status,
+                    score=pipeline.score,
+                    content_length=pipeline.content_length,
+                    failure_reason=error_msg,
+                    matched_rules=",".join(pipeline.matched_rules),
+                    raw_excerpt=(detail_content or original_content)[:200],
+                )
+            )
+
+            if status in {"partial", "complete"} and detail_content:
+                logger.info(f"详情爬取成功 [ID={info_id}] 策略={pipeline.strategy}: 内容{len(detail_content)}字")
             else:
-                info.detail_fetch_status = "failed"
-                info.detail_fetch_error = error_msg
-                logger.warning(f"详情爬取失败 [ID={info_id}]: {error_msg}，保留原始内容({len(original_content)}字)")
+                logger.warning(f"详情爬取未完成 [ID={info_id}] 状态={status}: {error_msg}，保留内容({len((detail_content or original_content))}字)")
 
             time.sleep(random.uniform(1.0, 3.0))
 

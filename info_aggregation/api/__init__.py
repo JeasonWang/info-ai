@@ -357,6 +357,15 @@ def list_events(
             )
             return [name for (name,) in rows]
 
+        def get_representative_info_id(event_id: int) -> Optional[int]:
+            row = (
+                session.query(EventItemLink.item_id)
+                .filter(EventItemLink.event_id == event_id)
+                .order_by(EventItemLink.is_primary.desc(), EventItemLink.weight.desc(), EventItemLink.id.asc())
+                .first()
+            )
+            return row[0] if row else None
+
         return {
             "code": 0,
             "message": "success",
@@ -367,6 +376,7 @@ def list_events(
                 "items": [
                     {
                         "id": item.id,
+                        "representative_info_id": get_representative_info_id(item.id),
                         "title": item.title,
                         "one_line_summary": item.one_line_summary,
                         "primary_category": {"code": item.category.code, "name": item.category.name},

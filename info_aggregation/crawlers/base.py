@@ -12,6 +12,7 @@ from datetime import datetime
 import requests
 
 from config import CRAWLER_USER_AGENTS, CRAWLER_REQUEST_TIMEOUT, CRAWLER_RETRY_TIMES, CRAWLER_RETRY_INTERVAL
+from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
 
 
 class BaseCrawler(ABC):
@@ -172,6 +173,16 @@ class BaseCrawler(ABC):
             self.logger.warning(f"详情页爬取失败 [{source_url}]: {e}")
             return ""
 
+    def resolve_detail(self, item: dict) -> DetailPipelineResult:
+        detail = self.fetch_detail(item.get("source_url", ""), item)
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=[
+                DetailStrategyResult(strategy="fetch_detail", content=detail),
+            ],
+        )
+
     def _extract_text_from_html(self, html: str) -> str:
         """
         从HTML中提取纯文本内容（通用方法）
@@ -228,27 +239,30 @@ class BaseCrawler(ABC):
             source_url: 详情页URL
             item: 列表页已爬取的基础信息字典
         返回:
-            (detail_content, status, error_message) 元组
+            (detail_content, status, error_message, pipeline_result) 元组
             - detail_content: 详情内容文本
             - status: "success" 或 "failed"
             - error_message: 失败原因，成功时为空字符串
         """
         if not source_url:
-            return "", "failed", "详情页URL为空"
+            pipeline = DetailPipelineResult("", "failed", "", 0, 0, "详情页URL为空", ["missing_source_url"])
+            return "", "failed", "详情页URL为空", pipeline
         try:
-            detail = self.fetch_detail(source_url, item)
-            if detail and len(detail.strip()) >= 50:
-                return detail[:500], "success", ""
-            else:
-                return detail[:500] if detail else "", "failed", f"详情内容过短(仅{len(detail.strip()) if detail else 0}字)"
+            pipeline = self.resolve_detail(item)
+            return pipeline.content[:500], pipeline.status, pipeline.failure_reason, pipeline
         except requests.Timeout:
-            return "", "failed", "详情页请求超时"
+            pipeline = DetailPipelineResult("", "failed", "", 0, 0, "详情页请求超时", ["network_timeout"])
+            return "", "failed", "详情页请求超时", pipeline
         except requests.ConnectionError:
-            return "", "failed", "详情页连接失败"
+            pipeline = DetailPipelineResult("", "failed", "", 0, 0, "详情页连接失败", ["network_connection_error"])
+            return "", "failed", "详情页连接失败", pipeline
         except requests.HTTPError as e:
             status_code = e.response.status_code if e.response is not None else 0
-            return "", "failed", f"详情页HTTP错误({status_code})"
+            message = f"详情页HTTP错误({status_code})"
+            pipeline = DetailPipelineResult("", "failed", "", 0, 0, message, [f"http_{status_code}"])
+            return "", "failed", message, pipeline
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)[:200]}"
             self.logger.warning(f"详情爬取异常 [{source_url}]: {error_msg}")
-            return "", "failed", error_msg
+            pipeline = DetailPipelineResult("", "failed", "", 0, 0, error_msg, ["unexpected_exception"])
+            return "", "failed", error_msg, pipeline

@@ -120,6 +120,7 @@ export async function getInfos(params: ListInfoParams) {
 export async function getEvents(params: ListEventParams) {
   const query = buildQuery({
     category_code: params.category_code ?? 'all',
+    keyword: params.keyword,
     page: params.page,
     page_size: params.page_size,
   })

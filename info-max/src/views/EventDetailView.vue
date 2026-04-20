@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import EventSummaryPanels from '@/components/EventSummaryPanels.vue'
 import EventTimeline from '@/components/EventTimeline.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
@@ -9,11 +9,33 @@ import type { EventDetail } from '@/types'
 import { formatDateTime } from '@/utils'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const error = ref('')
 const detail = ref<EventDetail | null>(null)
 
 const eventId = computed(() => Number(route.params.id))
+const focusConclusion = computed(() => {
+  if (!detail.value) {
+    return '暂时还没有提炼出重点结论。'
+  }
+  return detail.value.summaries.what_happened || detail.value.event.one_line_summary || '暂时还没有提炼出重点结论。'
+})
+const focusLatestUpdate = computed(() => {
+  if (!detail.value) {
+    return '暂时还没有最新进展摘要。'
+  }
+
+  const latestUpdate = (detail.value.summaries.latest_update || '').trim()
+  const whatHappened = (detail.value.summaries.what_happened || '').trim()
+  if (!latestUpdate) {
+    return '暂时还没有最新进展摘要。'
+  }
+  if (latestUpdate === whatHappened) {
+    return '当前暂无额外新增进展，事件仍在持续跟进。'
+  }
+  return latestUpdate
+})
 
 async function loadDetail() {
   loading.value = true
@@ -28,12 +50,22 @@ async function loadDetail() {
   }
 }
 
+function handleBack() {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  router.push('/')
+}
+
 onMounted(loadDetail)
 </script>
 
 <template>
   <div class="detail-page">
-    <RouterLink class="button button--ghost detail-page__back" to="/">返回首页</RouterLink>
+    <button class="button button--ghost detail-page__back" type="button" data-testid="back-button" @click="handleBack">
+      返回首页
+    </button>
 
     <section v-if="loading" class="panel">
       <SkeletonBlock :lines="5" />
@@ -48,14 +80,37 @@ onMounted(loadDetail)
       <section class="panel detail-hero">
         <div class="tags">
           <span class="tag">{{ detail.event.primary_category.name }}</span>
-          <span class="tag tag--soft">热度 {{ detail.event.heat_score }}</span>
           <span class="tag tag--soft">{{ formatDateTime(detail.event.last_updated_at) }}</span>
         </div>
         <h2>{{ detail.event.title }}</h2>
         <p class="detail-hero__summary">{{ detail.event.one_line_summary }}</p>
+        <div class="detail-hero__focus">
+          <article class="detail-focus-card detail-focus-card--primary">
+            <p class="detail-focus-card__label">重点结论</p>
+            <p class="detail-focus-card__body">
+              {{ focusConclusion }}
+            </p>
+          </article>
+          <div class="detail-focus-grid">
+            <article class="detail-focus-card">
+              <p class="detail-focus-card__label">最新进展</p>
+              <p class="detail-focus-card__body">
+                {{ focusLatestUpdate }}
+              </p>
+            </article>
+            <article class="detail-focus-card">
+              <p class="detail-focus-card__label">为什么重要</p>
+              <p class="detail-focus-card__body">
+                {{ detail.summaries.why_it_matters || '暂时还没有重要性摘要。' }}
+              </p>
+            </article>
+          </div>
+        </div>
       </section>
 
-      <EventTimeline :items="detail.timeline" />
+      <div id="event-timeline-section">
+        <EventTimeline :items="detail.timeline" />
+      </div>
       <EventSummaryPanels :summaries="detail.summaries" :source-views="detail.source_views" />
 
       <section class="panel">

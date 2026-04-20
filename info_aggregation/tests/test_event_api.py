@@ -82,6 +82,7 @@ def test_list_events_returns_grouped_cards(session):
     assert payload["items"][0]["title"] == "OpenAI 发布新模型能力"
     assert payload["items"][0]["source_count"] == 2
     assert "OpenAI" in payload["items"][0]["one_line_summary"]
+    assert payload["items"][0]["representative_info_id"]
 
 
 def test_get_event_returns_timeline_and_summaries(session):
@@ -100,6 +101,7 @@ def test_get_event_returns_timeline_and_summaries(session):
     assert len(payload["timeline"]) >= 1
     assert payload["summaries"]["why_it_matters"]
     assert len(payload["representative_sources"]) >= 1
+    assert payload["summaries"]["what_happened"] != payload["summaries"]["latest_update"]
 
 
 def test_list_events_supports_keyword_filtering(session):
@@ -113,3 +115,27 @@ def test_list_events_supports_keyword_filtering(session):
     payload = response.json()["data"]
     assert len(payload["items"]) == 1
     assert "OpenAI" in payload["items"][0]["title"]
+
+
+def test_list_infos_returns_acquisition_quality_fields(session):
+    seed_event_data(session)
+    info = session.query(Info).filter(Info.source_id == "tech-1").first()
+    info.detail_fetch_status = "complete"
+    info.detail_fetch_error = ""
+    info.detail_strategy = "topic_search"
+    info.detail_score = 86
+    info.detail_content_length = 188
+    info.detail_fetched_at = datetime(2026, 4, 20, 8, 30, 0)
+    session.commit()
+
+    client = TestClient(app)
+    response = client.get("/api/infos?page=1&page_size=10")
+    assert response.status_code == 200
+
+    payload = response.json()["data"]
+    target = next(item for item in payload["items"] if item["source_id"] == "tech-1")
+    assert target["detail_fetch_status"] == "complete"
+    assert target["detail_strategy"] == "topic_search"
+    assert target["detail_score"] == 86
+    assert target["detail_content_length"] == 188
+    assert target["detail_fetched_at"] == "2026-04-20 08:30:00"
