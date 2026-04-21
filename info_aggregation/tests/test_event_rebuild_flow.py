@@ -46,6 +46,48 @@ def test_admin_rebuild_events_refreshes_event_tables(session):
     assert session.query(Event).count() == 1
 
 
+def test_admin_refresh_quality_recomputes_semantics_and_rebuilds_events(session):
+    category = Category(name="科技", code="tech", description="科技事件")
+    session.add(category)
+    session.flush()
+
+    channel = Channel(
+        name="36氪",
+        code="36kr",
+        base_url="https://36kr.com",
+        category_id=category.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add(channel)
+    session.flush()
+
+    session.add(
+        Info(
+            title="英伟达发布H200芯片",
+            content="H200 芯片面向大模型训练场景，开发者开始讨论显存和训练效率。",
+            category_id=category.id,
+            channel_id=channel.id,
+            source_id="refresh-quality-001",
+            source_url="https://example.com/refresh-quality-001",
+            event_time=datetime(2026, 4, 21, 9, 0, 0),
+        )
+    )
+    session.commit()
+
+    client = TestClient(app)
+    response = client.post("/api/admin/refresh-quality")
+    assert response.status_code == 200
+
+    payload = response.json()["data"]
+    refreshed = session.query(Info).filter(Info.source_id == "refresh-quality-001").first()
+    assert payload["processed_count"] == 1
+    assert payload["changed_count"] == 1
+    assert payload["event_count"] == 1
+    assert refreshed.tech_topic_type == "chip_release"
+    assert "显存" in refreshed.tech_keywords
+
+
 def test_fetch_details_for_items_persists_quality_metadata(session, monkeypatch):
     category = Category(name="热点事件", code="hot", description="热点")
     session.add(category)
@@ -99,4 +141,6 @@ def test_fetch_details_for_items_persists_quality_metadata(session, monkeypatch)
     assert refreshed.detail_fetch_status == "complete"
     assert refreshed.detail_strategy == "topic_search"
     assert refreshed.detail_score >= 80
+    assert refreshed.tech_topic_type == "model_release"
+    assert "OpenAI" in refreshed.tech_entities
     assert session.query(InfoAcquisitionLog).count() == 1

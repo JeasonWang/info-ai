@@ -6,20 +6,22 @@ import { getContentMode, getMediaUrls } from '@/utils'
 
 const props = defineProps<{
   info: InfoItem
+  content?: string
 }>()
 
-const contentMode = computed(() => getContentMode(props.info.content))
+const displayContent = computed(() => props.content ?? props.info.content)
+const hasDisplayContent = computed(() => displayContent.value.trim().length > 0)
+const contentMode = computed(() => getContentMode(displayContent.value))
 const media = computed(() => getMediaUrls(props.info))
 </script>
 
 <template>
-  <section class="panel">
+  <section v-if="hasDisplayContent || media.images.length || media.videos.length" class="panel" data-testid="detail-content">
     <div class="panel__header">
       <div>
         <p class="panel__eyebrow">Content</p>
-        <h2>正文展示</h2>
+        <h2>正文</h2>
       </div>
-      <span class="panel__meta">自动识别普通文本 / Markdown / HTML 片段 / 媒体链接</span>
     </div>
 
     <div v-if="media.images.length" class="media-grid">
@@ -34,7 +36,7 @@ const media = computed(() => getMediaUrls(props.info))
       <p v-if="contentMode === 'html'" class="content-block__tip">
         检测到 HTML 结构内容，已转换为更适合阅读的文本版。
       </p>
-      <FormattedContent :content="info.content" />
+      <FormattedContent v-if="hasDisplayContent" :content="displayContent" />
     </article>
   </section>
 </template>

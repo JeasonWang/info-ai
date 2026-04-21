@@ -21,9 +21,87 @@ from database import (
     EventTimelineEntry,
     Info,
 )
-from services import rebuild_events
+from services import rebuild_events, refresh_info_semantics
+from services.data_quality import text_similarity
 
 logger = logging.getLogger(__name__)
+
+
+def _split_csv(raw_value: str) -> list[str]:
+    if not raw_value:
+        return []
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
+def _build_event_tech_context(source_rows) -> dict:
+    """
+    从事件关联的原始内容里聚合科技上下文，供事件详情页直接消费。
+    """
+    topic_counter: dict[str, int] = {}
+    entity_counter: dict[str, int] = {}
+    keyword_counter: dict[str, int] = {}
+
+    for _, info, _ in source_rows:
+        if info.tech_topic_type:
+            topic_counter[info.tech_topic_type] = topic_counter.get(info.tech_topic_type, 0) + 1
+        for entity in _split_csv(info.tech_entities):
+            entity_counter[entity] = entity_counter.get(entity, 0) + 1
+        for keyword in _split_csv(info.tech_keywords):
+            keyword_counter[keyword] = keyword_counter.get(keyword, 0) + 1
+
+    top_topics = [
+        {"topic_type": topic_type, "count": count}
+        for topic_type, count in sorted(topic_counter.items(), key=lambda item: (-item[1], item[0]))[:3]
+    ]
+    entities = [
+        entity
+        for entity, _ in sorted(entity_counter.items(), key=lambda item: (-item[1], item[0]))[:6]
+    ]
+    keywords = [
+        keyword
+        for keyword, _ in sorted(keyword_counter.items(), key=lambda item: (-item[1], item[0]))[:8]
+    ]
+
+    return {
+        "topics": top_topics,
+        "entities": entities,
+        "keywords": keywords,
+    }
+
+
+def _is_redundant_text(text: str, existing_texts: list[str], threshold: float = 0.9) -> bool:
+    cleaned = " ".join((text or "").split()).strip()
+    if not cleaned:
+        return True
+    for existing in existing_texts:
+        existing_cleaned = " ".join((existing or "").split()).strip()
+        if not existing_cleaned:
+            continue
+        if cleaned in existing_cleaned or existing_cleaned in cleaned:
+            return True
+        if text_similarity(cleaned, existing_cleaned) >= threshold:
+            return True
+    return False
+
+
+def _build_distinct_source_views(source_rows, summaries: dict) -> list[dict]:
+    views = []
+    seen_channels = set()
+    reference_texts = [value for value in summaries.values() if value]
+
+    for _, info, channel in source_rows:
+        summary = " ".join((info.content or "")[:120].split()).strip()
+        if not summary or channel.name in seen_channels:
+            continue
+        if _is_redundant_text(summary, reference_texts, threshold=0.86):
+            continue
+        views.append({"channel_name": channel.name, "summary": summary})
+        seen_channels.add(channel.name)
+        reference_texts.append(summary)
+        if len(views) >= 3:
+            break
+
+    return views
 
 
 class CategoryPayload(BaseModel):
@@ -355,7 +433,14 @@ def list_events(
                 .limit(3)
                 .all()
             )
-            return [name for (name,) in rows]
+            badges = []
+            seen = set()
+            for (name,) in rows:
+                if name in seen:
+                    continue
+                badges.append(name)
+                seen.add(name)
+            return badges
 
         def get_representative_info_id(event_id: int) -> Optional[int]:
             row = (
@@ -430,12 +515,19 @@ def get_event_detail(event_id: int):
             item.summary_type: item.content
             for item in session.query(EventSummarySnapshot).filter(EventSummarySnapshot.event_id == event_id).all()
         }
-        timeline = (
+        raw_timeline = (
             session.query(EventTimelineEntry)
             .filter(EventTimelineEntry.event_id == event_id)
             .order_by(EventTimelineEntry.occurred_at.asc())
             .all()
         )
+        timeline = []
+        seen_timeline_summaries: list[str] = [value for value in summaries.values() if value]
+        for item in raw_timeline:
+            if _is_redundant_text(item.summary, seen_timeline_summaries):
+                continue
+            timeline.append(item)
+            seen_timeline_summaries.append(item.summary)
         source_rows = (
             session.query(EventItemLink, Info, Channel)
             .join(Info, Info.id == EventItemLink.item_id)
@@ -444,6 +536,7 @@ def get_event_detail(event_id: int):
             .order_by(EventItemLink.weight.desc())
             .all()
         )
+        tech_context = _build_event_tech_context(source_rows)
 
         return {
             "code": 0,
@@ -467,10 +560,7 @@ def get_event_detail(event_id: int):
                     for item in timeline
                 ],
                 "summaries": summaries,
-                "source_views": [
-                    {"channel_name": channel.name, "summary": info.content[:120]}
-                    for _, info, channel in source_rows[:3]
-                ],
+                "source_views": _build_distinct_source_views(source_rows, summaries),
                 "representative_sources": [
                     {
                         "info_id": info.id,
@@ -481,6 +571,7 @@ def get_event_detail(event_id: int):
                     }
                     for _, info, channel in source_rows[:6]
                 ],
+                "tech_context": tech_context,
             },
         }
     finally:
@@ -532,6 +623,25 @@ def admin_rebuild_events():
             "code": 0,
             "message": "success",
             "data": {"event_count": event_count},
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/refresh-quality")
+def admin_refresh_quality():
+    session = get_session()
+    try:
+        semantic_result = refresh_info_semantics(session)
+        rebuild_events(session)
+        event_count = session.query(Event).count()
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                **semantic_result,
+                "event_count": event_count,
+            },
         }
     finally:
         session.close()

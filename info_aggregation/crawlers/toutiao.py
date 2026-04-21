@@ -40,10 +40,24 @@ class ToutiaoCrawler(BaseCrawler):
             normalized = re.sub(r"\s+", " ", str(part or "")).strip()
             if not normalized or normalized in seen:
                 continue
+            # 如果当前片段只是已有标题的扩展版，去掉重复前缀，只保留新增信息。
+            for existing in merged_parts:
+                if normalized.startswith(existing):
+                    normalized = normalized[len(existing):].lstrip("，。,:：;； ")
+            if not normalized:
+                continue
+            # 过滤标题与摘要、摘要与正文之间的包含式重复，避免正文里反复出现同一句开头。
+            if any(normalized in existing or existing in normalized for existing in merged_parts):
+                continue
             merged_parts.append(normalized)
             seen.add(normalized)
 
         return " ".join(merged_parts).strip()
+
+    def _clean_search_text(self, value: str) -> str:
+        cleaned = re.sub(r"<[^>]+>", "", str(value or ""))
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
 
     def crawl(self) -> list:
         results = []
@@ -171,13 +185,20 @@ class ToutiaoCrawler(BaseCrawler):
             search_data = self.fetch_json(search_url, headers=self._build_detail_headers())
             search_items = search_data.get("data", [])
             merged_parts = []
+            prefix_parts = []
+            for raw_part in (item.get("_hot_desc", ""), item.get("_label", "")):
+                part = self._clean_search_text(str(raw_part or ""))
+                if not part:
+                    continue
+                if part == word or part in word or word in part:
+                    continue
+                prefix_parts.append(part)
             for search_item in search_items[:3]:
                 for key in ("title", "abstract", "content"):
-                    value = re.sub(r"<[^>]+>", "", str(search_item.get(key, "")))
-                    value = re.sub(r"\s+", " ", value).strip()
+                    value = self._clean_search_text(search_item.get(key, ""))
                     if value:
                         merged_parts.append(value)
-            combined = self._merge_distinct_parts(merged_parts)
+            combined = self._merge_distinct_parts(merged_parts, prefix=" ".join(str(part).strip() for part in prefix_parts if str(part).strip()))
             if combined:
                 return DetailStrategyResult(strategy="search_content", content=combined[:500])
         except Exception:
@@ -191,7 +212,13 @@ class ToutiaoCrawler(BaseCrawler):
 
         try:
             response = self.fetch(source_url, headers=self._build_headers(), timeout=15)
-            text = self._extract_text_from_html(response.text)
+            html = response.text
+            match = re.search(r"<article[^>]*>(.*?)</article>", html, re.DOTALL | re.IGNORECASE)
+            text = ""
+            if match:
+                text = self._extract_text_from_html(match.group(0))
+            if not text:
+                text = self._extract_text_from_html(html)
             if text:
                 return DetailStrategyResult(strategy="web_fallback", content=text[:500])
         except Exception:

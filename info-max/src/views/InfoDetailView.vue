@@ -2,12 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DetailContent from '@/components/DetailContent.vue'
-import FavoriteButton from '@/components/FavoriteButton.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useFavorites } from '@/composables/useFavorites'
 import { getInfoById } from '@/services/api'
 import type { InfoItem } from '@/types'
-import { formatDateTime, getStatusTone } from '@/utils'
+import { formatDateTime } from '@/utils'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,6 +18,54 @@ const { isFavorite, toggleFavorite } = useFavorites()
 
 const infoId = computed(() => Number(route.params.id))
 
+function normalizeReadableText(text?: string | null) {
+  return (text || '').replace(/\s+/g, ' ').trim()
+}
+
+function isRepeatedText(text: string, references: string[]) {
+  const current = normalizeReadableText(text)
+  if (!current) {
+    return true
+  }
+  return references.some((reference) => {
+    const normalizedReference = normalizeReadableText(reference)
+    if (!normalizedReference) {
+      return false
+    }
+    if (current === normalizedReference || normalizedReference.includes(current)) {
+      return true
+    }
+    // 正文句子经常会以标题开头，只要后面有新增信息，就应该保留给用户阅读。
+    return current.includes(normalizedReference) && current.length - normalizedReference.length <= 6
+  })
+}
+
+function splitReadableParagraphs(content: string) {
+  return content
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+}
+
+const readableContent = computed(() => {
+  if (!info.value) {
+    return ''
+  }
+
+  const references = [info.value.title]
+  const paragraphs = splitReadableParagraphs(info.value.content)
+  const result: string[] = []
+
+  paragraphs.forEach((paragraph) => {
+    if (isRepeatedText(paragraph, [...references, ...result])) {
+      return
+    }
+    result.push(paragraph)
+  })
+
+  return result.join('\n\n')
+})
 async function loadDetail() {
   loading.value = true
   error.value = ''
@@ -64,13 +111,18 @@ function handleBack() {
   router.push('/')
 }
 
+function handleFavorite() {
+  if (!info.value) return
+  toggleFavorite(info.value.id)
+}
+
 onMounted(loadDetail)
 </script>
 
 <template>
   <div class="detail-page">
-    <button class="button button--ghost detail-page__back" type="button" data-testid="back-button" @click="handleBack">
-      返回看板
+    <button class="detail-back-link" type="button" data-testid="back-button" @click="handleBack">
+      返回
     </button>
 
     <section v-if="loading" class="panel">
@@ -83,42 +135,22 @@ onMounted(loadDetail)
       <button class="button button--ghost" @click="loadDetail">重新加载</button>
     </section>
     <template v-else-if="info">
-      <section class="panel detail-hero">
-        <div class="tags">
-          <span class="tag">{{ info.category_name }}</span>
-          <span class="tag tag--soft">{{ info.channel_name }}</span>
-          <span :class="['tag', `tag--${getStatusTone(info.detail_fetch_status)}`]">
-            {{ info.detail_fetch_status }}
-          </span>
-        </div>
-        <h2>{{ info.title }}</h2>
-        <p class="detail-hero__summary">{{ info.content }}</p>
-
-        <div class="detail-grid">
-          <div>
-            <span>事件时间</span>
-            <strong>{{ formatDateTime(info.event_time || info.created_at) }}</strong>
-          </div>
-          <div>
-            <span>核心主体</span>
-            <strong>{{ info.core_entity || '暂无' }}</strong>
-          </div>
-          <div>
-            <span>地点</span>
-            <strong>{{ info.location || '暂无' }}</strong>
-          </div>
-          <div>
-            <span>指标</span>
-            <strong>{{ info.indicator_name ? `${info.indicator_name} ${info.indicator_value}` : '暂无' }}</strong>
-          </div>
+      <section class="panel detail-hero" data-testid="info-detail-hero">
+        <div class="detail-hero__core">
+          <p class="detail-hero__meta-line" data-testid="info-detail-meta-line">
+            {{ info.category_name }} · {{ info.channel_name }} · {{ formatDateTime(info.event_time || info.created_at) }}
+          </p>
+          <h2>{{ info.title }}</h2>
         </div>
 
-        <div class="info-card__actions">
-          <FavoriteButton :active="isFavorite(info.id)" @toggle="toggleFavorite(info.id)" />
-          <button class="button button--ghost" @click="handleShare">分享</button>
+        <div class="detail-utility-actions">
+          <button type="button" class="detail-utility-action" @click="handleFavorite">
+            {{ isFavorite(info.id) ? '已收藏' : '收藏' }}
+          </button>
+          <button type="button" class="detail-utility-action" @click="handleShare">分享</button>
           <a
             v-if="info.source_url"
-            class="button button--primary"
+            class="detail-utility-action"
             :href="info.source_url"
             target="_blank"
             rel="noreferrer"
@@ -129,7 +161,7 @@ onMounted(loadDetail)
         <p v-if="shareFeedback" class="feedback">{{ shareFeedback }}</p>
       </section>
 
-      <DetailContent :info="info" />
+      <DetailContent :info="info" :content="readableContent" />
     </template>
   </div>
 </template>

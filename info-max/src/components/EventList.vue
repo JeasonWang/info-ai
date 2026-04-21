@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
-import PaginationBar from '@/components/PaginationBar.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import type { EventListItem } from '@/types'
 import { formatDateTime } from '@/utils'
@@ -9,26 +8,19 @@ defineProps<{
   items: EventListItem[]
   loading: boolean
   total: number
-  page: number
-  pageSize: number
+  hasMore: boolean
+  loadingMore: boolean
+  loadMoreError: string
 }>()
 
 const emit = defineEmits<{
-  pageChange: [page: number]
   retry: []
+  retryLoadMore: []
 }>()
 </script>
 
 <template>
-  <section class="panel">
-    <div class="panel__header">
-      <div>
-        <p class="panel__eyebrow">Events</p>
-        <h2>热点事件流</h2>
-      </div>
-      <span class="panel__meta">共 {{ total }} 条事件</span>
-    </div>
-
+  <section class="panel event-list-panel">
     <div v-if="loading" class="card-stack">
       <SkeletonBlock v-for="item in 4" :key="item" :lines="4" />
     </div>
@@ -38,61 +30,56 @@ const emit = defineEmits<{
       <button class="button button--ghost" type="button" @click="emit('retry')">重新加载</button>
     </div>
     <div v-else class="card-stack">
-      <article v-for="item in items" :key="item.id" class="info-card">
-        <div class="info-card__top">
-          <span class="tag">{{ item.primary_category.name }}热点</span>
-          <span class="panel__meta">{{ formatDateTime(item.last_updated_at) }}</span>
-        </div>
-
-        <h3>{{ item.title }}</h3>
-        <div class="event-card__digest">
-          <span class="event-card__digest-label">一句话看懂</span>
-          <p class="info-card__summary">{{ item.one_line_summary }}</p>
-        </div>
-
-        <div class="event-card__stats">
-          <div class="event-card__stat">
-            <span>热度</span>
-            <strong>{{ item.heat_score }}</strong>
-          </div>
-          <div class="event-card__stat">
-            <span>来源</span>
-            <strong>{{ item.source_count }} 个</strong>
-          </div>
-          <div class="event-card__stat">
-            <span>进展</span>
-            <strong>{{ item.new_update_count > 0 ? `${item.new_update_count} 条` : '持续跟进' }}</strong>
-          </div>
-        </div>
-
-        <div class="tags event-card__sources">
-          <span v-for="badge in item.source_badges" :key="badge" class="tag tag--soft">
-            {{ badge }}
+      <article v-for="item in items" :key="item.id" class="info-card event-card event-card--compact">
+        <div class="event-card__meta" data-testid="event-card-meta">
+          <span class="tag">{{ item.primary_category.name }}</span>
+          <span class="event-card__time">
+            {{ item.source_badges[0] || '来源待确认' }} · {{ formatDateTime(item.last_updated_at) }}
           </span>
         </div>
 
-        <div class="info-card__actions event-card__actions">
-          <RouterLink class="button button--primary" :to="`/events/${item.id}`">
-            查看时间线
-          </RouterLink>
+        <RouterLink
+          class="event-card__title-link"
+          :to="item.representative_info_id ? `/info/${item.representative_info_id}` : `/events/${item.id}`"
+        >
+          <h3>{{ item.title }}</h3>
+        </RouterLink>
+
+        <p
+          v-if="item.one_line_summary && item.one_line_summary !== item.title"
+          class="info-card__summary event-card__summary"
+        >
+          {{ item.one_line_summary }}
+        </p>
+
+        <div class="event-card__signal" data-testid="event-card-signal">
+          热度 {{ item.heat_score }} · {{ item.source_count }} 来源 ·
+          {{ item.new_update_count > 0 ? `新增 ${item.new_update_count}` : '持续跟进' }}
+        </div>
+
+        <div class="info-card__actions event-card__actions event-card__actions--compact">
           <RouterLink
-            v-if="item.representative_info_id"
-            class="button button--ghost"
-            :to="`/info/${item.representative_info_id}`"
+            class="button button--primary button--small"
+            :to="item.representative_info_id ? `/info/${item.representative_info_id}` : `/events/${item.id}`"
           >
             查看详情
+          </RouterLink>
+          <RouterLink class="event-card__timeline-link" :to="`/events/${item.id}`">
+            时间线
           </RouterLink>
         </div>
       </article>
     </div>
 
-    <PaginationBar
-      v-if="!loading && total > pageSize"
-      :page="page"
-      :page-size="pageSize"
-      :total="total"
-      :loading="loading"
-      @change="emit('pageChange', $event)"
-    />
+    <div v-if="!loading && items.length > 0" class="infinite-status" data-testid="infinite-status">
+      <span v-if="loadingMore">正在加载更多热点...</span>
+      <template v-else-if="loadMoreError">
+        <span>{{ loadMoreError }}</span>
+        <button class="button button--ghost button--small" type="button" @click="emit('retryLoadMore')">
+          重新加载
+        </button>
+      </template>
+      <span v-else-if="!hasMore">已经看完本频道</span>
+    </div>
   </section>
 </template>

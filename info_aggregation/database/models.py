@@ -103,6 +103,9 @@ class Info(Base):
     detail_score = Column(Integer, default=0, comment="详情完整度得分")
     detail_content_length = Column(Integer, default=0, comment="详情正文长度")
     detail_fetched_at = Column(DateTime, comment="详情抓取完成时间")
+    tech_topic_type = Column(String(50), default="", comment="科技主题类型")
+    tech_entities = Column(String(500), default="", comment="科技核心实体，使用逗号分隔")
+    tech_keywords = Column(String(500), default="", comment="科技关键词，使用逗号分隔")
     is_deleted = Column(Integer, default=0, comment="逻辑删除 0-正常 1-删除")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
@@ -124,6 +127,11 @@ class Info(Base):
 
     def to_dict(self):
         """将信息记录转换为字典，用于API返回"""
+        def split_csv(raw_value: str) -> list[str]:
+            if not raw_value:
+                return []
+            return [item.strip() for item in raw_value.split(",") if item.strip()]
+
         return {
             "id": self.id,
             "title": self.title,
@@ -145,6 +153,9 @@ class Info(Base):
             "detail_score": self.detail_score,
             "detail_content_length": self.detail_content_length,
             "detail_fetched_at": self.detail_fetched_at.strftime("%Y-%m-%d %H:%M:%S") if self.detail_fetched_at else None,
+            "tech_topic_type": self.tech_topic_type,
+            "tech_entities": split_csv(self.tech_entities),
+            "tech_keywords": split_csv(self.tech_keywords),
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None,
         }

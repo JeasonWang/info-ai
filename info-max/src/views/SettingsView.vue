@@ -86,6 +86,93 @@ const acquisitionAverageScore = computed(() => {
   const totalScore = acquisitionInfos.value.reduce((sum, info) => sum + (info.detail_score || 0), 0)
   return (totalScore / acquisitionInfos.value.length).toFixed(1)
 })
+const acquisitionTrendSnapshot = computed(() => {
+  if (acquisitionInfos.value.length === 0) {
+    return null
+  }
+
+  const midpoint = Math.ceil(acquisitionInfos.value.length / 2)
+  const recentBatch = acquisitionInfos.value.slice(0, midpoint)
+  const earlierBatch = acquisitionInfos.value.slice(midpoint)
+
+  const averageScore = (items: InfoItem[]) => {
+    if (items.length === 0) {
+      return 0
+    }
+    return items.reduce((sum, info) => sum + (info.detail_score || 0), 0) / items.length
+  }
+
+  const completeRate = (items: InfoItem[]) => {
+    if (items.length === 0) {
+      return 0
+    }
+    return items.filter((info) => info.detail_fetch_status === 'complete').length / items.length
+  }
+
+  const failedRate = (items: InfoItem[]) => {
+    if (items.length === 0) {
+      return 0
+    }
+    return items.filter((info) => info.detail_fetch_status === 'failed').length / items.length
+  }
+
+  const recentScore = averageScore(recentBatch)
+  const earlierScore = averageScore(earlierBatch)
+  const recentCompleteRate = completeRate(recentBatch)
+  const earlierCompleteRate = completeRate(earlierBatch)
+  const recentFailedRate = failedRate(recentBatch)
+  const earlierFailedRate = failedRate(earlierBatch)
+
+  return {
+    recentSize: recentBatch.length,
+    earlierSize: earlierBatch.length,
+    scoreDelta: recentScore - earlierScore,
+    completeDelta: recentCompleteRate - earlierCompleteRate,
+    failedDelta: recentFailedRate - earlierFailedRate,
+    recentScore: recentScore.toFixed(1),
+    earlierScore: earlierScore.toFixed(1),
+  }
+})
+const acquisitionChannelTrends = computed(() => {
+  const grouped = new Map<string, InfoItem[]>()
+
+  acquisitionInfos.value.forEach((info) => {
+    const channelName = info.channel_name || '未知渠道'
+    const items = grouped.get(channelName) || []
+    items.push(info)
+    grouped.set(channelName, items)
+  })
+
+  const averageScore = (items: InfoItem[]) => {
+    if (items.length === 0) {
+      return 0
+    }
+    return items.reduce((sum, info) => sum + (info.detail_score || 0), 0) / items.length
+  }
+
+  const failedRate = (items: InfoItem[]) => {
+    if (items.length === 0) {
+      return 0
+    }
+    return items.filter((info) => info.detail_fetch_status === 'failed').length / items.length
+  }
+
+  return [...grouped.entries()]
+    .map(([channelName, items]) => {
+      const midpoint = Math.ceil(items.length / 2)
+      const recentBatch = items.slice(0, midpoint)
+      const earlierBatch = items.slice(midpoint)
+      return {
+        channelName,
+        scoreDelta: averageScore(recentBatch) - averageScore(earlierBatch),
+        failedDelta: failedRate(recentBatch) - failedRate(earlierBatch),
+        recentSize: recentBatch.length,
+        earlierSize: earlierBatch.length,
+      }
+    })
+    .sort((left, right) => Math.abs(right.scoreDelta) - Math.abs(left.scoreDelta))
+    .slice(0, 3)
+})
 const acquisitionTopError = computed(() => {
   if (acquisitionErrorDistribution.value.length === 0) {
     return null
@@ -97,6 +184,35 @@ const acquisitionTopStrategy = computed(() => {
     return null
   }
   return acquisitionStrategyDistribution.value[0]
+})
+const acquisitionTopicDistribution = computed(() => {
+  const topicCounter = new Map<string, number>()
+
+  acquisitionInfos.value.forEach((info) => {
+    if (!info.tech_topic_type) {
+      return
+    }
+    topicCounter.set(info.tech_topic_type, (topicCounter.get(info.tech_topic_type) || 0) + 1)
+  })
+
+  return [...topicCounter.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([topicType, count]) => ({ topicType, count }))
+})
+const acquisitionKeywordDistribution = computed(() => {
+  const keywordCounter = new Map<string, number>()
+
+  acquisitionInfos.value.forEach((info) => {
+    info.tech_keywords?.forEach((keyword) => {
+      keywordCounter.set(keyword, (keywordCounter.get(keyword) || 0) + 1)
+    })
+  })
+
+  return [...keywordCounter.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5)
+    .map(([keyword, count]) => ({ keyword, count }))
 })
 const acquisitionErrorDistribution = computed(() => {
   const errorCounter = new Map<string, number>()
@@ -307,6 +423,49 @@ function formatQualityError(errorCode: string) {
   return errorMap[errorCode] ?? errorCode
 }
 
+function formatTechKeywords(keywords?: string[] | null) {
+  if (!keywords || keywords.length === 0) {
+    return []
+  }
+  return keywords
+}
+
+function formatTechEntities(entities?: string[] | null) {
+  if (!entities || entities.length === 0) {
+    return []
+  }
+  return entities
+}
+
+function formatTechTopicType(topicType?: string | null) {
+  const topicMap: Record<string, string> = {
+    chip_release: '芯片发布',
+    model_release: '模型发布',
+    dev_tool: '开发工具',
+    general_tech: '通用科技',
+  }
+
+  if (!topicType) {
+    return '未识别'
+  }
+  return topicMap[topicType] ?? topicType
+}
+
+function formatTrendDelta(delta: number, suffix = '') {
+  const rounded = Math.abs(delta)
+  const formatted = suffix === '%'
+    ? `${(rounded * 100).toFixed(0)}${suffix}`
+    : rounded.toFixed(1)
+
+  if (delta > 0) {
+    return `上升 ${formatted}`
+  }
+  if (delta < 0) {
+    return `下降 ${formatted}`
+  }
+  return `持平 ${formatted}`
+}
+
 onMounted(loadData)
 </script>
 
@@ -383,6 +542,20 @@ onMounted(loadData)
           </article>
         </div>
         <div class="summary-grid">
+          <article v-if="acquisitionTrendSnapshot" class="summary-card" data-testid="quality-score-trend">
+            <h3>质量分趋势</h3>
+            <p>最近 {{ acquisitionTrendSnapshot.recentSize }} 条相较较早 {{ acquisitionTrendSnapshot.earlierSize || 0 }} 条：{{ formatTrendDelta(acquisitionTrendSnapshot.scoreDelta) }}</p>
+          </article>
+          <article v-if="acquisitionTrendSnapshot" class="summary-card" data-testid="quality-complete-trend">
+            <h3>完整率趋势</h3>
+            <p>最近一批完整详情占比相较上一批：{{ formatTrendDelta(acquisitionTrendSnapshot.completeDelta, '%') }}</p>
+          </article>
+          <article v-if="acquisitionTrendSnapshot" class="summary-card" data-testid="quality-failed-trend">
+            <h3>失败率趋势</h3>
+            <p>最近一批失败占比相较上一批：{{ formatTrendDelta(acquisitionTrendSnapshot.failedDelta, '%') }}</p>
+          </article>
+        </div>
+        <div class="summary-grid">
           <article class="summary-card" data-testid="quality-error-distribution">
             <h3>失败分布 Top 3</h3>
             <ul v-if="acquisitionErrorDistribution.length > 0" class="summary-card__list">
@@ -403,6 +576,38 @@ onMounted(loadData)
             </ul>
             <p v-else>暂无策略记录</p>
           </article>
+          <article class="summary-card" data-testid="quality-topic-distribution">
+            <h3>科技主题分布</h3>
+            <ul v-if="acquisitionTopicDistribution.length > 0" class="summary-card__list">
+              <li v-for="item in acquisitionTopicDistribution" :key="item.topicType">
+                <span>{{ formatTechTopicType(item.topicType) }}</span>
+                <strong>{{ item.count }} 条</strong>
+              </li>
+            </ul>
+            <p v-else>当前批次还没有科技主题识别结果</p>
+          </article>
+        </div>
+        <div class="summary-grid">
+          <article class="summary-card" data-testid="quality-channel-trends">
+            <h3>渠道趋势</h3>
+            <ul v-if="acquisitionChannelTrends.length > 0" class="summary-card__list">
+              <li v-for="item in acquisitionChannelTrends" :key="item.channelName">
+                <span>{{ item.channelName }} · 质量{{ formatTrendDelta(item.scoreDelta) }} · 失败率{{ formatTrendDelta(item.failedDelta, '%') }}</span>
+                <strong>{{ item.recentSize }}/{{ item.earlierSize || 0 }}</strong>
+              </li>
+            </ul>
+            <p v-else>当前批次还没有足够的渠道趋势数据</p>
+          </article>
+          <article class="summary-card" data-testid="quality-keyword-distribution">
+            <h3>关键词热点</h3>
+            <ul v-if="acquisitionKeywordDistribution.length > 0" class="summary-card__list">
+              <li v-for="item in acquisitionKeywordDistribution" :key="item.keyword">
+                <span>{{ item.keyword }}</span>
+                <strong>{{ item.count }} 次</strong>
+              </li>
+            </ul>
+            <p v-else>当前批次还没有关键词识别结果</p>
+          </article>
         </div>
         <div v-if="acquisitionInfos.length === 0" class="empty-state">暂时还没有可展示的采集记录。</div>
         <div v-else class="card-stack">
@@ -419,6 +624,29 @@ onMounted(loadData)
               <span>策略：{{ info.detail_strategy || '未记录' }}</span>
               <span>评分：{{ info.detail_score }}</span>
               <span>长度：{{ info.detail_content_length }}</span>
+            </div>
+            <div class="info-card__meta info-card__meta--diagnostics" data-testid="quality-tech-diagnostics">
+              <span class="tag tag--soft">科技主题：{{ formatTechTopicType(info.tech_topic_type) }}</span>
+              <span
+                v-for="item in formatTechEntities(info.tech_entities)"
+                :key="`${info.id}-entity-${item}`"
+                class="tag tag--soft"
+              >
+                {{ item }}
+              </span>
+              <span
+                v-for="item in formatTechKeywords(info.tech_keywords)"
+                :key="`${info.id}-keyword-${item}`"
+                class="tag tag--soft"
+              >
+                {{ item }}
+              </span>
+              <span
+                v-if="formatTechEntities(info.tech_entities).length === 0 && formatTechKeywords(info.tech_keywords).length === 0"
+                class="tag tag--soft"
+              >
+                暂无科技诊断
+              </span>
             </div>
             <p class="info-card__summary">
               {{ info.detail_fetch_error || '当前记录没有失败原因，表示本次详情抓取已通过质量校验。' }}

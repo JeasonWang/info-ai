@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class ZhihuCrawler(BaseCrawler):
@@ -106,58 +107,107 @@ class ZhihuCrawler(BaseCrawler):
         return results
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        return self.resolve_detail(item).content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+
+        answer_api_detail = self._fetch_answer_api_detail(item)
+        if answer_api_detail:
+            candidates.append(answer_api_detail)
+
+        web_detail = self._fetch_web_detail(item)
+        if web_detail:
+            candidates.append(web_detail)
+
+        web_fallback = self._fetch_web_fallback(item)
+        if web_fallback:
+            candidates.append(web_fallback)
+
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+        )
+
+    def _fetch_answer_api_detail(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url or "/question/" not in source_url:
+            return None
+
         try:
             headers = self._build_headers()
             headers["Referer"] = "https://www.zhihu.com/"
             headers["Accept"] = "application/json, text/plain, */*"
 
-            try:
-                question_id = source_url.split("/question/")[-1].split("/")[0].split("?")[0]
-                answers_api = self.QUESTION_API.format(question_id=question_id)
-                data = self.fetch_json(answers_api, headers=headers)
-                answers = data.get("data", [])
-                if answers:
-                    for answer in answers:
-                        content = answer.get("content", "")
-                        if content:
-                            content = re.sub(r'<[^>]+>', '', content)
-                            content = re.sub(r'\s+', ' ', content).strip()
-                            if len(content) >= 50:
-                                return content[:500]
-                    excerpt_parts = []
-                    for answer in answers[:3]:
-                        content = answer.get("excerpt", "")
-                        if content:
-                            excerpt_parts.append(content)
-                    combined = " ".join(excerpt_parts)
-                    if len(combined) >= 50:
-                        return combined[:500]
-            except Exception:
-                pass
+            question_id = source_url.split("/question/")[-1].split("/")[0].split("?")[0]
+            answers_api = self.QUESTION_API.format(question_id=question_id)
+            data = self.fetch_json(answers_api, headers=headers)
+            answers = data.get("data", [])
+            if not answers:
+                return None
 
-            try:
-                response = self.fetch(source_url, headers=headers)
-                html = response.text
-                match = re.search(r'class="RichContent-inner"[^>]*>(.*?)</div>\s*</div>', html, re.DOTALL | re.IGNORECASE)
-                if match:
-                    content = match.group(1)
-                    content = re.sub(r'<[^>]+>', '', content)
-                    content = re.sub(r'\s+', ' ', content).strip()
-                    if len(content) >= 50:
-                        return content[:500]
-            except Exception:
-                pass
+            segments = []
+            seen_segments = set()
+            for answer in answers[:3]:
+                content = str(answer.get("content", "")).strip()
+                if not content:
+                    content = str(answer.get("excerpt", "")).strip()
+                if not content:
+                    continue
+                content = self._normalize_answer_text(content)
+                if content and content not in seen_segments:
+                    seen_segments.add(content)
+                    segments.append(content)
 
-            try:
-                response = self.fetch(source_url, headers=headers)
-                html = response.text
-                text = self._extract_text_from_html(html)
-                if len(text) >= 50:
-                    return text[:500]
-            except Exception:
-                pass
-
-            return ""
+            merged = " ".join(segments).strip()
+            if len(merged) >= 20:
+                return DetailStrategyResult(strategy="answer_api", content=merged[:500])
         except Exception as e:
-            self.logger.warning(f"知乎详情爬取失败: {e}")
-            return ""
+            self.logger.warning(f"知乎回答API解析失败: {e}")
+
+        return None
+
+    def _normalize_answer_text(self, content: str) -> str:
+        content = re.sub(r"<[^>]+>", "", content)
+        content = re.sub(r"\s+", " ", content).strip()
+        return content
+
+    def _fetch_web_detail(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+
+        try:
+            headers = self._build_headers()
+            headers["Referer"] = "https://www.zhihu.com/"
+            response = self.fetch(source_url, headers=headers)
+            html = response.text
+            match = re.search(r'class="RichContent-inner"[^>]*>(.*?)</div>', html, re.DOTALL | re.IGNORECASE)
+            if match:
+                content = match.group(1)
+                content = re.sub(r"<[^>]+>", "", content)
+                content = re.sub(r"\s+", " ", content).strip()
+                if len(content) >= 20:
+                    return DetailStrategyResult(strategy="fetch_detail", content=content[:500])
+        except Exception as e:
+            self.logger.warning(f"知乎页面正文解析失败: {e}")
+
+        return None
+
+    def _fetch_web_fallback(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+
+        try:
+            headers = self._build_headers()
+            headers["Referer"] = "https://www.zhihu.com/"
+            response = self.fetch(source_url, headers=headers)
+            text = self._extract_text_from_html(response.text)
+            if text and len(text) >= 20:
+                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+        except Exception as e:
+            self.logger.warning(f"知乎网页兜底解析失败: {e}")
+
+        return None

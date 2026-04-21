@@ -143,3 +143,40 @@ def test_info_quality_fields_and_acquisition_logs_can_persist(session):
     assert saved.detail_strategy == "topic_search"
     assert saved.detail_score == 72
     assert session.query(InfoAcquisitionLog).count() == 1
+
+
+def test_info_can_persist_tech_semantic_fields(session):
+    category = Category(name="AI大模型动向", code="ai", description="AI")
+    session.add(category)
+    session.flush()
+
+    channel = Channel(
+        name="36氪",
+        code="36kr",
+        base_url="https://36kr.com",
+        category_id=category.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add(channel)
+    session.flush()
+
+    info = Info(
+        title="英伟达发布H200芯片",
+        content="H200 芯片面向大模型训练场景。",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="chip-1",
+        source_url="https://example.com/chip-1",
+        tech_topic_type="chip_release",
+        tech_entities="英伟达,H200",
+        tech_keywords="显存,训练效率",
+    )
+    session.add(info)
+    session.commit()
+
+    saved = session.query(Info).filter(Info.source_id == "chip-1").first()
+    assert saved.tech_topic_type == "chip_release"
+    assert saved.tech_entities == "英伟达,H200"
+    assert saved.tech_keywords == "显存,训练效率"
+    assert saved.to_dict()["tech_keywords"] == ["显存", "训练效率"]

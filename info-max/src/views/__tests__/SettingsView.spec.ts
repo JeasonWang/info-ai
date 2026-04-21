@@ -275,6 +275,9 @@ describe('SettingsView', () => {
                   detail_score: 88,
                   detail_content_length: 226,
                   detail_fetched_at: '2026-04-20 10:05:00',
+                  tech_topic_type: 'chip_release',
+                  tech_entities: ['英伟达', 'H200'],
+                  tech_keywords: ['显存', '训练效率'],
                   created_at: '2026-04-20 10:05:00',
                   updated_at: '2026-04-20 10:05:00',
                 },
@@ -323,6 +326,9 @@ describe('SettingsView', () => {
                   detail_score: 58,
                   detail_content_length: 61,
                   detail_fetched_at: '2026-04-20 10:13:00',
+                  tech_topic_type: 'dev_tool',
+                  tech_entities: ['MCP'],
+                  tech_keywords: ['API', '开发工具'],
                   created_at: '2026-04-20 10:13:00',
                   updated_at: '2026-04-20 10:13:00',
                 },
@@ -406,8 +412,24 @@ describe('SettingsView', () => {
     expect(wrapper.text()).toContain('仅列表摘要')
     expect(wrapper.text()).toContain('微博热点样例')
     expect(wrapper.text()).toContain('topic_search')
+    expect(wrapper.text()).toContain('科技主题')
+    expect(wrapper.text()).toContain('芯片发布')
+    expect(wrapper.text()).toContain('关键词')
+    expect(wrapper.text()).toContain('显存')
+    expect(wrapper.text()).toContain('训练效率')
+    expect(wrapper.text()).toContain('英伟达')
+    expect(wrapper.text()).toContain('H200')
+    expect(wrapper.text()).toContain('科技主题分布')
+    expect(wrapper.text()).toContain('开发工具')
+    expect(wrapper.text()).toContain('关键词热点')
+    expect(wrapper.text()).toContain('API')
     expect(wrapper.text()).toContain('88')
     expect(wrapper.text()).toContain('226')
+    expect(wrapper.get('[data-testid="quality-tech-diagnostics"]').text()).toContain('芯片发布')
+    expect(wrapper.get('[data-testid="quality-tech-diagnostics"]').text()).toContain('显存')
+    expect(wrapper.get('[data-testid="quality-tech-diagnostics"]').text()).toContain('训练效率')
+    expect(wrapper.get('[data-testid="quality-tech-diagnostics"]').text()).toContain('英伟达')
+    expect(wrapper.get('[data-testid="quality-tech-diagnostics"]').text()).toContain('H200')
     expect(wrapper.get('[data-testid="quality-summary-complete"]').text()).toContain('1')
     expect(wrapper.get('[data-testid="quality-summary-partial"]').text()).toContain('1')
     expect(wrapper.get('[data-testid="quality-summary-list_only"]').text()).toContain('1')
@@ -417,11 +439,22 @@ describe('SettingsView', () => {
     expect(wrapper.get('[data-testid="quality-top-error"]').text()).toContain('2 次')
     expect(wrapper.get('[data-testid="quality-top-strategy"]').text()).toContain('topic_search')
     expect(wrapper.get('[data-testid="quality-top-strategy"]').text()).toContain('2 条')
+    expect(wrapper.get('[data-testid="quality-score-trend"]').text()).toContain('质量分趋势')
+    expect(wrapper.get('[data-testid="quality-score-trend"]').text()).toContain('上升')
+    expect(wrapper.get('[data-testid="quality-complete-trend"]').text()).toContain('完整率趋势')
+    expect(wrapper.get('[data-testid="quality-failed-trend"]').text()).toContain('失败率趋势')
     expect(wrapper.get('[data-testid="quality-error-distribution"]').text()).toContain('anti_crawl_blocked')
     expect(wrapper.get('[data-testid="quality-error-distribution"]').text()).toContain('weak_relevance')
     expect(wrapper.get('[data-testid="quality-error-distribution"]').text()).toContain('detail_unavailable')
     expect(wrapper.get('[data-testid="quality-strategy-distribution"]').text()).toContain('topic_search')
     expect(wrapper.get('[data-testid="quality-strategy-distribution"]').text()).toContain('mobile_search')
     expect(wrapper.get('[data-testid="quality-strategy-distribution"]').text()).toContain('list_fallback')
+    expect(wrapper.get('[data-testid="quality-channel-trends"]').text()).toContain('渠道趋势')
+    expect(wrapper.get('[data-testid="quality-channel-trends"]').text()).toContain('微博')
+    expect(wrapper.get('[data-testid="quality-channel-trends"]').text()).toContain('质量上升')
+    expect(wrapper.get('[data-testid="quality-topic-distribution"]').text()).toContain('芯片发布')
+    expect(wrapper.get('[data-testid="quality-topic-distribution"]').text()).toContain('开发工具')
+    expect(wrapper.get('[data-testid="quality-keyword-distribution"]').text()).toContain('显存')
+    expect(wrapper.get('[data-testid="quality-keyword-distribution"]').text()).toContain('API')
   })
 })

@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class CSDNCrawler(BaseCrawler):
@@ -21,6 +22,41 @@ class CSDNCrawler(BaseCrawler):
 
     def __init__(self):
         super().__init__("csdn", "CSDN")
+
+    def _clean_content_text(self, value: str) -> str:
+        cleaned = re.sub(r'<script[^>]*>.*?</script>', '', str(value or ''), flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<style[^>]*>.*?</style>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<[^>]+>', '', cleaned)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned
+
+    def _extract_web_fallback_content(self, html: str, title: str) -> str:
+        """优先从正文块提取 CSDN 文章内容，减少社区壳页面噪声干扰。"""
+        block_patterns = [
+            r'<article[^>]*id="article_content"[^>]*>(.*?)</article>',
+            r'<article[^>]*class="[^"]*article_content[^"]*"[^>]*>(.*?)</article>',
+            r"<article[^>]*>(.*?)</article>",
+            r"<main[^>]*>(.*?)</main>",
+        ]
+        cleaned_blocks = []
+        for pattern in block_patterns:
+            for match in re.findall(pattern, html, re.DOTALL | re.IGNORECASE):
+                cleaned = self._clean_content_text(match)
+                if cleaned:
+                    cleaned_blocks.append(cleaned)
+
+        for block in cleaned_blocks:
+            if title and title in block and len(block) >= 40:
+                return block
+
+        for block in cleaned_blocks:
+            if len(block) >= 80:
+                return block
+
+        fallback_text = self._extract_text_from_html(html)
+        if title and title in fallback_text:
+            return fallback_text
+        return fallback_text
 
     def crawl(self) -> list:
         results = []
@@ -104,37 +140,63 @@ class CSDNCrawler(BaseCrawler):
         return results
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        return self.resolve_detail(item).content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+
+        article_detail = self._fetch_article_detail_content(item)
+        if article_detail:
+            candidates.append(article_detail)
+
+        web_fallback = self._fetch_web_fallback(item)
+        if web_fallback:
+            candidates.append(web_fallback)
+
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+        )
+
+    def _fetch_article_detail_content(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+
         try:
             headers = self._build_headers()
             headers["Referer"] = "https://blog.csdn.net/"
+            response = self.fetch(source_url, headers=headers)
+            html = response.text
+            content = ""
+            match = re.search(r'<article[^>]*id="article_content"[^>]*>(.*?)</article>', html, re.DOTALL | re.IGNORECASE)
+            if not match:
+                match = re.search(r'<article[^>]*class="[^"]*article_content[^"]*"[^>]*>(.*?)</article>', html, re.DOTALL | re.IGNORECASE)
+            if match:
+                content = self._clean_content_text(match.group(1))
 
-            try:
-                response = self.fetch(source_url, headers=headers)
-                html = response.text
-                match = re.search(r'id="article_content"[^>]*>(.*?)</article>', html, re.DOTALL | re.IGNORECASE)
-                if not match:
-                    match = re.search(r'class="article_content"[^>]*>(.*?)</article>', html, re.DOTALL | re.IGNORECASE)
-                if match:
-                    content = match.group(1)
-                    content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL | re.IGNORECASE)
-                    content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL | re.IGNORECASE)
-                    content = re.sub(r'<[^>]+>', '', content)
-                    content = re.sub(r'\s+', ' ', content).strip()
-                    if len(content) >= 50:
-                        return content[:500]
-            except Exception:
-                pass
-
-            try:
-                response = self.fetch(source_url, headers=headers)
-                html = response.text
-                text = self._extract_text_from_html(html)
-                if len(text) >= 50:
-                    return text[:500]
-            except Exception:
-                pass
-
-            return ""
+            if content and len(content) >= 50:
+                return DetailStrategyResult(strategy="fetch_detail", content=content[:500])
         except Exception as e:
-            self.logger.warning(f"CSDN详情爬取失败: {e}")
-            return ""
+            self.logger.warning(f"CSDN详情页正文解析失败: {e}")
+
+        return None
+
+    def _fetch_web_fallback(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+
+        try:
+            headers = self._build_headers()
+            headers["Referer"] = "https://blog.csdn.net/"
+            response = self.fetch(source_url, headers=headers)
+            html = response.text
+            text = self._extract_web_fallback_content(html, item.get("title", ""))
+            if text and len(text) >= 50:
+                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+        except Exception as e:
+            self.logger.warning(f"CSDN网页兜底解析失败: {e}")
+
+        return None

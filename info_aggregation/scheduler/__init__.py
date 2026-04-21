@@ -25,7 +25,8 @@ from config import (
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
 from database import get_session, Channel, Info, InfoAcquisitionLog
-from services import rebuild_events
+from services.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
+from services import parse_tech_content, rebuild_events
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,13 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
 
         saved_ids = []
         saved_count = 0
+        recent_existing = (
+            session.query(Info)
+            .filter(Info.channel_id == channel.id)
+            .order_by(Info.created_at.desc())
+            .limit(200)
+            .all()
+        )
         for item in items:
             existing = session.query(Info).filter(
                 Info.source_id == item["source_id"],
@@ -85,6 +93,17 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
             ).first()
 
             if existing:
+                continue
+            if any(
+                is_near_duplicate_item(
+                    item["title"],
+                    item["content"],
+                    existing_item.title,
+                    existing_item.content,
+                )
+                for existing_item in recent_existing
+            ):
+                logger.info(f"渠道 {channel_code}: 跳过近似重复内容 {item['title'][:30]}")
                 continue
 
             info = Info(
@@ -104,6 +123,7 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
             session.add(info)
             session.flush()
             saved_ids.append(info.id)
+            recent_existing.insert(0, info)
             saved_count += 1
 
         session.commit()
@@ -145,6 +165,26 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
             detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
                 info.source_url, info.to_dict()
             )
+            if detail_content and is_title_content_duplicate(info.title, detail_content):
+                detail_content = ""
+                status = "list_only"
+                error_msg = "title_content_duplicate"
+                pipeline.content = original_content
+                pipeline.status = status
+                pipeline.failure_reason = error_msg
+                pipeline.score = min(pipeline.score, 10)
+                pipeline.content_length = len(original_content)
+                pipeline.matched_rules = [*pipeline.matched_rules, "title_content_duplicate"]
+            elif detail_content and is_low_quality_list_item(info.title, detail_content):
+                detail_content = ""
+                status = "list_only"
+                error_msg = "low_quality_detail"
+                pipeline.content = original_content
+                pipeline.status = status
+                pipeline.failure_reason = error_msg
+                pipeline.score = min(pipeline.score, 10)
+                pipeline.content_length = len(original_content)
+                pipeline.matched_rules = [*pipeline.matched_rules, "low_quality_detail"]
 
             if detail_content:
                 info.content = detail_content
@@ -154,6 +194,11 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
             info.detail_score = pipeline.score
             info.detail_content_length = pipeline.content_length
             info.detail_fetched_at = datetime.now()
+            # 使用最终落库正文做轻量科技结构化，便于 Plus 阶段的详情诊断和阅读增强。
+            semantic_result = parse_tech_content(info.title, detail_content or original_content)
+            info.tech_topic_type = semantic_result.topic_type
+            info.tech_entities = ",".join(semantic_result.entities)
+            info.tech_keywords = ",".join(semantic_result.keywords)
             session.add(
                 InfoAcquisitionLog(
                     info_id=info.id,

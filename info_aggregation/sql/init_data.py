@@ -9,6 +9,7 @@ import random
 from database import get_session, init_db, Category, Channel, Info
 from config import CATEGORIES, CHANNELS, CATEGORY_HOT, CATEGORY_ECONOMY, CATEGORY_INTERNATIONAL, CATEGORY_TECH, CATEGORY_AI
 from services import rebuild_events
+from services.tech_content_parser import parse_tech_content
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,10 @@ def init_mock_data(session, category_map: dict, channel_map: dict):
             detail_content_length=len(item["content"]),
             detail_fetched_at=now,
         )
+        semantic_result = parse_tech_content(item["title"], item["content"])
+        info.tech_topic_type = semantic_result.topic_type
+        info.tech_entities = ",".join(semantic_result.entities)
+        info.tech_keywords = ",".join(semantic_result.keywords)
         session.add(info)
 
     session.commit()

@@ -6,6 +6,8 @@ import re
 import logging
 from datetime import datetime
 
+from services.data_quality import content_fingerprint, is_low_quality_list_item
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,6 +75,9 @@ def clean_info_item(item: dict) -> dict:
         return None
 
     content = clean_content(item.get("content", ""))
+    if is_low_quality_list_item(title, content):
+        return None
+
     source_url = clean_source_url(item.get("source_url", ""))
     source_id = item.get("source_id", "").strip()
     if not source_id:
@@ -106,7 +111,7 @@ def clean_info_item(item: dict) -> dict:
 
 def clean_info_list(items: list) -> list:
     """
-    批量清洗信息列表：过滤不合格数据，去重（按source_id）
+    批量清洗信息列表：过滤不合格数据，去重（按source_id和内容弱指纹）
     参数:
         items: 原始信息列表
     返回:
@@ -114,6 +119,7 @@ def clean_info_list(items: list) -> list:
     """
     cleaned = []
     seen_ids = set()
+    seen_fingerprints = set()
 
     for item in items:
         result = clean_info_item(item)
@@ -121,7 +127,11 @@ def clean_info_list(items: list) -> list:
             continue
         if result["source_id"] in seen_ids:
             continue
+        fingerprint = content_fingerprint(result["title"], result["content"])
+        if fingerprint in seen_fingerprints:
+            continue
         seen_ids.add(result["source_id"])
+        seen_fingerprints.add(fingerprint)
         cleaned.append(result)
 
     logger.info(f"数据清洗: 输入{len(items)}条, 输出{len(cleaned)}条")

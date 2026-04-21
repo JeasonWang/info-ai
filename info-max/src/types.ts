@@ -47,6 +47,9 @@ export interface InfoItem {
   detail_score: number
   detail_content_length: number
   detail_fetched_at: string | null
+  tech_topic_type?: string | null
+  tech_entities?: string[] | null
+  tech_keywords?: string[] | null
   created_at: string | null
   updated_at: string | null
 }
@@ -109,6 +112,17 @@ export interface EventRepresentativeSource {
   event_time: string | null
 }
 
+export interface EventTechTopic {
+  topic_type: string
+  count: number
+}
+
+export interface EventTechContext {
+  topics: EventTechTopic[]
+  entities: string[]
+  keywords: string[]
+}
+
 export interface EventDetail {
   event: {
     id: number
@@ -125,6 +139,7 @@ export interface EventDetail {
   summaries: Record<string, string>
   source_views: EventSourceView[]
   representative_sources: EventRepresentativeSource[]
+  tech_context: EventTechContext
 }
 
 export interface StatsData {

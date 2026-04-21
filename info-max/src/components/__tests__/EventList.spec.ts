@@ -24,8 +24,9 @@ describe('EventList', () => {
         ],
         loading: false,
         total: 1,
-        page: 1,
-        pageSize: 10,
+        hasMore: false,
+        loadingMore: false,
+        loadMoreError: '',
       },
       global: {
         stubs: {
@@ -36,18 +37,63 @@ describe('EventList', () => {
 
     expect(wrapper.text()).toContain('OpenAI 新模型能力引发全网讨论')
     expect(wrapper.text()).toContain('一句话先看懂这件事发生了什么。')
-    expect(wrapper.text()).toContain('一句话看懂')
-    expect(wrapper.text()).toContain('来源')
+    expect(wrapper.find('[data-testid="event-card-signal"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="event-card-stat"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('热度 95 · 4 来源 · 新增 3')
     expect(wrapper.text()).toContain('微博')
-    expect(wrapper.text()).toContain('36氪')
-    expect(wrapper.text()).toContain('进展')
-    expect(wrapper.text()).toContain('3 条')
+    expect(wrapper.text()).not.toContain('36氪')
+    expect(wrapper.text()).not.toContain('进展')
+    expect(wrapper.find('[data-testid="event-card-meta"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="event-card-meta"]').text()).toContain('科技')
+    expect(wrapper.find('[data-testid="event-card-meta"]').text()).toContain('微博')
+    expect(wrapper.find('[data-testid="event-card-meta"]').text()).toContain('2026-04-19 12:30:00')
+    expect(wrapper.findAll('.event-card__actions .button')).toHaveLength(1)
     const links = wrapper.findAllComponents(RouterLinkStub)
-    expect(links).toHaveLength(2)
-    expect(links[0].props('to')).toBe('/events/7')
+    expect(links).toHaveLength(3)
+    expect(links[0].props('to')).toBe('/info/27')
     expect(links[1].props('to')).toBe('/info/27')
-    expect(wrapper.text()).toContain('查看时间线')
+    expect(links[2].props('to')).toBe('/events/7')
+    expect(wrapper.text()).toContain('时间线')
     expect(wrapper.text()).toContain('查看详情')
+    expect(wrapper.text()).toContain('已经看完本频道')
+    expect(wrapper.text()).not.toContain('上一页')
+    expect(wrapper.text()).not.toContain('下一页')
+    expect(wrapper.text()).not.toContain('第 1 /')
+  })
+
+  it('shows a lightweight loading-more state', () => {
+    const wrapper = mount(EventList, {
+      props: {
+        items: [
+          {
+            id: 7,
+            representative_info_id: 27,
+            title: 'OpenAI 新模型能力引发全网讨论',
+            one_line_summary: '一句话先看懂这件事发生了什么。',
+            primary_category: { code: 'tech', name: '科技' },
+            heat_score: 95,
+            freshness_score: 88,
+            composite_score: 92,
+            last_updated_at: '2026-04-19 12:30:00',
+            source_count: 4,
+            source_badges: ['微博'],
+            new_update_count: 3,
+          },
+        ],
+        loading: false,
+        total: 2,
+        hasMore: true,
+        loadingMore: true,
+        loadMoreError: '',
+      },
+      global: {
+        stubs: {
+          RouterLink: RouterLinkStub,
+        },
+      },
+    })
+
+    expect(wrapper.get('[data-testid="infinite-status"]').text()).toContain('正在加载更多热点')
   })
 
   it('renders an empty state and emits retry', async () => {
@@ -56,8 +102,9 @@ describe('EventList', () => {
         items: [],
         loading: false,
         total: 0,
-        page: 1,
-        pageSize: 10,
+        hasMore: false,
+        loadingMore: false,
+        loadMoreError: '',
       },
     })
 

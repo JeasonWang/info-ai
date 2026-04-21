@@ -85,6 +85,10 @@ def extract_meaningful_markers(title: str) -> list[str]:
     else:
         add_marker(normalized_title)
 
+    # 保留原始标题里的英文词和数字词，兼容 “AI Agent”“OpenAI API” 这类带空格标题。
+    for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{1,}", title or ""):
+        add_marker(token)
+
     # 优先保留英文/数字混合词，例如 OpenAI、H200，避免只靠中文前缀做判断。
     for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{1,}", normalized_title):
         add_marker(token)

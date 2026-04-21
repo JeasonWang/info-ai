@@ -47,6 +47,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+function normalizeTechKeywords(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[、,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  return undefined
+}
+
+function normalizeInfoItem(info: InfoItem): InfoItem {
+  return {
+    ...info,
+    tech_topic_type: info.tech_topic_type?.trim() || undefined,
+    tech_entities: normalizeTechKeywords(info.tech_entities),
+    tech_keywords: normalizeTechKeywords(info.tech_keywords),
+  }
+}
+
 export async function getCategories() {
   const response = await request<ApiResponse<Category[]>>('/api/categories')
   return response.data
@@ -114,7 +138,10 @@ export async function getInfos(params: ListInfoParams) {
     page_size: params.page_size,
   })
   const response = await request<ApiResponse<InfoPage>>(`/api/infos${query}`)
-  return response.data
+  return {
+    ...response.data,
+    items: response.data.items.map(normalizeInfoItem),
+  }
 }
 
 export async function getEvents(params: ListEventParams) {
@@ -135,7 +162,7 @@ export async function getEventById(id: number) {
 
 export async function getInfoById(id: number) {
   const response = await request<ApiResponse<InfoItem>>(`/api/infos/${id}`)
-  return response.data
+  return normalizeInfoItem(response.data)
 }
 
 export async function getStats() {
