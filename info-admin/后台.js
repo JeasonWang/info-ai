@@ -13,12 +13,27 @@ const recentRunText = document.querySelector('#recentRunText')
 const qualityStatus = document.querySelector('#qualityStatus')
 const qualityText = document.querySelector('#qualityText')
 const taskStatus = document.querySelector('#taskStatus')
+const categoryStatus = document.querySelector('#categoryStatus')
+const channelStatus = document.querySelector('#channelStatus')
 const crawlRunList = document.querySelector('#crawlRunList')
 const qualitySnapshotList = document.querySelector('#qualitySnapshotList')
 const crawlTaskList = document.querySelector('#crawlTaskList')
+const categoryList = document.querySelector('#categoryList')
+const channelList = document.querySelector('#channelList')
+const categoryForm = document.querySelector('#categoryForm')
+const categoryNameInput = document.querySelector('#categoryNameInput')
+const categoryCodeInput = document.querySelector('#categoryCodeInput')
+const categoryDescriptionInput = document.querySelector('#categoryDescriptionInput')
+const channelForm = document.querySelector('#channelForm')
+const channelNameInput = document.querySelector('#channelNameInput')
+const channelCodeInput = document.querySelector('#channelCodeInput')
+const channelBaseURLInput = document.querySelector('#channelBaseURLInput')
+const channelCategorySelect = document.querySelector('#channelCategorySelect')
+const channelIntervalInput = document.querySelector('#channelIntervalInput')
 
 const API_BASE_URL = 'http://localhost:8080'
 const TOKEN_KEY = 'info-admin-token'
+let cachedCategories = []
 
 async function refreshServiceStatus() {
   try {
@@ -59,6 +74,41 @@ submitLoginButton.addEventListener('click', async () => {
     loginPanel.hidden = true
     await refreshOverview()
     await refreshMonitoringLists()
+    await refreshConfiguration()
+  } catch (error) {
+    loginMessage.textContent = error.message
+  }
+})
+
+categoryForm.addEventListener('submit', async (event) => {
+  event.preventDefault()
+  try {
+    await submitAdminConfig('/api/admin/categories', {
+      name: categoryNameInput.value,
+      code: categoryCodeInput.value,
+      description: categoryDescriptionInput.value,
+    })
+    categoryForm.reset()
+    await refreshConfiguration()
+  } catch (error) {
+    loginMessage.textContent = error.message
+  }
+})
+
+channelForm.addEventListener('submit', async (event) => {
+  event.preventDefault()
+  try {
+    await submitAdminConfig('/api/admin/channels', {
+      name: channelNameInput.value,
+      code: channelCodeInput.value,
+      base_url: channelBaseURLInput.value,
+      category_id: Number(channelCategorySelect.value),
+      crawl_interval: Number(channelIntervalInput.value),
+      is_active: 1,
+    })
+    channelForm.reset()
+    channelIntervalInput.value = '60'
+    await refreshConfiguration()
   } catch (error) {
     loginMessage.textContent = error.message
   }
@@ -95,6 +145,17 @@ async function refreshMonitoringLists() {
   renderCrawlTasks(tasks)
 }
 
+async function refreshConfiguration() {
+  const [categories, channels] = await Promise.all([
+    fetchAdminList('/api/admin/categories'),
+    fetchAdminList('/api/admin/channels'),
+  ])
+  cachedCategories = categories
+  renderCategories(categories)
+  renderChannelCategoryOptions(categories)
+  renderChannels(channels)
+}
+
 async function fetchAdminList(path) {
   const token = localStorage.getItem(TOKEN_KEY)
   if (!token) {
@@ -108,6 +169,28 @@ async function fetchAdminList(path) {
   }
   const result = await response.json()
   return result.data || []
+}
+
+async function submitAdminConfig(path, payload) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (!token) {
+    loginMessage.textContent = '请先登录管理员账号。'
+    return
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  const result = await response.json()
+  if (!response.ok) {
+    throw new Error(result.message || '配置保存失败')
+  }
+  loginMessage.textContent = '配置已保存。'
+  return result.data
 }
 
 function renderOverview(data) {
@@ -166,6 +249,49 @@ function renderCrawlTasks(items) {
   })
 }
 
+function renderCategories(items) {
+  categoryList.innerHTML = ''
+  categoryStatus.textContent = items.length ? `${items.length} 个分类` : '暂无分类'
+  if (!items.length) {
+    categoryList.appendChild(listItem('暂无分类', '请先创建分类，再添加渠道'))
+    return
+  }
+  items.forEach((item) => {
+    categoryList.appendChild(listItem(`${item.name} · ${item.code}`, item.description || '暂无说明'))
+  })
+}
+
+function renderChannelCategoryOptions(items) {
+  channelCategorySelect.innerHTML = ''
+  if (!items.length) {
+    const option = document.createElement('option')
+    option.value = ''
+    option.textContent = '请先创建分类'
+    channelCategorySelect.appendChild(option)
+    return
+  }
+  items.forEach((item) => {
+    const option = document.createElement('option')
+    option.value = item.id
+    option.textContent = item.name
+    channelCategorySelect.appendChild(option)
+  })
+}
+
+function renderChannels(items) {
+  channelList.innerHTML = ''
+  channelStatus.textContent = items.length ? `${items.length} 个渠道` : '暂无渠道'
+  if (!items.length) {
+    channelList.appendChild(listItem('暂无渠道', '新增渠道后，采集任务可绑定这些数据源'))
+    return
+  }
+  items.forEach((item) => {
+    const category = item.category_name || cachedCategories.find((categoryItem) => categoryItem.id === item.category_id)?.name || '未分类'
+    const state = item.is_active === 1 ? '启用' : '停用'
+    channelList.appendChild(listItem(`${item.name} · ${item.code}`, `${category} · ${state} · ${item.crawl_interval} 分钟`))
+  })
+}
+
 function listItem(title, meta) {
   const item = document.createElement('li')
   const strong = document.createElement('strong')
@@ -179,3 +305,4 @@ function listItem(title, meta) {
 refreshServiceStatus()
 refreshOverview()
 refreshMonitoringLists()
+refreshConfiguration()

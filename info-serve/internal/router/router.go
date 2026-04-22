@@ -41,6 +41,12 @@ func NewWithDependencies(authService *auth.Service, eventService *events.Service
 	mux.HandleFunc("GET /api/admin/crawl-runs", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
 	mux.HandleFunc("GET /api/admin/quality-snapshots", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.QualitySnapshots))
 	mux.HandleFunc("GET /api/admin/crawl-tasks", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlTasks))
+	mux.HandleFunc("GET /api/admin/categories", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.Categories))
+	mux.HandleFunc("POST /api/admin/categories", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateCategory))
+	mux.HandleFunc("PUT /api/admin/categories/{id}", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateCategory))
+	mux.HandleFunc("GET /api/admin/channels", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.Channels))
+	mux.HandleFunc("POST /api/admin/channels", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateChannel))
+	mux.HandleFunc("PUT /api/admin/channels/{id}", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateChannel))
 	return mux
 }
 

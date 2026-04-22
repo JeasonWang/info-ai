@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"info-serve/internal/admin"
 )
@@ -182,4 +183,229 @@ ORDER BY t.status ASC, t.id ASC`,
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *MySQLStore) ListCategories(ctx context.Context) ([]admin.Category, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, name, code, description,
+       COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), ''),
+       COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '')
+FROM category
+ORDER BY id ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []admin.Category{}
+	for rows.Next() {
+		var item admin.Category
+		if err := rows.Scan(&item.ID, &item.Name, &item.Code, &item.Description, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+func (s *MySQLStore) CreateCategory(ctx context.Context, payload admin.CategoryPayload) (admin.Category, error) {
+	result, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO category (name, code, description) VALUES (?, ?, ?)`,
+		payload.Name,
+		payload.Code,
+		payload.Description,
+	)
+	if err != nil {
+		if isDuplicateError(err) {
+			return admin.Category{}, admin.ErrDuplicated
+		}
+		return admin.Category{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return admin.Category{}, err
+	}
+	return s.getCategoryByID(ctx, id)
+}
+
+func (s *MySQLStore) UpdateCategory(ctx context.Context, id int64, payload admin.CategoryPayload) (admin.Category, error) {
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE category SET name = ?, code = ?, description = ? WHERE id = ?`,
+		payload.Name,
+		payload.Code,
+		payload.Description,
+		id,
+	)
+	if err != nil {
+		if isDuplicateError(err) {
+			return admin.Category{}, admin.ErrDuplicated
+		}
+		return admin.Category{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return admin.Category{}, err
+	}
+	if affected == 0 {
+		return admin.Category{}, admin.ErrNotFound
+	}
+	return s.getCategoryByID(ctx, id)
+}
+
+func (s *MySQLStore) ListChannels(ctx context.Context) ([]admin.Channel, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
+       ch.crawl_interval, ch.is_active,
+       COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
+       COALESCE(DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s'), '')
+FROM channel AS ch
+JOIN category AS c ON c.id = ch.category_id
+ORDER BY ch.id ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []admin.Channel{}
+	for rows.Next() {
+		var item admin.Channel
+		if err := rows.Scan(
+			&item.ID,
+			&item.Name,
+			&item.Code,
+			&item.BaseURL,
+			&item.CategoryID,
+			&item.CategoryName,
+			&item.CrawlInterval,
+			&item.IsActive,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+func (s *MySQLStore) CreateChannel(ctx context.Context, payload admin.ChannelPayload) (admin.Channel, error) {
+	if err := s.ensureCategoryExists(ctx, payload.CategoryID); err != nil {
+		return admin.Channel{}, err
+	}
+	result, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO channel (name, code, base_url, category_id, crawl_interval, is_active) VALUES (?, ?, ?, ?, ?, ?)`,
+		payload.Name,
+		payload.Code,
+		payload.BaseURL,
+		payload.CategoryID,
+		payload.CrawlInterval,
+		payload.IsActive,
+	)
+	if err != nil {
+		if isDuplicateError(err) {
+			return admin.Channel{}, admin.ErrDuplicated
+		}
+		return admin.Channel{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return admin.Channel{}, err
+	}
+	return s.getChannelByID(ctx, id)
+}
+
+func (s *MySQLStore) UpdateChannel(ctx context.Context, id int64, payload admin.ChannelPayload) (admin.Channel, error) {
+	if err := s.ensureCategoryExists(ctx, payload.CategoryID); err != nil {
+		return admin.Channel{}, err
+	}
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE channel
+SET name = ?, code = ?, base_url = ?, category_id = ?, crawl_interval = ?, is_active = ?
+WHERE id = ?`,
+		payload.Name,
+		payload.Code,
+		payload.BaseURL,
+		payload.CategoryID,
+		payload.CrawlInterval,
+		payload.IsActive,
+		id,
+	)
+	if err != nil {
+		if isDuplicateError(err) {
+			return admin.Channel{}, admin.ErrDuplicated
+		}
+		return admin.Channel{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return admin.Channel{}, err
+	}
+	if affected == 0 {
+		return admin.Channel{}, admin.ErrNotFound
+	}
+	return s.getChannelByID(ctx, id)
+}
+
+func (s *MySQLStore) getCategoryByID(ctx context.Context, id int64) (admin.Category, error) {
+	row := s.db.QueryRowContext(
+		ctx,
+		`SELECT id, name, code, description,
+       COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), ''),
+       COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '')
+FROM category
+WHERE id = ?`,
+		id,
+	)
+	var item admin.Category
+	err := row.Scan(&item.ID, &item.Name, &item.Code, &item.Description, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.Category{}, admin.ErrNotFound
+	}
+	return item, err
+}
+
+func (s *MySQLStore) getChannelByID(ctx context.Context, id int64) (admin.Channel, error) {
+	row := s.db.QueryRowContext(
+		ctx,
+		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
+       ch.crawl_interval, ch.is_active,
+       COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
+       COALESCE(DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s'), '')
+FROM channel AS ch
+JOIN category AS c ON c.id = ch.category_id
+WHERE ch.id = ?`,
+		id,
+	)
+	var item admin.Channel
+	err := row.Scan(
+		&item.ID,
+		&item.Name,
+		&item.Code,
+		&item.BaseURL,
+		&item.CategoryID,
+		&item.CategoryName,
+		&item.CrawlInterval,
+		&item.IsActive,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.Channel{}, admin.ErrNotFound
+	}
+	return item, err
+}
+
+func (s *MySQLStore) ensureCategoryExists(ctx context.Context, categoryID int64) error {
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM category WHERE id = ? LIMIT 1`, categoryID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.ErrNotFound
+	}
+	return err
 }

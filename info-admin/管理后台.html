@@ -96,8 +96,38 @@
               <h3>渠道配置</h3>
               <span id="taskStatus">等待登录</span>
             </div>
-            <p>配置管理将从用户首页剥离，集中放入后台，并要求管理员登录后访问。</p>
+            <p>配置管理已从用户首页剥离，集中放入后台，并要求管理员登录后访问。</p>
             <ul class="data-list" id="crawlTaskList"></ul>
+          </article>
+
+          <article class="panel config-panel">
+            <div class="panel-title">
+              <h3>分类管理</h3>
+              <span id="categoryStatus">等待登录</span>
+            </div>
+            <form class="inline-form" id="categoryForm">
+              <input id="categoryNameInput" type="text" placeholder="分类名称，例如 体育" />
+              <input id="categoryCodeInput" type="text" placeholder="分类编码，例如 sports" />
+              <input id="categoryDescriptionInput" type="text" placeholder="分类说明" />
+              <button type="submit">新增分类</button>
+            </form>
+            <ul class="data-list" id="categoryList"></ul>
+          </article>
+
+          <article class="panel config-panel">
+            <div class="panel-title">
+              <h3>渠道管理</h3>
+              <span id="channelStatus">等待登录</span>
+            </div>
+            <form class="inline-form" id="channelForm">
+              <input id="channelNameInput" type="text" placeholder="渠道名称，例如 新浪体育" />
+              <input id="channelCodeInput" type="text" placeholder="渠道编码，例如 sina_sports" />
+              <input id="channelBaseURLInput" type="url" placeholder="渠道首页 URL" />
+              <select id="channelCategorySelect" aria-label="选择分类"></select>
+              <input id="channelIntervalInput" type="number" min="1" value="60" placeholder="采集间隔" />
+              <button type="submit">新增渠道</button>
+            </form>
+            <ul class="data-list" id="channelList"></ul>
           </article>
         </section>
       </section>
