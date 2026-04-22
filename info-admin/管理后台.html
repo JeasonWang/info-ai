@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>信息达人 Pro 管理后台</title>
+    <link rel="stylesheet" href="./样式.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="eyebrow">INFO DAREN PRO</span>
+          <h1>管理后台</h1>
+        </div>
+        <nav class="nav-list" aria-label="管理导航">
+          <a class="nav-item active" href="#overview">总览</a>
+          <a class="nav-item" href="#crawler">采集监控</a>
+          <a class="nav-item" href="#quality">数据质量</a>
+          <a class="nav-item" href="#channels">渠道配置</a>
+        </nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">MONITORING</p>
+            <h2>采集与质量中枢</h2>
+          </div>
+          <button class="login-button" id="loginButton">管理员登录</button>
+        </header>
+
+        <section class="hero-card" id="overview">
+          <div>
+            <p class="eyebrow">当前阶段</p>
+            <h3>先看清数据，再干预采集</h3>
+            <p class="hero-copy">
+              Pro 后台会优先呈现采集健康、数据完整度、重复内容、低质量详情等指标，避免管理端变成配置堆叠页。
+            </p>
+          </div>
+          <div class="status-pill" id="serviceStatus">等待连接 info-serve</div>
+        </section>
+
+        <section class="metric-grid">
+          <article class="metric-card">
+            <span>采集渠道</span>
+            <strong>12</strong>
+            <p>来自 Plus 版本迁移基线</p>
+          </article>
+          <article class="metric-card">
+            <span>热点事件</span>
+            <strong>199</strong>
+            <p>已迁移到 MySQL</p>
+          </article>
+          <article class="metric-card">
+            <span>原始内容</span>
+            <strong>611</strong>
+            <p>进入 Pro 数据底座</p>
+          </article>
+        </section>
+
+        <section class="panel-grid">
+          <article class="panel" id="crawler">
+            <div class="panel-title">
+              <h3>采集监控</h3>
+              <span>即将接入</span>
+            </div>
+            <p>后续展示每个渠道的最近运行时间、成功率、详情完整率、失败原因和手动重试入口。</p>
+          </article>
+
+          <article class="panel" id="quality">
+            <div class="panel-title">
+              <h3>数据质量</h3>
+              <span>即将接入</span>
+            </div>
+            <p>重点监控重复标题、正文缺失、实体缺失、详情评分过低等问题，帮助我们持续提升底座数据质量。</p>
+          </article>
+
+          <article class="panel" id="channels">
+            <div class="panel-title">
+              <h3>渠道配置</h3>
+              <span>管理能力</span>
+            </div>
+            <p>配置管理将从用户首页剥离，集中放入后台，并要求管理员登录后访问。</p>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script src="./后台.js"></script>
+  </body>
+</html>
