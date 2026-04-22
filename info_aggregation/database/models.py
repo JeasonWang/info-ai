@@ -3,7 +3,7 @@
 使用SQLAlchemy ORM定义渠道表、分类表、信息主表
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -263,4 +263,95 @@ class EventSummarySnapshot(Base):
 
     __table_args__ = (
         Index("idx_event_summary_lookup", "event_id", "summary_type", "version"),
+    )
+
+
+class CrawlTask(Base):
+    """采集任务表：保存可调度的数据采集任务。"""
+
+    __tablename__ = "crawl_task"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="采集任务ID")
+    channel_id = Column(Integer, ForeignKey("channel.id"), nullable=False, comment="渠道ID")
+    task_code = Column(String(80), nullable=False, unique=True, comment="任务编码")
+    task_name = Column(String(100), nullable=False, comment="任务名称")
+    schedule_type = Column(String(20), default="interval", nullable=False, comment="调度类型")
+    schedule_value = Column(String(100), default="", nullable=False, comment="调度配置值")
+    status = Column(String(20), default="active", nullable=False, comment="任务状态")
+    last_run_at = Column(DateTime, comment="最近运行时间")
+    next_run_at = Column(DateTime, comment="下次计划运行时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    channel = relationship("Channel", lazy="joined")
+
+    __table_args__ = (
+        Index("idx_crawl_task_channel_status", "channel_id", "status"),
+    )
+
+
+class CrawlRunLog(Base):
+    """采集运行日志表：记录每次采集执行结果。"""
+
+    __tablename__ = "crawl_run_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="采集运行日志ID")
+    task_id = Column(Integer, ForeignKey("crawl_task.id"), comment="采集任务ID")
+    channel_code = Column(String(50), nullable=False, comment="渠道编码")
+    trigger_type = Column(String(20), default="scheduler", nullable=False, comment="触发方式")
+    status = Column(String(20), nullable=False, comment="运行状态")
+    raw_count = Column(Integer, default=0, comment="原始抓取数量")
+    cleaned_count = Column(Integer, default=0, comment="清洗后数量")
+    saved_count = Column(Integer, default=0, comment="入库数量")
+    detail_success_count = Column(Integer, default=0, comment="详情成功数量")
+    detail_failed_count = Column(Integer, default=0, comment="详情失败数量")
+    error_message = Column(String(1000), default="", comment="错误信息")
+    started_at = Column(DateTime, nullable=False, comment="开始时间")
+    finished_at = Column(DateTime, comment="结束时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    task = relationship("CrawlTask", lazy="joined")
+
+    __table_args__ = (
+        Index("idx_crawl_run_channel_time", "channel_code", "started_at"),
+        Index("idx_crawl_run_task_time", "task_id", "started_at"),
+    )
+
+
+class CrawlHealthSnapshot(Base):
+    """采集健康快照表：保存渠道采集稳定性指标。"""
+
+    __tablename__ = "crawl_health_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="采集健康快照ID")
+    channel_code = Column(String(50), nullable=False, comment="渠道编码")
+    success_rate = Column(Float, default=0.0, comment="最近采集成功率")
+    detail_complete_rate = Column(Float, default=0.0, comment="详情完整率")
+    avg_detail_score = Column(Float, default=0.0, comment="平均详情质量分")
+    last_success_at = Column(DateTime, comment="最近成功时间")
+    last_failed_at = Column(DateTime, comment="最近失败时间")
+    snapshot_at = Column(DateTime, default=datetime.now, comment="快照时间")
+
+    __table_args__ = (
+        Index("idx_crawl_health_channel_time", "channel_code", "snapshot_at"),
+    )
+
+
+class DataQualitySnapshot(Base):
+    """数据质量快照表：保存重复、缺失、低质量等治理指标。"""
+
+    __tablename__ = "data_quality_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="质量快照ID")
+    category_code = Column(String(50), default="all", nullable=False, comment="分类编码")
+    total_count = Column(Integer, default=0, comment="总内容数量")
+    duplicate_title_count = Column(Integer, default=0, comment="重复标题数量")
+    empty_content_count = Column(Integer, default=0, comment="正文为空数量")
+    low_detail_score_count = Column(Integer, default=0, comment="低详情评分数量")
+    missing_entity_count = Column(Integer, default=0, comment="核心实体缺失数量")
+    snapshot_payload = Column(JSON, comment="完整质量报告JSON")
+    snapshot_at = Column(DateTime, default=datetime.now, comment="快照时间")
+
+    __table_args__ = (
+        Index("idx_data_quality_category_time", "category_code", "snapshot_at"),
     )

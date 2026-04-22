@@ -25,11 +25,79 @@ from config import (
 )
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
-from database import get_session, Channel, Info, InfoAcquisitionLog
+from database import get_session, Channel, CrawlRunLog, CrawlTask, Info, InfoAcquisitionLog
 from services.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
 from services import parse_tech_content, rebuild_events
+from services.data_quality_report import save_data_quality_snapshot
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_crawl_tasks(session) -> dict:
+    """把启用渠道同步为 Pro 监控后台可见的采集任务。"""
+    created_count = 0
+    updated_count = 0
+    channels = session.query(Channel).filter(Channel.is_active == 1).all()
+    for channel in channels:
+        task_code = f"crawl_{channel.code}"
+        task = session.query(CrawlTask).filter(CrawlTask.task_code == task_code).first()
+        if not task:
+            task = CrawlTask(
+                channel_id=channel.id,
+                task_code=task_code,
+                task_name=f"{channel.name}采集",
+                schedule_type="interval",
+                schedule_value=str(channel.crawl_interval),
+                status="active",
+            )
+            session.add(task)
+            created_count += 1
+        else:
+            task.channel_id = channel.id
+            task.task_name = f"{channel.name}采集"
+            task.schedule_type = "interval"
+            task.schedule_value = str(channel.crawl_interval)
+            task.status = "active"
+            updated_count += 1
+    session.commit()
+    return {"created_count": created_count, "updated_count": updated_count}
+
+
+def _record_crawl_run(
+    session,
+    channel_code: str,
+    trigger_type: str,
+    status: str,
+    raw_count: int,
+    cleaned_count: int,
+    saved_count: int,
+    detail_success_count: int,
+    detail_failed_count: int,
+    error_message: str,
+    started_at: datetime,
+    finished_at: datetime,
+):
+    """写入单次采集运行日志，供 Pro 管理后台展示。"""
+    task = session.query(CrawlTask).filter(CrawlTask.task_code == f"crawl_{channel_code}").first()
+    if task:
+        task.last_run_at = finished_at
+    session.add(
+        CrawlRunLog(
+            task_id=task.id if task else None,
+            channel_code=channel_code,
+            trigger_type=trigger_type,
+            status=status,
+            raw_count=raw_count,
+            cleaned_count=cleaned_count,
+            saved_count=saved_count,
+            detail_success_count=detail_success_count,
+            detail_failed_count=detail_failed_count,
+            error_message=error_message[:1000],
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+    )
+    session.commit()
 
 
 def _get_channel_category_map() -> dict:
@@ -147,14 +215,16 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
         saved_ids: 需要爬取详情的Info记录ID列表
     """
     if not saved_ids:
-        return
+        return {"detail_success_count": 0, "detail_failed_count": 0}
 
     crawler = crawler_registry.get(channel_code)
     if not crawler:
         logger.warning(f"渠道 {channel_code} 爬虫未注册，跳过详情爬取")
-        return
+        return {"detail_success_count": 0, "detail_failed_count": len(saved_ids)}
 
     session = get_session()
+    detail_success_count = 0
+    detail_failed_count = 0
     try:
         for info_id in saved_ids:
             info = session.query(Info).filter(Info.id == info_id).first()
@@ -215,17 +285,27 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
             )
 
             if status in {"partial", "complete"} and detail_content:
+                detail_success_count += 1
                 logger.info(f"详情爬取成功 [ID={info_id}] 策略={pipeline.strategy}: 内容{len(detail_content)}字")
             else:
+                detail_failed_count += 1
                 logger.warning(f"详情爬取未完成 [ID={info_id}] 状态={status}: {error_msg}，保留内容({len((detail_content or original_content))}字)")
 
             time.sleep(random.uniform(1.0, 3.0))
 
         session.commit()
         logger.info(f"渠道 {channel_code}: 详情爬取完成，共处理{len(saved_ids)}条")
+        return {
+            "detail_success_count": detail_success_count,
+            "detail_failed_count": detail_failed_count,
+        }
     except Exception as e:
         session.rollback()
         logger.error(f"详情爬取过程异常: {e}", exc_info=True)
+        return {
+            "detail_success_count": detail_success_count,
+            "detail_failed_count": len(saved_ids) - detail_success_count,
+        }
     finally:
         session.close()
 
@@ -258,14 +338,52 @@ def crawl_by_category(category_name: str):
     for code, crawler in all_crawlers.items():
         if code not in active_codes:
             continue
-        raw_items = crawler.safe_crawl()
-        cleaned_items = clean_info_list(raw_items)
-        saved_ids = _save_crawled_data(code, cleaned_items)
-        _fetch_details_for_items(code, saved_ids)
+        started_at = datetime.now()
+        raw_count = 0
+        cleaned_count = 0
+        saved_count = 0
+        detail_result = {"detail_success_count": 0, "detail_failed_count": 0}
+        status = "success"
+        error_message = ""
+        try:
+            raw_items = crawler.safe_crawl()
+            raw_count = len(raw_items)
+            cleaned_items = clean_info_list(raw_items)
+            cleaned_count = len(cleaned_items)
+            saved_ids = _save_crawled_data(code, cleaned_items)
+            saved_count = len(saved_ids)
+            detail_result = _fetch_details_for_items(code, saved_ids)
+            if detail_result["detail_failed_count"] > 0:
+                status = "partial"
+        except Exception as exc:
+            status = "failed"
+            error_message = str(exc)
+            logger.error(f"渠道 {code} 采集失败: {exc}", exc_info=True)
+        finally:
+            monitor_session = get_session()
+            try:
+                _sync_crawl_tasks(monitor_session)
+                _record_crawl_run(
+                    monitor_session,
+                    channel_code=code,
+                    trigger_type="scheduler",
+                    status=status,
+                    raw_count=raw_count,
+                    cleaned_count=cleaned_count,
+                    saved_count=saved_count,
+                    detail_success_count=detail_result["detail_success_count"],
+                    detail_failed_count=detail_result["detail_failed_count"],
+                    error_message=error_message,
+                    started_at=started_at,
+                    finished_at=datetime.now(),
+                )
+            finally:
+                monitor_session.close()
 
     session = get_session()
     try:
         rebuild_events(session)
+        save_data_quality_snapshot(session)
     finally:
         session.close()
 
@@ -329,6 +447,11 @@ def setup_scheduler() -> BackgroundScheduler:
     返回: 配置好的BackgroundScheduler实例
     """
     scheduler = BackgroundScheduler()
+    session = get_session()
+    try:
+        _sync_crawl_tasks(session)
+    finally:
+        session.close()
 
     scheduler.add_job(
         crawl_hot,

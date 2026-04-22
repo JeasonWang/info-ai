@@ -6,7 +6,7 @@
 """
 from collections import Counter
 
-from database import Event, Info
+from database import DataQualitySnapshot, Event, Info
 from services.data_quality import is_low_quality_list_item, is_title_content_duplicate, normalize_text, text_similarity
 
 
@@ -161,3 +161,30 @@ def build_data_quality_report(session) -> dict:
         "samples": _build_issue_samples(infos, semantic_infos),
         "recommendations": _build_recommendations(metrics),
     }
+
+
+def save_data_quality_snapshot(session, category_code: str = "all") -> DataQualitySnapshot:
+    """把当前质量体检结果保存到 Pro 监控快照表。"""
+    report = build_data_quality_report(session)
+    info_metrics = report["info"]
+    snapshot = DataQualitySnapshot(
+        category_code=category_code,
+        total_count=info_metrics["total"],
+        duplicate_title_count=info_metrics["duplicate_title_count"],
+        empty_content_count=sum(
+            1
+            for info in session.query(Info).filter(Info.is_deleted == 0).all()
+            if not (info.content or "").strip()
+        ),
+        low_detail_score_count=sum(
+            1
+            for info in session.query(Info).filter(Info.is_deleted == 0).all()
+            if (info.detail_score or 0) < 60
+        ),
+        missing_entity_count=info_metrics["missing_semantic_count"],
+        snapshot_payload=report,
+    )
+    session.add(snapshot)
+    session.commit()
+    session.refresh(snapshot)
+    return snapshot
