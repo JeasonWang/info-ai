@@ -22,9 +22,18 @@ cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
 GOCACHE=/tmp/info-serve-go-build-cache go test ./...
 ```
 
+## 初始化管理员账号
+
+管理后台不开放普通注册成为管理员。Pro 初期可以使用命令行工具初始化或重置首个管理员账号：
+
+```bash
+cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
+INFO_SERVE_MYSQL_DSN='root:root1234@tcp(localhost:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local' \
+go run ./cmd/create-admin -email admin@example.com -password StrongerPass123
+```
+
 ## Pro 后续演进
 
-- 接入 `user_account` 和 `user_session` 表，完成注册入库、登录、退出和会话续期。
 - 将管理后台接口迁移到 `info-serve`，管理接口强制登录并写入 `admin_audit_log`。
 - 将 `info-max` 用户侧 API 从旧 FastAPI 逐步切换到 `info-serve`。
 - 新建 `info-admin` PC Web，展示采集任务、运行日志、健康快照和质量快照。

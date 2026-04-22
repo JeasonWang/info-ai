@@ -33,3 +33,15 @@ func Created(w http.ResponseWriter, data interface{}) {
 func BadRequest(w http.ResponseWriter, message string) {
 	JSON(w, http.StatusBadRequest, Body{Code: 400, Message: message})
 }
+
+func Unauthorized(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusUnauthorized, Body{Code: 401, Message: message})
+}
+
+func Forbidden(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusForbidden, Body{Code: 403, Message: message})
+}
+
+func Conflict(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusConflict, Body{Code: 409, Message: message})
+}

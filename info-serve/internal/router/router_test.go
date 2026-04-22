@@ -63,3 +63,77 @@ func TestRegisterAcceptsEmailAndPasswordContract(t *testing.T) {
 		t.Fatalf("code = %v, want 0", body["code"])
 	}
 }
+
+func TestLoginAndMeUseBearerSession(t *testing.T) {
+	r := New()
+	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", registerPayload)
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerRes := httptest.NewRecorder()
+	r.ServeHTTP(registerRes, registerReq)
+	if registerRes.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerRes.Code, http.StatusCreated)
+	}
+
+	loginPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", loginPayload)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRes := httptest.NewRecorder()
+	r.ServeHTTP(loginRes, loginReq)
+	if loginRes.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d", loginRes.Code, http.StatusOK)
+	}
+
+	var loginBody struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(loginRes.Body.Bytes(), &loginBody); err != nil {
+		t.Fatalf("invalid login json: %v", err)
+	}
+	if loginBody.Data.Token == "" {
+		t.Fatal("login token should not be empty")
+	}
+
+	meReq := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	meRes := httptest.NewRecorder()
+	r.ServeHTTP(meRes, meReq)
+	if meRes.Code != http.StatusOK {
+		t.Fatalf("me status = %d, want %d", meRes.Code, http.StatusOK)
+	}
+}
+
+func TestAdminHealthRequiresAdminRole(t *testing.T) {
+	r := New()
+	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", registerPayload)
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerRes := httptest.NewRecorder()
+	r.ServeHTTP(registerRes, registerReq)
+	if registerRes.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerRes.Code, http.StatusCreated)
+	}
+
+	loginPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", loginPayload)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRes := httptest.NewRecorder()
+	r.ServeHTTP(loginRes, loginReq)
+
+	var loginBody struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(loginRes.Body.Bytes(), &loginBody)
+
+	adminReq := httptest.NewRequest(http.MethodGet, "/api/admin/health", nil)
+	adminReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	adminRes := httptest.NewRecorder()
+	r.ServeHTTP(adminRes, adminReq)
+	if adminRes.Code != http.StatusForbidden {
+		t.Fatalf("admin health status = %d, want %d", adminRes.Code, http.StatusForbidden)
+	}
+}
