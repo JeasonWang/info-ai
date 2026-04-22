@@ -133,6 +133,9 @@ export interface EventDetail {
       name: string
     }
     heat_score: number
+    freshness_score?: number
+    composite_score?: number
+    source_count?: number
     last_updated_at: string | null
   }
   timeline: EventTimelineItem[]
@@ -187,6 +190,7 @@ export interface ListInfoParams {
 export interface ListEventParams {
   category_code?: string
   keyword?: string
+  sort?: 'composite' | 'latest'
   page?: number
   page_size?: number
 }

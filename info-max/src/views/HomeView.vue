@@ -3,17 +3,21 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EventCategoryTabs from '@/components/EventCategoryTabs.vue'
 import EventList from '@/components/EventList.vue'
 import { getEventCategories, getEvents } from '@/services/api'
+import { loadHomeFilterMemory, saveHomeFilterMemory } from '@/services/homeFilterMemory'
 import type { EventCategory, EventPage } from '@/types'
 
 const pageSize = 10
+const filterMemory = loadHomeFilterMemory()
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref('')
 const loadMoreError = ref('')
 const categories = ref<EventCategory[]>([])
-const activeCategoryCode = ref('all')
-const keyword = ref('')
-const appliedKeyword = ref('')
+const activeCategoryCode = ref(filterMemory.categoryCode)
+const keyword = ref(filterMemory.keyword)
+const appliedKeyword = ref(filterMemory.keyword)
+const sortMode = ref<'composite' | 'latest'>(filterMemory.sortMode)
+const filterExpanded = ref(false)
 const showBackToTop = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
@@ -27,10 +31,23 @@ const eventPage = ref<EventPage>({
 const activeCategoryName = computed(
   () => categories.value.find((item) => item.code === activeCategoryCode.value)?.name ?? '全网',
 )
+const sortModeLabel = computed(() => (sortMode.value === 'latest' ? '最新更新优先' : '综合分优先'))
 const hasMore = computed(() => eventPage.value.items.length < eventPage.value.total)
 
 async function loadCategories() {
   categories.value = await getEventCategories()
+  const categoryExists = categories.value.some((item) => item.code === activeCategoryCode.value)
+  if (!categoryExists) {
+    activeCategoryCode.value = 'all'
+  }
+}
+
+function rememberCurrentFilter() {
+  saveHomeFilterMemory({
+    categoryCode: activeCategoryCode.value,
+    sortMode: sortMode.value,
+    keyword: appliedKeyword.value,
+  })
 }
 
 async function loadEvents(page = 1, mode: 'replace' | 'append' = 'replace') {
@@ -47,6 +64,7 @@ async function loadEvents(page = 1, mode: 'replace' | 'append' = 'replace') {
     const nextPage = await getEvents({
       category_code: activeCategoryCode.value,
       keyword: appliedKeyword.value,
+      sort: sortMode.value,
       page,
       page_size: pageSize,
     })
@@ -80,18 +98,35 @@ async function loadMoreEvents() {
 async function selectCategory(code: string) {
   if (code === activeCategoryCode.value) return
   activeCategoryCode.value = code
+  rememberCurrentFilter()
   await loadEvents(1)
+  filterExpanded.value = false
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 async function submitSearch() {
   appliedKeyword.value = keyword.value.trim()
+  rememberCurrentFilter()
   await loadEvents(1)
+}
+
+async function selectSort(mode: 'composite' | 'latest') {
+  if (mode === sortMode.value) return
+  sortMode.value = mode
+  rememberCurrentFilter()
+  await loadEvents(1)
+  filterExpanded.value = false
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function toggleFilterPanel() {
+  filterExpanded.value = !filterExpanded.value
 }
 
 async function loadHome() {
   try {
     await loadCategories()
+    rememberCurrentFilter()
     await loadEvents()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '首页初始化失败'
@@ -154,14 +189,47 @@ onBeforeUnmount(() => {
         />
         <button class="button button--primary button--small" type="submit">搜</button>
       </form>
-    </section>
 
-    <section class="home-channel-strip" data-testid="home-channel-strip">
-      <EventCategoryTabs
-        :categories="categories"
-        :active-code="activeCategoryCode"
-        @select="selectCategory"
-      />
+      <div class="home-channel-strip" data-testid="home-channel-strip">
+        <button
+          type="button"
+          class="home-filter-summary"
+          data-testid="home-filter-toggle"
+          :aria-expanded="filterExpanded"
+          @click="toggleFilterPanel"
+        >
+          <span>当前：{{ activeCategoryName }} · {{ sortModeLabel }}</span>
+          <strong>{{ filterExpanded ? '收起' : '调整' }}</strong>
+        </button>
+
+        <div v-if="filterExpanded" class="home-filter-panel" data-testid="home-filter-panel">
+          <EventCategoryTabs
+            :categories="categories"
+            :active-code="activeCategoryCode"
+            @select="selectCategory"
+          />
+          <div class="home-sort-switch" aria-label="热点排序方式">
+            <button
+              type="button"
+              class="home-sort-switch__item"
+              :class="{ 'home-sort-switch__item--active': sortMode === 'composite' }"
+              data-sort="composite"
+              @click="selectSort('composite')"
+            >
+              综合分优先
+            </button>
+            <button
+              type="button"
+              class="home-sort-switch__item"
+              :class="{ 'home-sort-switch__item--active': sortMode === 'latest' }"
+              data-sort="latest"
+              @click="selectSort('latest')"
+            >
+              最新更新优先
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <p v-if="error" class="error-banner">{{ error }}</p>

@@ -13,6 +13,8 @@ INVALID_PATTERNS = {
         "超话社区",
         "热门微博",
         "登录 注册",
+        "您需要允许该网站执行 JavaScript",
+        "需要允许该网站执行 JavaScript",
     ],
     "anti_crawl_blocked": [
         "请先登录",
@@ -110,7 +112,8 @@ def validate_content(title: str, content: str) -> tuple[str, str, list[str]]:
         return "failed", "empty_content", ["empty_content"]
 
     matched_rules: list[str] = []
-    for reason, patterns in INVALID_PATTERNS.items():
+    for reason in ("anti_crawl_blocked", "shell_page"):
+        patterns = INVALID_PATTERNS[reason]
         if any(pattern in content for pattern in patterns):
             matched_rules.append(reason)
             return "failed", reason, matched_rules
@@ -157,6 +160,7 @@ def run_detail_pipeline(title: str, list_content: str, strategy_results: list[De
         matched_rules=[],
     )
     best_partial: DetailPipelineResult | None = None
+    anti_crawl_failed: DetailPipelineResult | None = None
 
     for candidate in strategy_results:
         normalized = normalize_content(candidate.content)
@@ -177,16 +181,19 @@ def run_detail_pipeline(title: str, list_content: str, strategy_results: list[De
             if best_partial is None or result.score > best_partial.score:
                 best_partial = result
             continue
+        if result.failure_reason == "anti_crawl_blocked":
+            anti_crawl_failed = result
         last_failed = result
 
     if best_partial is not None:
         return best_partial
 
-    if last_failed.failure_reason in {"shell_page", "anti_crawl_blocked"}:
-        return last_failed
+    if anti_crawl_failed is not None:
+        return anti_crawl_failed
 
     fallback = normalize_content(list_content)
-    if fallback:
+    normalized_title = normalize_content(title)
+    if fallback and fallback != normalized_title:
         return DetailPipelineResult(
             content=fallback,
             status="list_only",

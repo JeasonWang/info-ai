@@ -7,7 +7,16 @@ from datetime import datetime, timedelta
 import random
 
 from database import get_session, init_db, Category, Channel, Info
-from config import CATEGORIES, CHANNELS, CATEGORY_HOT, CATEGORY_ECONOMY, CATEGORY_INTERNATIONAL, CATEGORY_TECH, CATEGORY_AI
+from config import (
+    CATEGORIES,
+    CHANNELS,
+    CATEGORY_HOT,
+    CATEGORY_ECONOMY,
+    CATEGORY_INTERNATIONAL,
+    CATEGORY_TECH,
+    CATEGORY_AI,
+    CATEGORY_SPORTS,
+)
 from services import rebuild_events
 from services.tech_content_parser import parse_tech_content
 
@@ -28,6 +37,7 @@ def init_categories(session) -> dict:
         {"name": CATEGORY_INTERNATIONAL, "code": "international", "description": "美国动向、中东战争等国际大事"},
         {"name": CATEGORY_TECH, "code": "tech", "description": "科技行业最新动向"},
         {"name": CATEGORY_AI, "code": "ai", "description": "AI与大模型领域最新进展"},
+        {"name": CATEGORY_SPORTS, "code": "sports", "description": "足球、篮球、综合体育等赛事动态"},
     ]
     for cat_def in category_defs:
         existing = session.query(Category).filter(Category.code == cat_def["code"]).first()
@@ -67,6 +77,8 @@ def init_channels(session, category_map: dict) -> dict:
         {"name": "博客园", "code": "cnblogs", "base_url": "https://www.cnblogs.com", "category": CATEGORY_TECH, "interval": 120},
         {"name": "36氪", "code": "36kr", "base_url": "https://36kr.com", "category": CATEGORY_AI, "interval": 120},
         {"name": "知乎", "code": "zhihu", "base_url": "https://www.zhihu.com", "category": CATEGORY_AI, "interval": 120},
+        {"name": "央视体育网", "code": "cctv_sports", "base_url": "https://sports.cctv.com", "category": CATEGORY_SPORTS, "interval": 60},
+        {"name": "新浪体育", "code": "sina_sports", "base_url": "https://sports.sina.com.cn", "category": CATEGORY_SPORTS, "interval": 60},
     ]
     for ch_def in channel_defs:
         existing = session.query(Channel).filter(Channel.code == ch_def["code"]).first()

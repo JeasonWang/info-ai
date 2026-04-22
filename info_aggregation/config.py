@@ -64,6 +64,7 @@ CATEGORY_ECONOMY = "经济数据"
 CATEGORY_INTERNATIONAL = "国际大事"
 CATEGORY_TECH = "科技动向"
 CATEGORY_AI = "AI大模型动向"
+CATEGORY_SPORTS = "体育"
 
 CATEGORIES = [
     CATEGORY_HOT,
@@ -71,6 +72,7 @@ CATEGORIES = [
     CATEGORY_INTERNATIONAL,
     CATEGORY_TECH,
     CATEGORY_AI,
+    CATEGORY_SPORTS,
 ]
 
 # ==================== 渠道配置 ====================
@@ -85,4 +87,6 @@ CHANNELS = [
     {"name": "博客园", "code": "cnblogs", "category": CATEGORY_TECH},
     {"name": "36氪", "code": "36kr", "category": CATEGORY_AI},
     {"name": "知乎", "code": "zhihu", "category": CATEGORY_AI},
+    {"name": "央视体育网", "code": "cctv_sports", "category": CATEGORY_SPORTS},
+    {"name": "新浪体育", "code": "sina_sports", "category": CATEGORY_SPORTS},
 ]

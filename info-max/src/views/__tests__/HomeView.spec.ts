@@ -5,6 +5,7 @@ import HomeView from '@/views/HomeView.vue'
 describe('HomeView', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    window.localStorage.clear()
   })
 
   it('loads event categories and the event feed, then refetches after selecting another category', async () => {
@@ -161,7 +162,7 @@ describe('HomeView', () => {
       expect.any(Object),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=all&page=1&page_size=10'),
+      expect.stringContaining('/api/events?category_code=all&sort=composite&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.find('[data-testid="home-compact-header"]').exists()).toBe(true)
@@ -173,25 +174,162 @@ describe('HomeView', () => {
     expect(wrapper.text()).not.toContain('事件数量')
     expect(wrapper.text()).toContain('全网综合热点')
     expect(wrapper.text()).not.toContain('管理配置')
+    expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
 
+    await wrapper.get('[data-testid="home-filter-toggle"]').trigger('click')
     await wrapper.get('[data-code="tech"]').trigger('click')
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=tech&page=1&page_size=10'),
+      expect.stringContaining('/api/events?category_code=tech&sort=composite&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('科技频道热点')
+    expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
 
     await wrapper.get('input[type="search"]').setValue('OpenAI')
     await wrapper.get('form').trigger('submit.prevent')
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=tech&keyword=OpenAI&page=1&page_size=10'),
+      expect.stringContaining('/api/events?category_code=tech&keyword=OpenAI&sort=composite&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('科技频道 OpenAI 热点')
+  })
+
+  it('refetches the feed when changing sort mode', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.endsWith('/api/event-categories')) {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: [{ code: 'all', name: '全网', display_order: 0 }],
+          }),
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          message: 'success',
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 10,
+            items: [],
+          },
+        }),
+      )
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('scrollTo', vi.fn())
+
+    const wrapper = mount(HomeView, {
+      global: {
+        stubs: {
+          RouterLink: RouterLinkStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('全网 · 综合分优先')
+    expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="home-filter-toggle"]').trigger('click')
+    expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(true)
+    await wrapper.get('[data-sort="latest"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/events?category_code=all&sort=latest&page=1&page_size=10'),
+      expect.any(Object),
+    )
+    expect(wrapper.text()).toContain('全网 · 最新更新优先')
+    expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
+  })
+
+  it('restores the last selected category, sort mode and keyword from local storage', async () => {
+    window.localStorage.setItem(
+      'info-daren:home-filter-memory',
+      JSON.stringify({
+        categoryCode: 'sports',
+        sortMode: 'latest',
+        keyword: 'NBA',
+      }),
+    )
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.endsWith('/api/event-categories')) {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: [
+              { code: 'all', name: '全网', display_order: 0 },
+              { code: 'sports', name: '体育', display_order: 3 },
+            ],
+          }),
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          message: 'success',
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 10,
+            items: [
+              {
+                id: 8,
+                representative_info_id: 88,
+                title: '体育频道 NBA 热点',
+                one_line_summary: '恢复上次筛选后看到的体育内容。',
+                primary_category: { code: 'sports', name: '体育' },
+                heat_score: 90,
+                freshness_score: 90,
+                composite_score: 90,
+                last_updated_at: '2026-04-22 08:00:00',
+                source_count: 1,
+                source_badges: ['央视体育网'],
+                new_update_count: 0,
+              },
+            ],
+          },
+        }),
+      )
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('scrollTo', vi.fn())
+
+    const wrapper = mount(HomeView, {
+      global: {
+        stubs: {
+          RouterLink: RouterLinkStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/events?category_code=sports&keyword=NBA&sort=latest&page=1&page_size=10'),
+      expect.any(Object),
+    )
+    expect(wrapper.text()).toContain('体育 · 1 条')
+    expect(wrapper.text()).toContain('体育 · 最新更新优先')
+    expect(wrapper.get<HTMLInputElement>('input[type="search"]').element.value).toBe('NBA')
   })
 
   it('shows a back-to-top button after scrolling and scrolls smoothly to the top', async () => {
@@ -366,7 +504,7 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=all&page=2&page_size=10'),
+      expect.stringContaining('/api/events?category_code=all&sort=composite&page=2&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('第一条首页热点')

@@ -148,6 +148,7 @@ export async function getEvents(params: ListEventParams) {
   const query = buildQuery({
     category_code: params.category_code ?? 'all',
     keyword: params.keyword,
+    sort: params.sort,
     page: params.page,
     page_size: params.page_size,
   })

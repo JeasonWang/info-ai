@@ -23,7 +23,6 @@ defineProps<{
         <div class="timeline__content">
           <span class="panel__meta">{{ formatDateTime(item.occurred_at) }}</span>
           <h3>{{ item.summary }}</h3>
-          <p>可信度 {{ Math.round(item.confidence * 100) }}%</p>
         </div>
       </article>
     </div>

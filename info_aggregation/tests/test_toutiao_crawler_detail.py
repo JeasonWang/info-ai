@@ -172,3 +172,25 @@ def test_toutiao_web_fallback_prefers_article_blocks():
     assert result.status == "complete"
     assert result.strategy == "web_fallback"
     assert "部署建议和自动化治理要点" in result.content
+
+
+def test_toutiao_web_fallback_rejects_javascript_shell_page():
+    crawler = ToutiaoCrawler()
+
+    class DummyResponse:
+        text = "<html><body>今日头条 您需要允许该网站执行 JavaScript</body></html>"
+
+    crawler.fetch_json = lambda *args, **kwargs: {"data": []}
+    crawler.fetch = lambda *args, **kwargs: DummyResponse()
+
+    result = crawler.resolve_detail(
+        {
+            "title": "机器人半马见证大国创造澎湃动能",
+            "content": "机器人半马见证大国创造澎湃动能 标签：hot",
+            "source_url": "https://www.toutiao.com/trending/7630373183060770879/",
+            "_cluster_id": "7630373183060770879",
+        }
+    )
+
+    assert result.strategy == "list_fallback"
+    assert result.content != "今日头条 您需要允许该网站执行 JavaScript"

@@ -8,6 +8,16 @@ from difflib import SequenceMatcher
 import re
 
 
+UNUSABLE_CONTENT_MARKERS = (
+    "您需要允许该网站执行 JavaScript",
+    "需要允许该网站执行 JavaScript",
+    "请先登录",
+    "异常访问",
+    "访问频次过高",
+    "验证后继续访问",
+)
+
+
 def normalize_text(value: str) -> str:
     """统一文本形态，方便做稳定的重复判断。"""
     text = re.sub(r"<[^>]+>", "", value or "")
@@ -45,9 +55,16 @@ def is_low_quality_list_item(title: str, content: str) -> bool:
     normalized_content = normalize_text(content)
     if not normalized_content:
         return True
+    if is_unusable_detail_content(content):
+        return True
     if len(normalized_content) < 12:
         return True
     return is_title_content_duplicate(title, content)
+
+
+def is_unusable_detail_content(content: str) -> bool:
+    """判断正文是否是登录、验证或 JS 壳页面等不可读内容。"""
+    return any(marker in (content or "") for marker in UNUSABLE_CONTENT_MARKERS)
 
 
 def is_near_duplicate_item(

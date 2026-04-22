@@ -21,6 +21,7 @@ from config import (
     CATEGORY_INTERNATIONAL,
     CATEGORY_TECH,
     CATEGORY_AI,
+    CATEGORY_SPORTS,
 )
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
@@ -296,6 +297,11 @@ def crawl_ai():
     crawl_by_category(CATEGORY_AI)
 
 
+def crawl_sports():
+    """体育新闻爬取任务（每1小时）"""
+    crawl_by_category(CATEGORY_SPORTS)
+
+
 def cleanup_expired_infos():
     """
     清理两周前创建的信息数据
@@ -365,6 +371,15 @@ def setup_scheduler() -> BackgroundScheduler:
         trigger=IntervalTrigger(minutes=SCHEDULER_AI_INTERVAL),
         id="crawl_ai",
         name="AI大模型动向爬取",
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+
+    scheduler.add_job(
+        crawl_sports,
+        trigger=IntervalTrigger(minutes=60),
+        id="crawl_sports",
+        name="体育新闻爬取",
         max_instances=1,
         misfire_grace_time=300,
     )

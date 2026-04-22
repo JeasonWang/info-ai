@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 
 from api import app
-from database import Category, Channel, Info
+from database import Category, Channel, Event, Info
 from services.event_builder import rebuild_events
 
 
@@ -426,6 +426,39 @@ def test_list_events_supports_keyword_filtering(session):
     payload = response.json()["data"]
     assert len(payload["items"]) == 1
     assert "OpenAI" in payload["items"][0]["title"]
+
+
+def test_list_events_supports_latest_sort(session):
+    tech = Category(name="科技", code="tech", description="科技事件")
+    session.add(tech)
+    session.flush()
+    session.add_all(
+        [
+            Event(
+                title="高综合分较早事件",
+                one_line_summary="综合分更高但更新时间更早。",
+                primary_category_id=tech.id,
+                composite_score=98,
+                heat_score=98,
+                last_updated_at=datetime(2026, 4, 19, 9, 0, 0),
+            ),
+            Event(
+                title="最新更新事件",
+                one_line_summary="综合分较低但更新时间最新。",
+                primary_category_id=tech.id,
+                composite_score=80,
+                heat_score=80,
+                last_updated_at=datetime(2026, 4, 20, 9, 0, 0),
+            ),
+        ]
+    )
+    session.commit()
+
+    client = TestClient(app)
+    response = client.get("/api/events?category_code=all&sort=latest&page=1&page_size=10")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["items"][0]["title"] == "最新更新事件"
 
 
 def test_list_infos_returns_acquisition_quality_fields(session):

@@ -10,8 +10,56 @@ import re
 
 TECH_TOPIC_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("chip_release", ("芯片", "GPU", "显卡", "显存", "算力", "CUDA", "H100", "H200", "Blackwell")),
-    ("dev_tool", ("编程", "开发者", "IDE", "API", "框架", "SDK", "开源", "MCP")),
-    ("model_release", ("模型", "大模型", "推理", "训练", "token", "上下文", "Agent", "智能体")),
+    (
+        "model_release",
+        (
+            "模型",
+            "大模型",
+            "推理",
+            "训练",
+            "token",
+            "上下文",
+            "Agent",
+            "智能体",
+            "AI 应用",
+            "AI应用",
+            "Kimi",
+            "GPT",
+            "GPT Pro",
+            "GPT-5",
+            "Claude",
+            "CLAUDE",
+        ),
+    ),
+    (
+        "dev_tool",
+        (
+            "编程",
+            "开发者",
+            "IDE",
+            "API",
+            "框架",
+            "SDK",
+            "开源",
+            "MCP",
+            "SQL",
+            "C#",
+            "查询引擎",
+            "类型系统",
+            "OOM",
+            "内存泄漏",
+            "故障排查",
+            "Keepalived",
+            "高可用",
+            "集群",
+            "编译安装",
+            "openclaw",
+            "GitHub",
+            "Karpathy",
+            "代码生成",
+            "提示词",
+        ),
+    ),
 ]
 
 ENTITY_MARKERS = (
@@ -26,9 +74,22 @@ ENTITY_MARKERS = (
     "阿里云",
     "字节跳动",
     "DeepSeek",
+    "月之暗面",
+    "Kimi",
     "Claude",
+    "CLAUDE",
+    "GPT",
+    "GPT Pro",
+    "GitHub",
+    "Karpathy",
     "Cursor",
     "MCP",
+    "SQL",
+    "C#",
+    "OOM",
+    "Java",
+    "Keepalived",
+    "openclaw",
     "CUDA",
     "H100",
     "H200",
@@ -48,9 +109,23 @@ KEYWORD_MARKERS = (
     "API",
     "算力",
     "多模态",
+    "AI应用",
+    "AI 应用",
     "Agent",
     "智能体",
     "编程效率",
+    "类型安全",
+    "查询引擎",
+    "数据库查询",
+    "SQL",
+    "内存泄漏",
+    "故障排查",
+    "高可用",
+    "集群配置",
+    "推理速度",
+    "代码生成",
+    "提示词",
+    "蒸馏",
 )
 
 
@@ -82,6 +157,23 @@ def _extract_entities(text: str) -> list[str]:
     # 补充抽取常见型号/缩写，保证 H200、RTX5090 这类对象能被保留下来。
     for token in re.findall(r"\b[A-Za-z]{1,6}\d{2,5}\b", text):
         _add_unique(entities, seen, token)
+    for token in re.findall(r"\bGPT-\d(?:\.\d)?\b", text):
+        _add_unique(entities, seen, token)
+    for token in re.findall(r"\b[A-Za-z]{1,8}(?:\.[A-Za-z0-9]+)?\b|C#", text):
+        if token in {
+            "AI",
+            "SQL",
+            "Kimi",
+            "TypedSql",
+            "C#",
+            "OOM",
+            "Java",
+            "Keepalived",
+            "GPT",
+            "GitHub",
+            "Karpathy",
+        }:
+            _add_unique(entities, seen, token)
 
     return entities
 
@@ -90,9 +182,10 @@ def _extract_keywords(text: str) -> list[str]:
     keywords: list[str] = []
     seen: set[str] = set()
 
+    normalized_text = text.replace(" ", "")
     for marker in KEYWORD_MARKERS:
-        if marker in text:
-            _add_unique(keywords, seen, marker)
+        if marker in text or marker.replace(" ", "") in normalized_text:
+            _add_unique(keywords, seen, marker.replace(" ", ""))
 
     # 补充提取常见双词科技短语，优先保留更有解释性的字段。
     for phrase in ("训练效率", "部署成本", "开发工具", "上下文长度", "开发者工作流"):
@@ -103,6 +196,22 @@ def _extract_keywords(text: str) -> list[str]:
 
 
 def _detect_topic_type(text: str) -> str:
+    strong_dev_markers = (
+        "MCP",
+        "GitHub",
+        "SQL",
+        "C#",
+        "OOM",
+        "Keepalived",
+        "代码生成",
+        "查询引擎",
+        "类型系统",
+        "高可用",
+        "openclaw",
+    )
+    if any(marker in text for marker in strong_dev_markers):
+        return "dev_tool"
+
     for topic_type, markers in TECH_TOPIC_RULES:
         if any(marker in text for marker in markers):
             return topic_type

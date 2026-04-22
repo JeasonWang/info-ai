@@ -21,7 +21,13 @@ from database import (
     EventTimelineEntry,
     Info,
 )
-from services import rebuild_events, refresh_info_semantics
+from services import (
+    archive_duplicate_title_infos,
+    archive_low_quality_infos,
+    build_data_quality_report,
+    rebuild_events,
+    refresh_info_semantics,
+)
 from services.data_quality import text_similarity
 
 logger = logging.getLogger(__name__)
@@ -400,6 +406,7 @@ def list_infos(
 def list_events(
     category_code: str = Query("all", description="按分类编码筛选"),
     keyword: Optional[str] = Query(None, description="按关键词筛选事件"),
+    sort: str = Query("composite", description="排序方式: composite-综合分 latest-最新更新"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=50, description="每页数量"),
 ):
@@ -417,12 +424,12 @@ def list_events(
             )
 
         total = query.count()
-        items = (
-            query.order_by(Event.composite_score.desc(), Event.last_updated_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .all()
-        )
+        if sort == "latest":
+            query = query.order_by(Event.last_updated_at.desc(), Event.composite_score.desc())
+        else:
+            query = query.order_by(Event.composite_score.desc(), Event.last_updated_at.desc())
+
+        items = query.offset((page - 1) * page_size).limit(page_size).all()
 
         def build_badges(event_id: int) -> list[str]:
             rows = (
@@ -548,6 +555,9 @@ def get_event_detail(event_id: int):
                     "one_line_summary": event.one_line_summary,
                     "primary_category": {"code": event.category.code, "name": event.category.name},
                     "heat_score": event.heat_score,
+                    "freshness_score": event.freshness_score,
+                    "composite_score": event.composite_score,
+                    "source_count": event.source_count,
                     "last_updated_at": event.last_updated_at.strftime("%Y-%m-%d %H:%M:%S") if event.last_updated_at else None,
                 },
                 "timeline": [
@@ -641,6 +651,60 @@ def admin_refresh_quality():
             "data": {
                 **semantic_result,
                 "event_count": event_count,
+            },
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/data-quality-report")
+def admin_data_quality_report():
+    """返回数据库质量体检结果，供 Plus 版本收尾和后续采集治理使用。"""
+    session = get_session()
+    try:
+        return {
+            "code": 0,
+            "message": "success",
+            "data": build_data_quality_report(session),
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/archive-low-quality")
+def admin_archive_low_quality():
+    """软删除明显低质量内容，并重建事件流。"""
+    session = get_session()
+    try:
+        archive_result = archive_low_quality_infos(session)
+        rebuild_events(session)
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                **archive_result,
+                "event_count": session.query(Event).count(),
+                "quality_report": build_data_quality_report(session),
+            },
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/archive-duplicate-titles")
+def admin_archive_duplicate_titles():
+    """软删除重复标题内容，每组保留质量最高的一条，并重建事件流。"""
+    session = get_session()
+    try:
+        archive_result = archive_duplicate_title_infos(session)
+        rebuild_events(session)
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                **archive_result,
+                "event_count": session.query(Event).count(),
+                "quality_report": build_data_quality_report(session),
             },
         }
     finally:

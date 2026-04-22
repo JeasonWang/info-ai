@@ -147,6 +147,12 @@ onMounted(loadDetail)
             {{ detail.representative_sources.length }} 个来源
           </p>
           <h2>{{ detail.event.title }}</h2>
+          <div class="detail-hero__quickfacts" data-testid="event-detail-quickfacts">
+            <span>热度 {{ detail.event.heat_score }}</span>
+            <span v-if="detail.event.composite_score !== undefined">综合 {{ detail.event.composite_score }}</span>
+            <span>来源 {{ detail.event.source_count ?? detail.representative_sources.length }}</span>
+            <span v-if="detail.event.last_updated_at">更新 {{ formatDateTime(detail.event.last_updated_at) }}</span>
+          </div>
         </div>
 
         <div class="detail-hero__support" data-testid="event-detail-support">

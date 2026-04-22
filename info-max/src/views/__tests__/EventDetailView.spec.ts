@@ -24,6 +24,8 @@ describe('EventDetailView', () => {
                 one_line_summary: '一句话看懂这个热点事件。',
                 primary_category: { code: 'tech', name: '科技' },
                 heat_score: 92,
+                composite_score: 96,
+                source_count: 2,
                 last_updated_at: '2026-04-19 12:00:00',
               },
               timeline: [
@@ -101,7 +103,10 @@ describe('EventDetailView', () => {
     expect(wrapper.find('[data-testid="event-detail-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="event-detail-core"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="event-detail-support"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="event-detail-quickfacts"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="event-detail-quickfacts"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="event-detail-quickfacts"]').text()).toContain('热度 92')
+    expect(wrapper.get('[data-testid="event-detail-quickfacts"]').text()).toContain('综合 96')
+    expect(wrapper.get('[data-testid="event-detail-quickfacts"]').text()).toContain('来源 2')
     expect(wrapper.text()).toContain('全网关注的热点事件')
     expect(wrapper.text()).toContain('重点结论')
     expect(wrapper.text()).toContain('最新进展')

@@ -32,9 +32,10 @@ const emit = defineEmits<{
     <div v-else class="card-stack">
       <article v-for="item in items" :key="item.id" class="info-card event-card event-card--compact">
         <div class="event-card__meta" data-testid="event-card-meta">
-          <span class="tag">{{ item.primary_category.name }}</span>
+          <span class="tag tag--source">{{ item.source_badges[0] || '来源待确认' }}</span>
+          <span class="event-card__category">{{ item.primary_category.name }}</span>
           <span class="event-card__time">
-            {{ item.source_badges[0] || '来源待确认' }} · {{ formatDateTime(item.last_updated_at) }}
+            {{ formatDateTime(item.last_updated_at) }}
           </span>
         </div>
 
@@ -53,8 +54,9 @@ const emit = defineEmits<{
         </p>
 
         <div class="event-card__signal" data-testid="event-card-signal">
-          热度 {{ item.heat_score }} · {{ item.source_count }} 来源 ·
-          {{ item.new_update_count > 0 ? `新增 ${item.new_update_count}` : '持续跟进' }}
+          <span>热度 {{ item.heat_score }}</span>
+          <span>{{ item.source_count }} 来源</span>
+          <span>{{ item.new_update_count > 0 ? `新增 ${item.new_update_count}` : '持续跟进' }}</span>
         </div>
 
         <div class="info-card__actions event-card__actions event-card__actions--compact">

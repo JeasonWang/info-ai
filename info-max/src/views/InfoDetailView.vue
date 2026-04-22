@@ -48,9 +48,9 @@ function splitReadableParagraphs(content: string) {
     .filter(Boolean)
 }
 
-const readableContent = computed(() => {
+const readableParagraphs = computed(() => {
   if (!info.value) {
-    return ''
+    return []
   }
 
   const references = [info.value.title]
@@ -64,8 +64,42 @@ const readableContent = computed(() => {
     result.push(paragraph)
   })
 
-  return result.join('\n\n')
+  return result
 })
+
+const readableContent = computed(() => readableParagraphs.value.join('\n\n'))
+
+const leadSummary = computed(() => {
+  if (!info.value || readableParagraphs.value.length < 2) {
+    return ''
+  }
+
+  const firstParagraph = readableParagraphs.value[0]
+  if (isRepeatedText(firstParagraph, [info.value.title]) || firstParagraph.includes(info.value.title)) {
+    return ''
+  }
+  return firstParagraph.length > 120 ? `${firstParagraph.slice(0, 120)}...` : firstParagraph
+})
+
+const quickFacts = computed(() => {
+  if (!info.value) {
+    return []
+  }
+  return [
+    info.value.channel_name,
+    formatDateTime(info.value.event_time || info.value.created_at),
+    `质量评分 ${info.value.detail_score}`,
+    `正文长度 ${info.value.detail_content_length}`,
+  ].filter((item): item is string => Boolean(item))
+})
+
+const bodyContent = computed(() => {
+  if (!leadSummary.value) {
+    return readableContent.value
+  }
+  return readableParagraphs.value.slice(1).join('\n\n')
+})
+
 async function loadDetail() {
   loading.value = true
   error.value = ''
@@ -141,6 +175,11 @@ onMounted(loadDetail)
             {{ info.category_name }} · {{ info.channel_name }} · {{ formatDateTime(info.event_time || info.created_at) }}
           </p>
           <h2>{{ info.title }}</h2>
+          <div class="detail-hero__quickfacts" data-testid="info-detail-quickfacts">
+            <span v-for="item in quickFacts" :key="item" class="detail-hero__quickfact">
+              {{ item }}
+            </span>
+          </div>
         </div>
 
         <div class="detail-utility-actions">
@@ -159,9 +198,18 @@ onMounted(loadDetail)
           </a>
         </div>
         <p v-if="shareFeedback" class="feedback">{{ shareFeedback }}</p>
+
+        <article
+          v-if="leadSummary"
+          class="detail-focus-card detail-focus-card--primary detail-focus-card--lead"
+          data-testid="info-detail-summary-card"
+        >
+          <p class="detail-focus-card__label">先看重点</p>
+          <p class="detail-focus-card__body">{{ leadSummary }}</p>
+        </article>
       </section>
 
-      <DetailContent :info="info" :content="readableContent" />
+      <DetailContent :info="info" :content="bodyContent" />
     </template>
   </div>
 </template>

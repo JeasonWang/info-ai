@@ -45,6 +45,8 @@ def register_all_crawlers():
     from crawlers.cnblogs import CnblogsCrawler
     from crawlers.kr36 import Kr36Crawler
     from crawlers.zhihu import ZhihuCrawler
+    from crawlers.cctv_sports import CctvSportsCrawler
+    from crawlers.sina_sports import SinaSportsCrawler
 
     crawlers = [
         WeiboCrawler(),
@@ -57,6 +59,8 @@ def register_all_crawlers():
         CnblogsCrawler(),
         Kr36Crawler(),
         ZhihuCrawler(),
+        CctvSportsCrawler(),
+        SinaSportsCrawler(),
     ]
 
     for crawler in crawlers:
