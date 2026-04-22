@@ -9,7 +9,7 @@ import (
 	"info-serve/internal/auth"
 	"info-serve/internal/events"
 	"info-serve/internal/repository"
-	"info-serve/internal/router"
+	transporthttp "info-serve/internal/transport/http"
 )
 
 // Stores 收拢服务装配所需的存储依赖，避免 cmd 入口直接感知各业务服务的构造细节。
@@ -39,12 +39,12 @@ func NewHTTPHandler(stores Stores) http.Handler {
 		auditStore = audit.NewMemoryStore()
 	}
 
-	return router.NewWithDependencies(
-		auth.NewService(authStore),
-		events.NewService(eventStore),
-		admin.NewService(adminStore),
-		audit.NewService(auditStore),
-	)
+	return transporthttp.NewRouter(transporthttp.Services{
+		Auth:   auth.NewService(authStore),
+		Events: events.NewService(eventStore),
+		Admin:  admin.NewService(adminStore),
+		Audit:  audit.NewService(auditStore),
+	})
 }
 
 // NewHTTPHandlerFromDB 使用同一个 MySQL store 装配所有业务模块。

@@ -76,7 +76,7 @@ info-serve/
   README.md
 ```
 
-说明：可以分阶段迁移，短期允许保留现有 `internal/admin`、`internal/auth`、`internal/events` 包，但新增模块必须遵守上述边界。等功能稳定后，再逐步把领域模型和 HTTP transport 迁移到新结构。
+说明：可以分阶段迁移，短期允许保留现有 `internal/admin`、`internal/auth`、`internal/events` 包。HTTP 路由入口已经迁入 `internal/transport/http`，后续新增 HTTP 代码必须进入该目录；现有 `handler/router/middleware` 会继续小步迁移。
 
 ## 分层职责
 

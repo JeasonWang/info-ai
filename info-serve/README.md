@@ -24,14 +24,15 @@ internal/
   auth/            # 用户鉴权和会话服务
   config/          # 环境变量配置
   events/          # 用户侧事件查询服务
-  handler/         # 当前 HTTP handler，后续迁移到 transport/http
+  handler/         # 历史 HTTP handler，新增 handler 应进入 transport/http
   middleware/      # 鉴权和审计中间件
   repository/      # MySQL 数据访问
   response/        # 统一 JSON 响应
-  router/          # 当前路由装配，后续迁移到 transport/http
+  router/          # 历史兼容路由包装
+  transport/http/  # 新 HTTP 路由装配入口
 ```
 
-后续新增 HTTP 代码应优先进入规划中的 `internal/transport/http`，现有 `handler/router/middleware` 会分阶段迁移，避免一次性大重构。
+后续新增 HTTP 代码必须优先进入 `internal/transport/http`。现有 `handler/router/middleware` 属于待迁移目录，迁移时必须保持 API 行为不变并补充路由测试。
 
 ## 本地启动
 
@@ -82,6 +83,7 @@ go run ./cmd/create-admin -email admin@example.com -password StrongerPass123
 
 - `cmd/server/main.go` 只保留进程入口和启动逻辑。
 - `handler` 只解析 HTTP 请求和响应，不写 SQL，不写复杂业务规则。
+- `internal/router` 只保留兼容入口，新路由统一放入 `internal/transport/http`。
 - `service` 处理业务规则、参数归一化、权限语义。
 - `repository` 只负责 SQL、事务和数据映射。
 - `response` 统一输出 `{ code, message, data }`。
