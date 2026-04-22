@@ -62,7 +62,7 @@ func (s stubEventStore) GetEventDetail(ctx context.Context, id int64) (events.Ev
 }
 
 func TestEventCategoriesRoute(t *testing.T) {
-	r := NewWithDependencies(nil, events.NewService(stubEventStore{}))
+	r := NewWithDependencies(nil, events.NewService(stubEventStore{}), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/event-categories", nil)
 	res := httptest.NewRecorder()
 
@@ -83,7 +83,7 @@ func TestEventCategoriesRoute(t *testing.T) {
 }
 
 func TestListEventsRouteUsesFrontendCompatibleShape(t *testing.T) {
-	r := NewWithDependencies(nil, events.NewService(stubEventStore{}))
+	r := NewWithDependencies(nil, events.NewService(stubEventStore{}), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/events?category_code=tech&sort=latest&page=2&page_size=5", nil)
 	res := httptest.NewRecorder()
 
@@ -107,7 +107,7 @@ func TestListEventsRouteUsesFrontendCompatibleShape(t *testing.T) {
 }
 
 func TestEventDetailRouteUsesFrontendCompatibleShape(t *testing.T) {
-	r := NewWithDependencies(nil, events.NewService(stubEventStore{}))
+	r := NewWithDependencies(nil, events.NewService(stubEventStore{}), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/events/7", nil)
 	res := httptest.NewRecorder()
 

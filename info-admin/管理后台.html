@@ -30,6 +30,19 @@
           <button class="login-button" id="loginButton">管理员登录</button>
         </header>
 
+        <section class="login-panel" id="loginPanel" hidden>
+          <label>
+            管理员邮箱
+            <input id="emailInput" type="email" value="admin@info-daren.local" />
+          </label>
+          <label>
+            密码
+            <input id="passwordInput" type="password" placeholder="请输入管理员密码" />
+          </label>
+          <button id="submitLoginButton">登录后台</button>
+          <p id="loginMessage"></p>
+        </section>
+
         <section class="hero-card" id="overview">
           <div>
             <p class="eyebrow">当前阶段</p>
@@ -44,17 +57,17 @@
         <section class="metric-grid">
           <article class="metric-card">
             <span>采集渠道</span>
-            <strong>12</strong>
-            <p>来自 Plus 版本迁移基线</p>
+            <strong id="channelCount">--</strong>
+            <p>来自 Pro MySQL 数据库</p>
           </article>
           <article class="metric-card">
             <span>热点事件</span>
-            <strong>199</strong>
-            <p>已迁移到 MySQL</p>
+            <strong id="eventCount">--</strong>
+            <p>当前可展示事件</p>
           </article>
           <article class="metric-card">
             <span>原始内容</span>
-            <strong>611</strong>
+            <strong id="infoCount">--</strong>
             <p>进入 Pro 数据底座</p>
           </article>
         </section>
@@ -63,17 +76,17 @@
           <article class="panel" id="crawler">
             <div class="panel-title">
               <h3>采集监控</h3>
-              <span>即将接入</span>
+              <span id="recentRunStatus">等待登录</span>
             </div>
-            <p>后续展示每个渠道的最近运行时间、成功率、详情完整率、失败原因和手动重试入口。</p>
+            <p id="recentRunText">登录后展示最近采集运行状态、入库数量和详情抓取结果。</p>
           </article>
 
           <article class="panel" id="quality">
             <div class="panel-title">
               <h3>数据质量</h3>
-              <span>即将接入</span>
+              <span id="qualityStatus">等待登录</span>
             </div>
-            <p>重点监控重复标题、正文缺失、实体缺失、详情评分过低等问题，帮助我们持续提升底座数据质量。</p>
+            <p id="qualityText">登录后展示重复标题、正文缺失、实体缺失、低详情评分等治理指标。</p>
           </article>
 
           <article class="panel" id="channels">

@@ -33,6 +33,7 @@ body {
 
 .sidebar,
 .topbar,
+.login-panel,
 .hero-card,
 .metric-card,
 .panel {
@@ -110,6 +111,50 @@ h2 {
   cursor: pointer;
 }
 
+.login-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 20px;
+}
+
+.login-panel[hidden] {
+  display: none;
+}
+
+.login-panel label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login-panel input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  outline: none;
+}
+
+.login-panel button {
+  border: 0;
+  border-radius: 16px;
+  padding: 13px 18px;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.login-panel p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+}
+
 .hero-card {
   display: flex;
   align-items: flex-end;
@@ -184,9 +229,14 @@ h2 {
   }
 
   .topbar,
-  .hero-card {
+  .hero-card,
+  .login-panel {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .login-panel {
+    grid-template-columns: 1fr;
   }
 
   .metric-grid,
