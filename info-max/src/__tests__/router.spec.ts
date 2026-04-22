@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { createAppRouter } from '@/router'
 
 describe('router scroll behavior', () => {
+  it('does not expose admin configuration routes in the user app', () => {
+    const routeNames = createAppRouter()
+      .getRoutes()
+      .map((route) => route.name)
+
+    expect(routeNames).not.toContain('settings')
+  })
+
   it('restores saved position when navigating back', async () => {
     const router = createAppRouter()
     const scrollBehavior = router.options.scrollBehavior

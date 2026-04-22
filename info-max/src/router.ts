@@ -18,11 +18,6 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('./views/EventDetailView.vue'),
     props: true,
   },
-  {
-    path: '/settings',
-    name: 'settings',
-    component: () => import('./views/SettingsView.vue'),
-  },
 ]
 
 export const appScrollBehavior: RouterScrollBehavior = (

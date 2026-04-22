@@ -1,11 +1,7 @@
 import type {
   ApiResponse,
   Category,
-  CategoryPayload,
   Channel,
-  ChannelPayload,
-  CrawlTriggerResult,
-  EventRebuildResult,
   EventDetail,
   EventCategory,
   EventPage,
@@ -87,48 +83,6 @@ export async function getChannels(categoryId?: number) {
   return response.data
 }
 
-export async function getAdminCategories() {
-  const response = await request<ApiResponse<Category[]>>('/api/admin/categories')
-  return response.data
-}
-
-export async function createCategory(payload: CategoryPayload) {
-  const response = await request<ApiResponse<Category>>('/api/admin/categories', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-  return response.data
-}
-
-export async function updateCategory(id: number, payload: CategoryPayload) {
-  const response = await request<ApiResponse<Category>>(`/api/admin/categories/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  })
-  return response.data
-}
-
-export async function getAdminChannels() {
-  const response = await request<ApiResponse<Channel[]>>('/api/admin/channels')
-  return response.data
-}
-
-export async function createChannel(payload: ChannelPayload) {
-  const response = await request<ApiResponse<Channel>>('/api/admin/channels', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-  return response.data
-}
-
-export async function updateChannel(id: number, payload: ChannelPayload) {
-  const response = await request<ApiResponse<Channel>>(`/api/admin/channels/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  })
-  return response.data
-}
-
 export async function getInfos(params: ListInfoParams) {
   const query = buildQuery({
     category_id: params.category_id,
@@ -168,20 +122,5 @@ export async function getInfoById(id: number) {
 
 export async function getStats() {
   const response = await request<ApiResponse<StatsData>>('/api/stats')
-  return response.data
-}
-
-export async function triggerCrawl(channelCode: string) {
-  const query = buildQuery({ channel_code: channelCode })
-  const response = await request<ApiResponse<CrawlTriggerResult>>(`/api/crawl/trigger${query}`, {
-    method: 'POST',
-  })
-  return response.data
-}
-
-export async function rebuildEvents() {
-  const response = await request<ApiResponse<EventRebuildResult>>('/api/admin/rebuild-events', {
-    method: 'POST',
-  })
   return response.data
 }

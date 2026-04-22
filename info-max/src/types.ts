@@ -153,32 +153,6 @@ export interface StatsData {
   }>
 }
 
-export interface CrawlTriggerResult {
-  channel: string
-  raw_count: number
-  cleaned_count: number
-  detail_fetched: number
-}
-
-export interface EventRebuildResult {
-  event_count: number
-}
-
-export interface CategoryPayload {
-  name: string
-  code: string
-  description: string
-}
-
-export interface ChannelPayload {
-  name: string
-  code: string
-  base_url: string
-  category_id: number
-  crawl_interval: number
-  is_active: number
-}
-
 export interface ListInfoParams {
   category_id?: number
   channel_id?: number
