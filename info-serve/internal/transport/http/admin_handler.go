@@ -1,4 +1,4 @@
-package handler
+package transporthttp
 
 import (
 	"encoding/json"
@@ -9,6 +9,14 @@ import (
 	"info-serve/internal/admin"
 	"info-serve/internal/response"
 )
+
+// AdminHealth 是管理后台探活接口，用于验证管理鉴权链路。
+func AdminHealth(w http.ResponseWriter, r *http.Request) {
+	response.OK(w, map[string]string{
+		"service": "info-admin-api",
+		"status":  "protected",
+	})
+}
 
 // AdminHandler 承载管理后台 API。
 type AdminHandler struct {

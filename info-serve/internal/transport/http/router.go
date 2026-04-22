@@ -7,7 +7,6 @@ import (
 	"info-serve/internal/audit"
 	"info-serve/internal/auth"
 	"info-serve/internal/events"
-	"info-serve/internal/handler"
 	"info-serve/internal/middleware"
 )
 
@@ -28,7 +27,7 @@ func NewRouter(services Services) http.Handler {
 
 	authHandler := NewAuthHandler(authService)
 	eventHandler := NewEventHandler(eventService)
-	adminHandler := handler.NewAdminHandler(adminService)
+	adminHandler := NewAdminHandler(adminService)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", Health)
@@ -39,7 +38,7 @@ func NewRouter(services Services) http.Handler {
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/auth/logout", authHandler.Logout)
 	mux.HandleFunc("GET /api/me", authHandler.Me)
-	mux.HandleFunc("GET /api/admin/health", middleware.RequireAdminWithAudit(authService, auditService, handler.AdminHealth))
+	mux.HandleFunc("GET /api/admin/health", middleware.RequireAdminWithAudit(authService, auditService, AdminHealth))
 	mux.HandleFunc("GET /api/admin/overview", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
 	mux.HandleFunc("GET /api/admin/crawl-runs", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
 	mux.HandleFunc("GET /api/admin/quality-snapshots", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.QualitySnapshots))

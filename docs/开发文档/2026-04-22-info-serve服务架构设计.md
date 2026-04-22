@@ -76,7 +76,7 @@ info-serve/
   README.md
 ```
 
-说明：可以分阶段迁移，短期允许保留现有 `internal/admin`、`internal/auth`、`internal/events` 包。HTTP 路由入口、健康检查、鉴权 handler 和事件 handler 已经迁入 `internal/transport/http`，后续新增 HTTP 代码必须进入该目录；现有管理 handler 会继续小步迁移。
+说明：可以分阶段迁移，短期允许保留现有 `internal/admin`、`internal/auth`、`internal/events` 包。HTTP 路由入口、健康检查、鉴权 handler、事件 handler 和管理后台 handler 已经迁入 `internal/transport/http`，后续新增 HTTP 代码必须进入该目录；现有 middleware 会继续小步迁移。
 
 ## 分层职责
 
