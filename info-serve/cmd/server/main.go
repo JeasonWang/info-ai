@@ -8,6 +8,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"info-serve/internal/admin"
+	"info-serve/internal/audit"
 	"info-serve/internal/auth"
 	"info-serve/internal/config"
 	"info-serve/internal/events"
@@ -30,8 +31,9 @@ func main() {
 	authService := auth.NewService(store)
 	eventService := events.NewService(store)
 	adminService := admin.NewService(store)
+	auditService := audit.NewService(store)
 	log.Printf("info-serve 启动中，监听地址：%s", cfg.HTTPAddr)
-	if err := http.ListenAndServe(cfg.HTTPAddr, router.NewWithDependencies(authService, eventService, adminService)); err != nil {
+	if err := http.ListenAndServe(cfg.HTTPAddr, router.NewWithDependencies(authService, eventService, adminService, auditService)); err != nil {
 		log.Fatalf("info-serve 启动失败：%v", err)
 	}
 }

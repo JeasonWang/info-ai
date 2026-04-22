@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"info-serve/internal/admin"
+	"info-serve/internal/audit"
 	"info-serve/internal/auth"
 	"info-serve/internal/events"
 	"info-serve/internal/handler"
@@ -13,14 +14,15 @@ import (
 // New 创建 info-serve 路由。
 func New(services ...*auth.Service) http.Handler {
 	authService := resolveAuthService(services...)
-	return NewWithDependencies(authService, nil, nil)
+	return NewWithDependencies(authService, nil, nil, nil)
 }
 
 // NewWithDependencies 创建带依赖注入的路由，便于服务启动和测试复用。
-func NewWithDependencies(authService *auth.Service, eventService *events.Service, adminService *admin.Service) http.Handler {
+func NewWithDependencies(authService *auth.Service, eventService *events.Service, adminService *admin.Service, auditService *audit.Service) http.Handler {
 	authService = resolveAuthService(authService)
 	eventService = resolveEventService(eventService)
 	adminService = resolveAdminService(adminService)
+	auditService = resolveAuditService(auditService)
 	authHandler := handler.NewAuthHandler(authService)
 	eventHandler := handler.NewEventHandler(eventService)
 	adminHandler := handler.NewAdminHandler(adminService)
@@ -34,11 +36,11 @@ func NewWithDependencies(authService *auth.Service, eventService *events.Service
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/auth/logout", authHandler.Logout)
 	mux.HandleFunc("GET /api/me", authHandler.Me)
-	mux.HandleFunc("GET /api/admin/health", middleware.RequireAdmin(authService, handler.AdminHealth))
-	mux.HandleFunc("GET /api/admin/overview", middleware.RequireAdmin(authService, adminHandler.Overview))
-	mux.HandleFunc("GET /api/admin/crawl-runs", middleware.RequireAdmin(authService, adminHandler.CrawlRuns))
-	mux.HandleFunc("GET /api/admin/quality-snapshots", middleware.RequireAdmin(authService, adminHandler.QualitySnapshots))
-	mux.HandleFunc("GET /api/admin/crawl-tasks", middleware.RequireAdmin(authService, adminHandler.CrawlTasks))
+	mux.HandleFunc("GET /api/admin/health", middleware.RequireAdminWithAudit(authService, auditService, handler.AdminHealth))
+	mux.HandleFunc("GET /api/admin/overview", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
+	mux.HandleFunc("GET /api/admin/crawl-runs", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
+	mux.HandleFunc("GET /api/admin/quality-snapshots", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.QualitySnapshots))
+	mux.HandleFunc("GET /api/admin/crawl-tasks", middleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlTasks))
 	return mux
 }
 
@@ -61,4 +63,11 @@ func resolveAdminService(service *admin.Service) *admin.Service {
 		return service
 	}
 	return admin.NewService(admin.NewMemoryStore())
+}
+
+func resolveAuditService(service *audit.Service) *audit.Service {
+	if service != nil {
+		return service
+	}
+	return audit.NewService(audit.NewMemoryStore())
 }

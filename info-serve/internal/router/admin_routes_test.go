@@ -42,7 +42,7 @@ func (s stubAdminStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, 
 }
 
 func TestAdminOverviewRequiresLogin(t *testing.T) {
-	r := NewWithDependencies(nil, nil, admin.NewService(stubAdminStore{}))
+	r := NewWithDependencies(nil, nil, admin.NewService(stubAdminStore{}), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	res := httptest.NewRecorder()
 
@@ -54,7 +54,7 @@ func TestAdminOverviewRequiresLogin(t *testing.T) {
 }
 
 func TestAdminOverviewRequiresAdminRole(t *testing.T) {
-	r := NewWithDependencies(nil, nil, admin.NewService(stubAdminStore{}))
+	r := NewWithDependencies(nil, nil, admin.NewService(stubAdminStore{}), nil)
 	token := registerAndLogin(t, r, "user@example.com", "StrongerPass123")
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -79,7 +79,7 @@ func TestAdminOverviewReturnsMetricsForAdmin(t *testing.T) {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
 
-	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}))
+	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}), nil)
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -115,7 +115,7 @@ func TestAdminMonitoringRoutesReturnListsForAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
-	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}))
+	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}), nil)
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 
 	cases := []struct {
