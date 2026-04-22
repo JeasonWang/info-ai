@@ -36,6 +36,9 @@ func NewWithDependencies(authService *auth.Service, eventService *events.Service
 	mux.HandleFunc("GET /api/me", authHandler.Me)
 	mux.HandleFunc("GET /api/admin/health", middleware.RequireAdmin(authService, handler.AdminHealth))
 	mux.HandleFunc("GET /api/admin/overview", middleware.RequireAdmin(authService, adminHandler.Overview))
+	mux.HandleFunc("GET /api/admin/crawl-runs", middleware.RequireAdmin(authService, adminHandler.CrawlRuns))
+	mux.HandleFunc("GET /api/admin/quality-snapshots", middleware.RequireAdmin(authService, adminHandler.QualitySnapshots))
+	mux.HandleFunc("GET /api/admin/crawl-tasks", middleware.RequireAdmin(authService, adminHandler.CrawlTasks))
 	return mux
 }
 

@@ -212,6 +212,31 @@ h2 {
   line-height: 1.7;
 }
 
+.data-list {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.data-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.data-list strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
 .panel-title {
   display: flex;
   align-items: center;

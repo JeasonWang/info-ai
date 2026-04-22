@@ -79,6 +79,7 @@
               <span id="recentRunStatus">等待登录</span>
             </div>
             <p id="recentRunText">登录后展示最近采集运行状态、入库数量和详情抓取结果。</p>
+            <ul class="data-list" id="crawlRunList"></ul>
           </article>
 
           <article class="panel" id="quality">
@@ -87,14 +88,16 @@
               <span id="qualityStatus">等待登录</span>
             </div>
             <p id="qualityText">登录后展示重复标题、正文缺失、实体缺失、低详情评分等治理指标。</p>
+            <ul class="data-list" id="qualitySnapshotList"></ul>
           </article>
 
           <article class="panel" id="channels">
             <div class="panel-title">
               <h3>渠道配置</h3>
-              <span>管理能力</span>
+              <span id="taskStatus">等待登录</span>
             </div>
             <p>配置管理将从用户首页剥离，集中放入后台，并要求管理员登录后访问。</p>
+            <ul class="data-list" id="crawlTaskList"></ul>
           </article>
         </section>
       </section>

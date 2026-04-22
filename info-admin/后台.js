@@ -12,6 +12,10 @@ const recentRunStatus = document.querySelector('#recentRunStatus')
 const recentRunText = document.querySelector('#recentRunText')
 const qualityStatus = document.querySelector('#qualityStatus')
 const qualityText = document.querySelector('#qualityText')
+const taskStatus = document.querySelector('#taskStatus')
+const crawlRunList = document.querySelector('#crawlRunList')
+const qualitySnapshotList = document.querySelector('#qualitySnapshotList')
+const crawlTaskList = document.querySelector('#crawlTaskList')
 
 const API_BASE_URL = 'http://localhost:8080'
 const TOKEN_KEY = 'info-admin-token'
@@ -54,6 +58,7 @@ submitLoginButton.addEventListener('click', async () => {
     loginButton.textContent = result.data.user.email
     loginPanel.hidden = true
     await refreshOverview()
+    await refreshMonitoringLists()
   } catch (error) {
     loginMessage.textContent = error.message
   }
@@ -79,6 +84,32 @@ async function refreshOverview() {
   renderOverview(result.data)
 }
 
+async function refreshMonitoringLists() {
+  const [runs, snapshots, tasks] = await Promise.all([
+    fetchAdminList('/api/admin/crawl-runs?limit=6'),
+    fetchAdminList('/api/admin/quality-snapshots?limit=6'),
+    fetchAdminList('/api/admin/crawl-tasks'),
+  ])
+  renderCrawlRuns(runs)
+  renderQualitySnapshots(snapshots)
+  renderCrawlTasks(tasks)
+}
+
+async function fetchAdminList(path) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (!token) {
+    return []
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    return []
+  }
+  const result = await response.json()
+  return result.data || []
+}
+
 function renderOverview(data) {
   channelCount.textContent = data.channel_count
   eventCount.textContent = data.event_count
@@ -97,5 +128,54 @@ function renderOverview(data) {
   qualityText.textContent = `重复标题 ${data.quality.duplicate_title_count} 条，正文缺失 ${data.quality.empty_content_count} 条，实体缺失 ${data.quality.missing_entity_count} 条，低详情评分 ${data.quality.low_detail_score_count} 条。`
 }
 
+function renderCrawlRuns(items) {
+  crawlRunList.innerHTML = ''
+  if (!items.length) {
+    crawlRunList.appendChild(listItem('暂无采集运行日志', '等待调度器写入'))
+    return
+  }
+  items.forEach((item) => {
+    crawlRunList.appendChild(
+      listItem(`${item.channel_code} · ${item.status}`, `入库 ${item.saved_count} / 详情失败 ${item.detail_failed_count}`)
+    )
+  })
+}
+
+function renderQualitySnapshots(items) {
+  qualitySnapshotList.innerHTML = ''
+  if (!items.length) {
+    qualitySnapshotList.appendChild(listItem('暂无质量快照', '等待质量任务写入'))
+    return
+  }
+  items.forEach((item) => {
+    qualitySnapshotList.appendChild(
+      listItem(`${item.category_code} · ${item.total_count} 条`, `重复 ${item.duplicate_title_count} / 缺正文 ${item.empty_content_count}`)
+    )
+  })
+}
+
+function renderCrawlTasks(items) {
+  crawlTaskList.innerHTML = ''
+  taskStatus.textContent = items.length ? `${items.length} 个任务` : '暂无任务'
+  if (!items.length) {
+    crawlTaskList.appendChild(listItem('暂无采集任务', '后续由调度器注册'))
+    return
+  }
+  items.forEach((item) => {
+    crawlTaskList.appendChild(listItem(`${item.task_name}`, `${item.channel_name} · ${item.status}`))
+  })
+}
+
+function listItem(title, meta) {
+  const item = document.createElement('li')
+  const strong = document.createElement('strong')
+  const span = document.createElement('span')
+  strong.textContent = title
+  span.textContent = meta
+  item.append(strong, span)
+  return item
+}
+
 refreshServiceStatus()
 refreshOverview()
+refreshMonitoringLists()
