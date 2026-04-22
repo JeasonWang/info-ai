@@ -52,7 +52,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		response.BadRequest(w, "注册失败")
+		response.InternalServerError(w, "注册失败")
 		return
 	}
 
@@ -76,7 +76,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		response.BadRequest(w, "登录失败")
+		response.InternalServerError(w, "登录失败")
 		return
 	}
 	response.OK(w, result)

@@ -22,7 +22,7 @@ func NewAdminHandler(service *admin.Service) *AdminHandler {
 func (h *AdminHandler) Overview(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.GetOverview(r.Context())
 	if err != nil {
-		response.BadRequest(w, "管理总览查询失败")
+		response.InternalServerError(w, "管理总览查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -31,7 +31,7 @@ func (h *AdminHandler) Overview(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) CrawlRuns(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListCrawlRuns(r.Context(), queryLimit(r))
 	if err != nil {
-		response.BadRequest(w, "采集运行日志查询失败")
+		response.InternalServerError(w, "采集运行日志查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -40,7 +40,7 @@ func (h *AdminHandler) CrawlRuns(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListQualitySnapshots(r.Context(), queryLimit(r))
 	if err != nil {
-		response.BadRequest(w, "质量快照查询失败")
+		response.InternalServerError(w, "质量快照查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -49,7 +49,7 @@ func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) 
 func (h *AdminHandler) CrawlTasks(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListCrawlTasks(r.Context())
 	if err != nil {
-		response.BadRequest(w, "采集任务查询失败")
+		response.InternalServerError(w, "采集任务查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -58,7 +58,7 @@ func (h *AdminHandler) CrawlTasks(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Categories(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListCategories(r.Context())
 	if err != nil {
-		response.BadRequest(w, "分类配置查询失败")
+		response.InternalServerError(w, "分类配置查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -100,7 +100,7 @@ func (h *AdminHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Channels(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListChannels(r.Context())
 	if err != nil {
-		response.BadRequest(w, "渠道配置查询失败")
+		response.InternalServerError(w, "渠道配置查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -151,8 +151,8 @@ func writeAdminConfigError(w http.ResponseWriter, err error, fallback string) {
 	case errors.Is(err, admin.ErrDuplicated):
 		response.Conflict(w, "配置名称或编码已存在")
 	case errors.Is(err, admin.ErrNotFound):
-		response.BadRequest(w, "配置不存在")
+		response.NotFound(w, "配置不存在")
 	default:
-		response.BadRequest(w, fallback)
+		response.InternalServerError(w, fallback)
 	}
 }

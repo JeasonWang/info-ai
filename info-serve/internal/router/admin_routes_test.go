@@ -14,6 +14,10 @@ import (
 
 type stubAdminStore struct{}
 
+type notFoundAdminStore struct {
+	stubAdminStore
+}
+
 func (s stubAdminStore) GetOverview(ctx context.Context) (admin.Overview, error) {
 	return admin.Overview{
 		ChannelCount: 12,
@@ -63,6 +67,10 @@ func (s stubAdminStore) CreateChannel(ctx context.Context, payload admin.Channel
 
 func (s stubAdminStore) UpdateChannel(ctx context.Context, id int64, payload admin.ChannelPayload) (admin.Channel, error) {
 	return admin.Channel{ID: id, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
+}
+
+func (s notFoundAdminStore) UpdateCategory(ctx context.Context, id int64, payload admin.CategoryPayload) (admin.Category, error) {
+	return admin.Category{}, admin.ErrNotFound
 }
 
 func TestAdminOverviewRequiresLogin(t *testing.T) {
@@ -218,6 +226,31 @@ func TestAdminConfigurationRoutesManageCategoriesAndChannels(t *testing.T) {
 		if body.Data == nil {
 			t.Fatalf("%s %s returned empty data", item.method, item.path)
 		}
+	}
+}
+
+func TestAdminConfigurationUpdateReturnsNotFound(t *testing.T) {
+	store := auth.NewMemoryStore()
+	service := auth.NewService(store)
+	_, err := store.CreateUser(context.Background(), auth.CreateUserParams{
+		Email:        "admin@example.com",
+		PasswordHash: mustHashPassword(t, "Admin123456"),
+		Role:         "admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	r := NewWithDependencies(service, nil, admin.NewService(notFoundAdminStore{}), nil)
+	token := loginOnly(t, r, "admin@example.com", "Admin123456")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/categories/404", stringsReader(`{"name":"不存在","code":"missing","description":""}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d, body=%s", res.Code, http.StatusNotFound, res.Body.String())
 	}
 }
 

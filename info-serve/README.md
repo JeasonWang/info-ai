@@ -1,18 +1,57 @@
 # info-serve
 
-`info-serve` 是信息达人 Pro 版本新增的 Go 服务，负责业务 API、用户鉴权、管理侧接口和对外服务边界。
+`info-serve` 是信息达人 Pro 版本的 Go 业务 API 服务，负责用户端 API、管理后台 API、用户鉴权、权限控制、管理审计和业务查询。
 
-## 当前职责
+## 服务边界
 
-- 用户服务：提供健康检查、邮箱注册接口契约。
-- 鉴权基础：提供密码哈希与校验能力。
-- 服务配置：通过环境变量读取监听地址、MySQL DSN、会话密钥。
+- `info_aggregation` 负责采集、清洗、详情补全、事件构建和写入 MySQL。
+- `info-serve` 负责读取 MySQL 并提供业务 API。
+- `info-max` 负责用户端展示。
+- `info-admin` 负责管理后台展示。
+
+`info-serve` 不负责爬虫采集，不直接渲染页面，不把管理后台页面逻辑混入服务端。
+
+## 当前目录
+
+```text
+cmd/
+  server/          # HTTP 服务入口，只负责加载配置、创建 app、启动 server
+  create-admin/    # 本地管理员账号初始化工具
+internal/
+  app/             # 服务装配、依赖注入、MySQL handler 构建
+  admin/           # 管理后台业务服务
+  audit/           # 管理操作审计服务
+  auth/            # 用户鉴权和会话服务
+  config/          # 环境变量配置
+  events/          # 用户侧事件查询服务
+  handler/         # 当前 HTTP handler，后续迁移到 transport/http
+  middleware/      # 鉴权和审计中间件
+  repository/      # MySQL 数据访问
+  response/        # 统一 JSON 响应
+  router/          # 当前路由装配，后续迁移到 transport/http
+```
+
+后续新增 HTTP 代码应优先进入规划中的 `internal/transport/http`，现有 `handler/router/middleware` 会分阶段迁移，避免一次性大重构。
 
 ## 本地启动
 
 ```bash
 cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
 INFO_SERVE_HTTP_ADDR=:8080 go run ./cmd/server
+```
+
+默认 MySQL DSN：
+
+```text
+root:root1234@tcp(localhost:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
+```
+
+可通过环境变量覆盖：
+
+```text
+INFO_SERVE_MYSQL_DSN
+INFO_SERVE_HTTP_ADDR
+INFO_SERVE_SESSION_SECRET
 ```
 
 ## 本地测试
@@ -22,9 +61,16 @@ cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
 GOCACHE=/tmp/info-serve-go-build-cache go test ./...
 ```
 
-## 初始化管理员账号
+真实 MySQL 集成测试：
 
-管理后台不开放普通注册成为管理员。Pro 初期可以使用命令行工具初始化或重置首个管理员账号：
+```bash
+cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
+GOCACHE=/tmp/info-serve-go-build-cache \
+INFO_SERVE_TEST_MYSQL_DSN='root:root1234@tcp(127.0.0.1:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local' \
+go test ./internal/repository -v
+```
+
+## 初始化管理员账号
 
 ```bash
 cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
@@ -32,8 +78,13 @@ INFO_SERVE_MYSQL_DSN='root:root1234@tcp(localhost:3306)/info-max?charset=utf8mb4
 go run ./cmd/create-admin -email admin@example.com -password StrongerPass123
 ```
 
-## Pro 后续演进
+## 架构规则
 
-- 将管理后台接口迁移到 `info-serve`，管理接口强制登录并写入 `admin_audit_log`。
-- 将 `info-max` 用户侧 API 从旧 FastAPI 逐步切换到 `info-serve`。
-- 新建 `info-admin` PC Web，展示采集任务、运行日志、健康快照和质量快照。
+- `cmd/server/main.go` 只保留进程入口和启动逻辑。
+- `handler` 只解析 HTTP 请求和响应，不写 SQL，不写复杂业务规则。
+- `service` 处理业务规则、参数归一化、权限语义。
+- `repository` 只负责 SQL、事务和数据映射。
+- `response` 统一输出 `{ code, message, data }`。
+- 管理接口必须经过管理员鉴权，并写入审计日志。
+- 新增接口必须先写测试，再写实现。
+- 数据库结构变更必须保存 SQL 文件，字段必须带中文注释。

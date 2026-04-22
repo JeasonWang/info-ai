@@ -34,7 +34,7 @@ func (h *EventHandler) List(w http.ResponseWriter, r *http.Request) {
 		PageSize:     pageSize,
 	})
 	if err != nil {
-		response.BadRequest(w, "事件列表查询失败")
+		response.InternalServerError(w, "事件列表查询失败")
 		return
 	}
 	response.OK(w, result)
@@ -49,7 +49,7 @@ func (h *EventHandler) Detail(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.service.GetEventDetail(r.Context(), id)
 	if err != nil {
-		response.BadRequest(w, "事件详情查询失败")
+		response.InternalServerError(w, "事件详情查询失败")
 		return
 	}
 	response.OK(w, result)

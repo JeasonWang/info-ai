@@ -42,6 +42,14 @@ func Forbidden(w http.ResponseWriter, message string) {
 	JSON(w, http.StatusForbidden, Body{Code: 403, Message: message})
 }
 
+func NotFound(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusNotFound, Body{Code: 404, Message: message})
+}
+
 func Conflict(w http.ResponseWriter, message string) {
 	JSON(w, http.StatusConflict, Body{Code: 409, Message: message})
+}
+
+func InternalServerError(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusInternalServerError, Body{Code: 500, Message: message})
 }
