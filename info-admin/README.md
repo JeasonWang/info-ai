@@ -1,19 +1,48 @@
 # info-admin
 
-`info-admin` 是信息达人 Pro 版本新增的 PC Web 管理与监控后台。
+`info-admin` 是信息达人 Pro 版本的独立 PC Web 管理后台，使用 Vue3 + TypeScript + Vite 构建。
 
-当前阶段先提供静态骨架，用于确认后台信息架构和视觉方向；后续会接入 `info-serve` 的管理 API，并要求管理员登录后才能访问真实数据。
+## 职责边界
 
-## 当前页面
+- 管理员登录。
+- 采集监控。
+- 数据质量查看。
+- 分类管理。
+- 渠道管理。
+- 审计日志展示。
 
-- `管理后台.html`：管理后台入口页面。
-- `样式.css`：PC Web 优先的视觉样式。
-- `后台.js`：页面交互、管理员登录、管理总览数据加载。
+`info-admin` 只负责后台页面和交互，不直接连接数据库，不承载用户端能力，所有后台数据均来自 `info-serve`。
 
-## 后续接入
+## 本地开发
 
-- 登录接口：`POST /api/auth/login`
-- 当前用户：`GET /api/me`
-- 管理探活：`GET /api/admin/health`
-- 采集任务：待接入 `info-serve` 管理 API
-- 数据质量：待接入 `info-serve` 管理 API
+```bash
+cd /Users/jeasonwang/IdeaProjects/info-ai/info-admin
+npm install
+npm run dev
+```
+
+默认开发端口：`5174`。
+
+## 环境变量
+
+```text
+VITE_INFO_SERVE_BASE_URL=http://localhost:8080
+```
+
+未配置时默认使用 `http://localhost:8080`。
+
+## 测试和构建
+
+```bash
+cd /Users/jeasonwang/IdeaProjects/info-ai/info-admin
+npm test -- --run
+npm run build
+```
+
+## 编码规范
+
+- 代码文件、目录、变量、类型、组件名使用英文。
+- 页面展示文案使用中文。
+- 关键业务注释使用中文。
+- 新增页面必须接入路由守卫。
+- 新增后台接口必须统一走 `src/services/httpClient.ts`。
