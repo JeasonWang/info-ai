@@ -26,12 +26,12 @@ func NewRouter(services Services) http.Handler {
 	adminService := resolveAdminService(services.Admin)
 	auditService := resolveAuditService(services.Audit)
 
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := NewAuthHandler(authService)
 	eventHandler := handler.NewEventHandler(eventService)
 	adminHandler := handler.NewAdminHandler(adminService)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", handler.Health)
+	mux.HandleFunc("GET /health", Health)
 	mux.HandleFunc("GET /api/event-categories", eventHandler.Categories)
 	mux.HandleFunc("GET /api/events", eventHandler.List)
 	mux.HandleFunc("GET /api/events/", eventHandler.Detail)

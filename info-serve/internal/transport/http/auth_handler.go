@@ -1,4 +1,4 @@
-package handler
+package transporthttp
 
 import (
 	"encoding/json"
@@ -10,16 +10,10 @@ import (
 	"info-serve/internal/response"
 )
 
-// RegisterRequest 是邮箱注册接口的请求参数。
+// RegisterRequest 是邮箱注册和登录接口的请求参数。
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-}
-
-// RegisterResponse 是注册接口第一阶段返回给前端的用户摘要。
-type RegisterResponse struct {
-	Email string `json:"email"`
-	Role  string `json:"role"`
 }
 
 // AuthHandler 承载鉴权相关 HTTP 接口。
