@@ -27,7 +27,7 @@ func NewRouter(services Services) http.Handler {
 	auditService := resolveAuditService(services.Audit)
 
 	authHandler := NewAuthHandler(authService)
-	eventHandler := handler.NewEventHandler(eventService)
+	eventHandler := NewEventHandler(eventService)
 	adminHandler := handler.NewAdminHandler(adminService)
 
 	mux := http.NewServeMux()

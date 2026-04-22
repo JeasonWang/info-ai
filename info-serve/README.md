@@ -24,7 +24,7 @@ internal/
   auth/            # 用户鉴权和会话服务
   config/          # 环境变量配置
   events/          # 用户侧事件查询服务
-  handler/         # 历史 HTTP handler，当前仍保留事件和管理 handler
+  handler/         # 历史 HTTP handler，当前仍保留管理 handler
   middleware/      # 鉴权和审计中间件
   repository/      # MySQL 数据访问
   response/        # 统一 JSON 响应
@@ -32,7 +32,7 @@ internal/
   transport/http/  # 新 HTTP 路由装配入口
 ```
 
-后续新增 HTTP 代码必须优先进入 `internal/transport/http`。`health` 和 `auth` handler 已迁入该目录；现有 `handler` 中仍保留事件和管理后台 handler，后续继续小步迁移。迁移时必须保持 API 行为不变并补充路由测试。
+后续新增 HTTP 代码必须优先进入 `internal/transport/http`。`health`、`auth` 和 `events` handler 已迁入该目录；现有 `handler` 中仍保留管理后台 handler，后续继续小步迁移。迁移时必须保持 API 行为不变并补充路由测试。
 
 ## 本地启动
 
