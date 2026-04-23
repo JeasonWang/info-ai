@@ -41,7 +41,11 @@ func (h *EventHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EventHandler) Detail(w http.ResponseWriter, r *http.Request) {
-	rawID := strings.TrimPrefix(r.URL.Path, "/api/events/")
+	rawID := strings.Trim(r.URL.Path, "/")
+	segments := strings.Split(rawID, "/")
+	if len(segments) > 0 {
+		rawID = segments[len(segments)-1]
+	}
 	id, err := strconv.ParseInt(rawID, 10, 64)
 	if err != nil || id <= 0 {
 		response.BadRequest(w, "事件ID不正确")

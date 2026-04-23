@@ -31,25 +31,38 @@ func NewRouter(services Services) http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", Health)
-	mux.HandleFunc("GET /api/event-categories", eventHandler.Categories)
-	mux.HandleFunc("GET /api/events", eventHandler.List)
-	mux.HandleFunc("GET /api/events/", eventHandler.Detail)
-	mux.HandleFunc("POST /api/auth/register", authHandler.Register)
-	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
-	mux.HandleFunc("POST /api/auth/logout", authHandler.Logout)
-	mux.HandleFunc("GET /api/me", authHandler.Me)
-	mux.HandleFunc("GET /api/admin/health", transportmiddleware.RequireAdminWithAudit(authService, auditService, AdminHealth))
-	mux.HandleFunc("GET /api/admin/overview", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
-	mux.HandleFunc("GET /api/admin/crawl-runs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
-	mux.HandleFunc("GET /api/admin/quality-snapshots", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.QualitySnapshots))
-	mux.HandleFunc("GET /api/admin/crawl-tasks", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlTasks))
-	mux.HandleFunc("GET /api/admin/categories", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Categories))
-	mux.HandleFunc("POST /api/admin/categories", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateCategory))
-	mux.HandleFunc("PUT /api/admin/categories/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateCategory))
-	mux.HandleFunc("GET /api/admin/channels", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Channels))
-	mux.HandleFunc("POST /api/admin/channels", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateChannel))
-	mux.HandleFunc("PUT /api/admin/channels/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateChannel))
+	registerAPIRoutes(mux, "/api", authService, auditService, authHandler, eventHandler, adminHandler)
+	registerAPIRoutes(mux, "/api/v1", authService, auditService, authHandler, eventHandler, adminHandler)
 	return mux
+}
+
+func registerAPIRoutes(
+	mux *http.ServeMux,
+	prefix string,
+	authService *auth.Service,
+	auditService *audit.Service,
+	authHandler *AuthHandler,
+	eventHandler *EventHandler,
+	adminHandler *AdminHandler,
+) {
+	mux.HandleFunc("GET "+prefix+"/event-categories", eventHandler.Categories)
+	mux.HandleFunc("GET "+prefix+"/events", eventHandler.List)
+	mux.HandleFunc("GET "+prefix+"/events/", eventHandler.Detail)
+	mux.HandleFunc("POST "+prefix+"/auth/register", authHandler.Register)
+	mux.HandleFunc("POST "+prefix+"/auth/login", authHandler.Login)
+	mux.HandleFunc("POST "+prefix+"/auth/logout", authHandler.Logout)
+	mux.HandleFunc("GET "+prefix+"/me", authHandler.Me)
+	mux.HandleFunc("GET "+prefix+"/admin/health", transportmiddleware.RequireAdminWithAudit(authService, auditService, AdminHealth))
+	mux.HandleFunc("GET "+prefix+"/admin/overview", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
+	mux.HandleFunc("GET "+prefix+"/admin/crawl-runs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
+	mux.HandleFunc("GET "+prefix+"/admin/quality-snapshots", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.QualitySnapshots))
+	mux.HandleFunc("GET "+prefix+"/admin/crawl-tasks", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlTasks))
+	mux.HandleFunc("GET "+prefix+"/admin/categories", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Categories))
+	mux.HandleFunc("POST "+prefix+"/admin/categories", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateCategory))
+	mux.HandleFunc("PUT "+prefix+"/admin/categories/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateCategory))
+	mux.HandleFunc("GET "+prefix+"/admin/channels", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Channels))
+	mux.HandleFunc("POST "+prefix+"/admin/channels", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateChannel))
+	mux.HandleFunc("PUT "+prefix+"/admin/channels/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateChannel))
 }
 
 func resolveAuthService(service *auth.Service) *auth.Service {

@@ -31,6 +31,8 @@ VITE_INFO_SERVE_BASE_URL=http://localhost:8080
 
 未配置时默认使用 `http://localhost:8080`。
 
+后台业务接口统一请求 `info-serve` 的 `/api/v1/*` 路径；旧 `/api/*` 路径只作为服务端兼容入口保留。
+
 ## 测试和构建
 
 ```bash
@@ -46,3 +48,4 @@ npm run build
 - 关键业务注释使用中文。
 - 新增页面必须接入路由守卫。
 - 新增后台接口必须统一走 `src/services/httpClient.ts`。
+- 新增后台接口路径必须通过 `src/services/apiPath.ts` 生成 `/api/v1/*` 路径。

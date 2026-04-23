@@ -90,6 +90,6 @@ go run ./cmd/create-admin -email admin@example.com -password StrongerPass123
 
 ## API 版本化计划
 
-- Pro 当前阶段继续保留 `/api/*` 路径，保证 `info-max` 和 `info-admin` 已有联调不被打断。
-- 下一阶段先以测试驱动方式补充 `/api/v1/*` 等价入口，旧路径和新路径并行一个版本周期。
-- 前端切换完成后，再评估是否废弃旧路径；废弃前必须更新文档、联调清单和回归测试。
+- Pro 当前阶段已补充 `/api/v1/*` 等价入口，并继续保留 `/api/*` 旧路径。
+- `info-admin` 已切换到 `/api/v1/*`，`info-max` 仍保留旧路径，等待用户侧接口从旧 FastAPI 平滑迁入 `info-serve`。
+- 前端全部切换完成后，再评估是否废弃旧路径；废弃前必须更新文档、联调清单和回归测试。

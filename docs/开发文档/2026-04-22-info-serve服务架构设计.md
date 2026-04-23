@@ -191,8 +191,8 @@ Handler 职责：
 
 执行策略：
 
-- Pro 当前阶段保留 `/api/*`，避免打断 `info-max` 与 `info-admin` 联调。
-- 下一阶段通过测试先补齐 `/api/v1/*` 等价入口，保证同一 handler 同时服务新旧路径。
+- Pro 当前阶段已补齐 `/api/v1/*` 等价入口，同一 handler 同时服务新旧路径。
+- `info-admin` 已切换到 `/api/v1/*`；`info-max` 仍保留旧路径，等待用户侧接口从旧 FastAPI 平滑迁入 `info-serve`。
 - 前端统一切换到 `/api/v1/*` 后，再评估旧路径下线窗口；下线前必须同步 API 文档、回归测试和部署说明。
 
 ### 响应结构
