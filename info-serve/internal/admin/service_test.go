@@ -16,6 +16,37 @@ type fakeAdminStore struct {
 	auditLogs        []AuditLog
 }
 
+type fakeActionRunner struct {
+	action      string
+	channelCode string
+}
+
+func (r *fakeActionRunner) TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error) {
+	r.action = "trigger_crawl"
+	r.channelCode = channelCode
+	return ActionResult{Action: r.action, Message: "已触发采集", Data: map[string]any{"channel_code": channelCode}}, nil
+}
+
+func (r *fakeActionRunner) RebuildEvents(ctx context.Context) (ActionResult, error) {
+	r.action = "rebuild_events"
+	return ActionResult{Action: r.action, Message: "已重建事件"}, nil
+}
+
+func (r *fakeActionRunner) RefreshQuality(ctx context.Context) (ActionResult, error) {
+	r.action = "refresh_quality"
+	return ActionResult{Action: r.action, Message: "已刷新质量"}, nil
+}
+
+func (r *fakeActionRunner) ArchiveLowQuality(ctx context.Context) (ActionResult, error) {
+	r.action = "archive_low_quality"
+	return ActionResult{Action: r.action, Message: "已归档低质量内容"}, nil
+}
+
+func (r *fakeActionRunner) ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error) {
+	r.action = "archive_duplicate_titles"
+	return ActionResult{Action: r.action, Message: "已归档重复标题"}, nil
+}
+
 func (s fakeAdminStore) GetOverview(ctx context.Context) (Overview, error) {
 	return s.overview, nil
 }
@@ -228,6 +259,34 @@ func TestServiceRejectsInvalidConfigurationPayload(t *testing.T) {
 	}
 	if _, err := service.CreateChannel(context.Background(), ChannelPayload{Name: "微博", Code: "weibo", CategoryID: 1, CrawlInterval: 0, IsActive: 1}); err == nil {
 		t.Fatal("CreateChannel accepted invalid crawl interval")
+	}
+}
+
+func TestServiceRunsAdminActions(t *testing.T) {
+	runner := &fakeActionRunner{}
+	service := NewServiceWithActions(fakeAdminStore{}, runner)
+
+	result, err := service.TriggerCrawl(context.Background(), " weibo ")
+	if err != nil {
+		t.Fatalf("TriggerCrawl returned error: %v", err)
+	}
+	if runner.channelCode != "weibo" {
+		t.Fatalf("channel code = %q, want weibo", runner.channelCode)
+	}
+	if result.Action != "trigger_crawl" {
+		t.Fatalf("action = %q, want trigger_crawl", result.Action)
+	}
+
+	if _, err := service.TriggerCrawl(context.Background(), " "); err == nil {
+		t.Fatal("TriggerCrawl accepted blank channel code")
+	}
+
+	result, err = service.RefreshQuality(context.Background())
+	if err != nil {
+		t.Fatalf("RefreshQuality returned error: %v", err)
+	}
+	if result.Action != "refresh_quality" {
+		t.Fatalf("action = %q, want refresh_quality", result.Action)
 	}
 }
 

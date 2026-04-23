@@ -6,6 +6,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
+	"info-serve/internal/admin"
 	"info-serve/internal/config"
 )
 
@@ -29,7 +30,7 @@ func New(cfg config.Config) (*App, error) {
 	return &App{
 		cfg:     cfg,
 		db:      db,
-		handler: NewHTTPHandlerFromDB(db),
+		handler: NewHTTPHandlerFromDB(db, admin.NewAggregationActionRunner(cfg.AggregationBaseURL)),
 	}, nil
 }
 

@@ -7,6 +7,7 @@
 - 管理员登录。
 - 采集监控。
 - 数据质量查看。
+- 手动触发采集、事件重建和质量治理动作。
 - 分类管理。
 - 渠道管理。
 - 审计日志展示。
@@ -32,6 +33,14 @@ VITE_INFO_SERVE_BASE_URL=http://localhost:8080
 未配置时默认使用 `http://localhost:8080`。
 
 后台业务接口统一请求 `info-serve` 的 `/api/v1/*` 路径；旧 `/api/*` 路径只作为服务端兼容入口保留。
+
+当前管理动作通过 `info-serve` 统一鉴权和审计，再转发给 `info_aggregation` 执行：
+
+- `POST /api/v1/admin/crawl-tasks/{channel_code}/trigger`
+- `POST /api/v1/admin/rebuild-events`
+- `POST /api/v1/admin/refresh-quality`
+- `POST /api/v1/admin/archive-low-quality`
+- `POST /api/v1/admin/archive-duplicate-titles`
 
 ## 测试和构建
 

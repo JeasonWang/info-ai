@@ -2,21 +2,54 @@
 import { onMounted, ref } from 'vue'
 import DataPanel from '@/components/DataPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { getLowQualityInfos, getQualitySnapshots } from '@/services/adminApi'
+import {
+  archiveDuplicateTitles,
+  archiveLowQualityInfos,
+  getLowQualityInfos,
+  getQualitySnapshots,
+  refreshQuality,
+} from '@/services/adminApi'
 import type { LowQualityInfo, QualitySnapshot } from '@/types/admin'
 
 const snapshots = ref<QualitySnapshot[]>([])
 const lowQualityInfos = ref<LowQualityInfo[]>([])
+const actionMessage = ref('')
+const isRunning = ref(false)
 
-onMounted(async () => {
+async function loadData() {
   const [snapshotItems, lowQualityItems] = await Promise.all([getQualitySnapshots(20), getLowQualityInfos(20)])
   snapshots.value = snapshotItems
   lowQualityInfos.value = lowQualityItems
-})
+}
+
+async function runAction(action: () => Promise<{ message: string }>) {
+  isRunning.value = true
+  actionMessage.value = '正在执行，请稍候...'
+  try {
+    const result = await action()
+    actionMessage.value = result.message || '操作已提交'
+    await loadData()
+  } catch (error) {
+    actionMessage.value = error instanceof Error ? error.message : '操作失败'
+  } finally {
+    isRunning.value = false
+  }
+}
+
+onMounted(loadData)
 </script>
 
 <template>
   <section class="panel-grid">
+    <DataPanel title="质量治理操作" status="人工治理">
+      <div class="action-strip">
+        <button type="button" :disabled="isRunning" @click="runAction(refreshQuality)">刷新质量</button>
+        <button type="button" :disabled="isRunning" @click="runAction(archiveLowQualityInfos)">归档低质量</button>
+        <button type="button" :disabled="isRunning" @click="runAction(archiveDuplicateTitles)">归档重复标题</button>
+      </div>
+      <p class="action-message">{{ actionMessage || '建议先刷新质量，再处理明显低质或重复数据。治理动作会触发事件流更新。' }}</p>
+    </DataPanel>
+
     <DataPanel title="数据质量快照" :status="`${snapshots.length} 条`">
       <ul v-if="snapshots.length" class="data-list">
         <li v-for="item in snapshots" :key="`${item.category_code}-${item.snapshot_at}`">

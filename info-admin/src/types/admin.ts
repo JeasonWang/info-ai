@@ -106,3 +106,9 @@ export interface AuditLog {
   ip_address: string
   created_at: string
 }
+
+export interface AdminActionResult {
+  action: string
+  message: string
+  data: Record<string, unknown>
+}

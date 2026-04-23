@@ -15,11 +15,12 @@ import (
 
 // Stores 收拢服务装配所需的存储依赖，避免 cmd 入口直接感知各业务服务的构造细节。
 type Stores struct {
-	Auth    auth.Store
-	Events  events.Store
-	Content content.Store
-	Admin   admin.Store
-	Audit   audit.Store
+	Auth         auth.Store
+	Events       events.Store
+	Content      content.Store
+	Admin        admin.Store
+	AdminActions admin.ActionRunner
+	Audit        audit.Store
 }
 
 // NewHTTPHandler 根据存储依赖装配完整 HTTP 路由，供生产入口和测试复用。
@@ -44,25 +45,30 @@ func NewHTTPHandler(stores Stores) http.Handler {
 	if auditStore == nil {
 		auditStore = audit.NewMemoryStore()
 	}
+	adminActions := stores.AdminActions
+	if adminActions == nil {
+		adminActions = admin.NewMemoryActionRunner()
+	}
 
 	return transporthttp.NewRouter(transporthttp.Services{
 		Auth:    auth.NewService(authStore),
 		Events:  events.NewService(eventStore),
 		Content: content.NewService(contentStore),
-		Admin:   admin.NewService(adminStore),
+		Admin:   admin.NewServiceWithActions(adminStore, adminActions),
 		Audit:   audit.NewService(auditStore),
 	})
 }
 
 // NewHTTPHandlerFromDB 使用同一个 MySQL store 装配所有业务模块。
-func NewHTTPHandlerFromDB(db *sql.DB) http.Handler {
+func NewHTTPHandlerFromDB(db *sql.DB, adminActions admin.ActionRunner) http.Handler {
 	store := repository.NewMySQLStore(db)
 	contentStore := repository.NewContentMySQLStore(db)
 	return NewHTTPHandler(Stores{
-		Auth:    store,
-		Events:  store,
-		Content: contentStore,
-		Admin:   store,
-		Audit:   store,
+		Auth:         store,
+		Events:       store,
+		Content:      contentStore,
+		Admin:        store,
+		AdminActions: adminActions,
+		Audit:        store,
 	})
 }

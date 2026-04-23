@@ -265,6 +265,54 @@ func TestAdminConfigurationUpdateReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestAdminActionRoutesReturnResultForAdmin(t *testing.T) {
+	store := auth.NewMemoryStore()
+	service := auth.NewService(store)
+	_, err := store.CreateUser(context.Background(), auth.CreateUserParams{
+		Email:        "admin@example.com",
+		PasswordHash: mustHashPassword(t, "Admin123456"),
+		Role:         "admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	r := transporthttp.NewRouter(transporthttp.Services{
+		Auth:  service,
+		Admin: admin.NewServiceWithActions(stubAdminStore{}, admin.NewMemoryActionRunner()),
+	})
+	token := loginOnly(t, r, "admin@example.com", "Admin123456")
+
+	cases := []struct {
+		path   string
+		action string
+	}{
+		{path: "/api/v1/admin/crawl-tasks/weibo/trigger", action: "trigger_crawl"},
+		{path: "/api/v1/admin/rebuild-events", action: "rebuild_events"},
+		{path: "/api/v1/admin/refresh-quality", action: "refresh_quality"},
+		{path: "/api/v1/admin/archive-low-quality", action: "archive_low_quality"},
+		{path: "/api/v1/admin/archive-duplicate-titles", action: "archive_duplicate_titles"},
+	}
+
+	for _, item := range cases {
+		req := httptest.NewRequest(http.MethodPost, item.path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d, body=%s", item.path, res.Code, http.StatusOK, res.Body.String())
+		}
+		var body struct {
+			Data admin.ActionResult `json:"data"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+			t.Fatalf("invalid json for %s: %v", item.path, err)
+		}
+		if body.Data.Action != item.action {
+			t.Fatalf("%s action = %q, want %q", item.path, body.Data.Action, item.action)
+		}
+	}
+}
+
 func registerAndLogin(t *testing.T, r http.Handler, email string, password string) string {
 	t.Helper()
 	registerPayload := stringsReader(`{"email":"` + email + `","password":"` + password + `"}`)

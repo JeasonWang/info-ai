@@ -29,7 +29,8 @@ type Store interface {
 }
 
 type Service struct {
-	store Store
+	store  Store
+	runner ActionRunner
 }
 
 type Overview struct {
@@ -142,7 +143,14 @@ type AuditLog struct {
 }
 
 func NewService(store Store) *Service {
-	return &Service{store: store}
+	return NewServiceWithActions(store, NewMemoryActionRunner())
+}
+
+func NewServiceWithActions(store Store, runner ActionRunner) *Service {
+	if runner == nil {
+		runner = NewMemoryActionRunner()
+	}
+	return &Service{store: store, runner: runner}
 }
 
 func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
@@ -237,6 +245,30 @@ func (s *Service) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, err
 		limit = 100
 	}
 	return s.store.ListAuditLogs(ctx, limit)
+}
+
+func (s *Service) TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return ActionResult{}, ErrInvalidInput
+	}
+	return s.runner.TriggerCrawl(ctx, channelCode)
+}
+
+func (s *Service) RebuildEvents(ctx context.Context) (ActionResult, error) {
+	return s.runner.RebuildEvents(ctx)
+}
+
+func (s *Service) RefreshQuality(ctx context.Context) (ActionResult, error) {
+	return s.runner.RefreshQuality(ctx)
+}
+
+func (s *Service) ArchiveLowQuality(ctx context.Context) (ActionResult, error) {
+	return s.runner.ArchiveLowQuality(ctx)
+}
+
+func (s *Service) ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error) {
+	return s.runner.ArchiveDuplicateTitles(ctx)
 }
 
 func normalizeCategoryPayload(payload CategoryPayload) (CategoryPayload, error) {

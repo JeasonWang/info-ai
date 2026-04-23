@@ -165,6 +165,51 @@ func (h *AdminHandler) AuditLogs(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) TriggerCrawl(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.TriggerCrawl(r.Context(), r.PathValue("channel_code"))
+	if err != nil {
+		writeAdminActionError(w, err, "采集任务触发失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) RebuildEvents(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.RebuildEvents(r.Context())
+	if err != nil {
+		writeAdminActionError(w, err, "事件重建失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) RefreshQuality(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.RefreshQuality(r.Context())
+	if err != nil {
+		writeAdminActionError(w, err, "数据质量刷新失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) ArchiveLowQuality(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ArchiveLowQuality(r.Context())
+	if err != nil {
+		writeAdminActionError(w, err, "低质量内容归档失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) ArchiveDuplicateTitles(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ArchiveDuplicateTitles(r.Context())
+	if err != nil {
+		writeAdminActionError(w, err, "重复标题归档失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func queryLimit(r *http.Request) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	return limit
@@ -178,6 +223,15 @@ func writeAdminConfigError(w http.ResponseWriter, err error, fallback string) {
 		response.Conflict(w, "配置名称或编码已存在")
 	case errors.Is(err, admin.ErrNotFound):
 		response.NotFound(w, "配置不存在")
+	default:
+		response.InternalServerError(w, fallback)
+	}
+}
+
+func writeAdminActionError(w http.ResponseWriter, err error, fallback string) {
+	switch {
+	case errors.Is(err, admin.ErrInvalidInput):
+		response.BadRequest(w, "管理动作参数不合法")
 	default:
 		response.InternalServerError(w, fallback)
 	}

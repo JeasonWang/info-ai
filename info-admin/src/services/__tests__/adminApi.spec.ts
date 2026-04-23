@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAdminOverview, getAuditLogs, getLowQualityInfos } from '@/services/adminApi'
+import {
+  archiveDuplicateTitles,
+  archiveLowQualityInfos,
+  getAdminOverview,
+  getAuditLogs,
+  getLowQualityInfos,
+  rebuildEvents,
+  refreshQuality,
+  triggerCrawlTask,
+} from '@/services/adminApi'
 import { loginAdmin } from '@/services/authApi'
 
 describe('admin API versioned paths', () => {
@@ -32,6 +41,36 @@ describe('admin API versioned paths', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/low-quality-infos?limit=12',
       expect.any(Object),
+    )
+
+    await triggerCrawlTask('weibo')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/crawl-tasks/weibo/trigger',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await rebuildEvents()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/rebuild-events',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await refreshQuality()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/refresh-quality',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await archiveLowQualityInfos()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/archive-low-quality',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await archiveDuplicateTitles()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/archive-duplicate-titles',
+      expect.objectContaining({ method: 'POST' }),
     )
   })
 
