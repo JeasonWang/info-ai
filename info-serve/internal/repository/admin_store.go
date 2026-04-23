@@ -146,6 +146,52 @@ LIMIT ?`,
 	return result, nil
 }
 
+func (s *MySQLStore) ListLowQualityInfos(ctx context.Context, limit int) ([]admin.LowQualityInfo, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT i.id, i.title, ch.name, c.name, i.detail_fetch_status,
+		       i.detail_score, i.detail_content_length,
+		       CASE
+		         WHEN COALESCE(i.content, '') = '' THEN '正文为空'
+		         WHEN i.detail_score < 60 THEN '详情评分偏低'
+		         WHEN i.tech_entities = '' THEN '关键实体缺失'
+		         ELSE '需要复核'
+		       END AS issue_reason,
+		       DATE_FORMAT(i.updated_at, '%Y-%m-%d %H:%i:%s')
+FROM info AS i
+JOIN channel AS ch ON ch.id = i.channel_id
+JOIN category AS c ON c.id = i.category_id
+WHERE i.is_deleted = 0
+  AND (COALESCE(i.content, '') = '' OR i.detail_score < 60 OR i.tech_entities = '')
+ORDER BY i.detail_score ASC, i.detail_content_length ASC, i.updated_at DESC
+LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []admin.LowQualityInfo{}
+	for rows.Next() {
+		var item admin.LowQualityInfo
+		if err := rows.Scan(
+			&item.ID,
+			&item.Title,
+			&item.ChannelName,
+			&item.CategoryName,
+			&item.DetailFetchStatus,
+			&item.DetailScore,
+			&item.DetailContentLength,
+			&item.IssueReason,
+			&item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *MySQLStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
 	rows, err := s.db.QueryContext(
 		ctx,

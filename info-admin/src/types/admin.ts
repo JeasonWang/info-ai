@@ -35,6 +35,18 @@ export interface QualitySnapshot {
   snapshot_at: string
 }
 
+export interface LowQualityInfo {
+  id: number
+  title: string
+  channel_name: string
+  category_name: string
+  detail_fetch_status: string
+  detail_score: number
+  detail_content_length: number
+  issue_reason: string
+  updated_at: string
+}
+
 export interface CrawlTask {
   task_code: string
   task_name: string

@@ -24,6 +24,10 @@ func (s *MemoryStore) ListQualitySnapshots(ctx context.Context, limit int) ([]Qu
 	return []QualitySnapshot{}, nil
 }
 
+func (s *MemoryStore) ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error) {
+	return []LowQualityInfo{}, nil
+}
+
 func (s *MemoryStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
 	return []CrawlTask{}, nil
 }

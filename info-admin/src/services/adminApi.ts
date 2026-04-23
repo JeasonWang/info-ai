@@ -9,6 +9,7 @@ import type {
   ChannelPayload,
   CrawlRunSummary,
   CrawlTask,
+  LowQualityInfo,
   QualitySnapshot,
 } from '@/types/admin'
 
@@ -22,6 +23,10 @@ export function getCrawlRuns(limit = 20) {
 
 export function getQualitySnapshots(limit = 20) {
   return apiRequest<QualitySnapshot[]>(apiV1(`/admin/quality-snapshots?limit=${limit}`))
+}
+
+export function getLowQualityInfos(limit = 20) {
+  return apiRequest<LowQualityInfo[]>(apiV1(`/admin/low-quality-infos?limit=${limit}`))
 }
 
 export function getCrawlTasks() {

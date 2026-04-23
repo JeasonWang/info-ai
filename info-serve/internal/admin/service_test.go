@@ -9,6 +9,7 @@ type fakeAdminStore struct {
 	overview         Overview
 	crawlRuns        []CrawlRunSummary
 	qualitySnapshots []QualitySnapshot
+	lowQualityInfos  []LowQualityInfo
 	crawlTasks       []CrawlTask
 	categories       []Category
 	channels         []Channel
@@ -25,6 +26,10 @@ func (s fakeAdminStore) ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRu
 
 func (s fakeAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
 	return s.qualitySnapshots[:min(limit, len(s.qualitySnapshots))], nil
+}
+
+func (s fakeAdminStore) ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error) {
+	return s.lowQualityInfos[:min(limit, len(s.lowQualityInfos))], nil
 }
 
 func (s fakeAdminStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
@@ -107,6 +112,9 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 		qualitySnapshots: []QualitySnapshot{
 			{CategoryCode: "all", TotalCount: 611},
 		},
+		lowQualityInfos: []LowQualityInfo{
+			{ID: 1, Title: "正文缺失", IssueReason: "正文为空"},
+		},
 		crawlTasks: []CrawlTask{
 			{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"},
 		},
@@ -129,6 +137,14 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 	}
 	if snapshots[0].TotalCount != 611 {
 		t.Fatalf("snapshots = %+v", snapshots)
+	}
+
+	lowQualityInfos, err := service.ListLowQualityInfos(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("ListLowQualityInfos returned error: %v", err)
+	}
+	if lowQualityInfos[0].IssueReason != "正文为空" {
+		t.Fatalf("lowQualityInfos = %+v", lowQualityInfos)
 	}
 
 	tasks, err := service.ListCrawlTasks(context.Background())

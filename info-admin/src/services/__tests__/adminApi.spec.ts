@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAdminOverview, getAuditLogs } from '@/services/adminApi'
+import { getAdminOverview, getAuditLogs, getLowQualityInfos } from '@/services/adminApi'
 import { loginAdmin } from '@/services/authApi'
 
 describe('admin API versioned paths', () => {
@@ -24,6 +24,13 @@ describe('admin API versioned paths', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/audit-logs?limit=10',
+      expect.any(Object),
+    )
+
+    await getLowQualityInfos(12)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/low-quality-infos?limit=12',
       expect.any(Object),
     )
   })

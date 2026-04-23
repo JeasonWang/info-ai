@@ -17,6 +17,7 @@ type Store interface {
 	GetOverview(ctx context.Context) (Overview, error)
 	ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunSummary, error)
 	ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error)
+	ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error)
 	ListCrawlTasks(ctx context.Context) ([]CrawlTask, error)
 	ListCategories(ctx context.Context) ([]Category, error)
 	CreateCategory(ctx context.Context, payload CategoryPayload) (Category, error)
@@ -66,6 +67,18 @@ type QualitySnapshot struct {
 	LowDetailScoreCount int    `json:"low_detail_score_count"`
 	MissingEntityCount  int    `json:"missing_entity_count"`
 	SnapshotAt          string `json:"snapshot_at"`
+}
+
+type LowQualityInfo struct {
+	ID                  int64  `json:"id"`
+	Title               string `json:"title"`
+	ChannelName         string `json:"channel_name"`
+	CategoryName        string `json:"category_name"`
+	DetailFetchStatus   string `json:"detail_fetch_status"`
+	DetailScore         int    `json:"detail_score"`
+	DetailContentLength int    `json:"detail_content_length"`
+	IssueReason         string `json:"issue_reason"`
+	UpdatedAt           string `json:"updated_at"`
 }
 
 type CrawlTask struct {
@@ -154,6 +167,16 @@ func (s *Service) ListQualitySnapshots(ctx context.Context, limit int) ([]Qualit
 		limit = 50
 	}
 	return s.store.ListQualitySnapshots(ctx, limit)
+}
+
+func (s *Service) ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.store.ListLowQualityInfos(ctx, limit)
 }
 
 func (s *Service) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {

@@ -35,6 +35,10 @@ func (s stubAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]
 	return []admin.QualitySnapshot{{CategoryCode: "all", TotalCount: 611}}, nil
 }
 
+func (s stubAdminStore) ListLowQualityInfos(ctx context.Context, limit int) ([]admin.LowQualityInfo, error) {
+	return []admin.LowQualityInfo{{ID: 1, Title: "正文缺失", IssueReason: "正文为空"}}, nil
+}
+
 func (s stubAdminStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
 	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"}}, nil
 }

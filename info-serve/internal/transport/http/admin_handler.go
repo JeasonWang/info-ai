@@ -54,6 +54,15 @@ func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) 
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) LowQualityInfos(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ListLowQualityInfos(r.Context(), queryLimit(r))
+	if err != nil {
+		response.InternalServerError(w, "低质量信息查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) CrawlTasks(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListCrawlTasks(r.Context())
 	if err != nil {
