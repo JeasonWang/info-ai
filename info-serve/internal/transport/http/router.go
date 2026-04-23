@@ -37,7 +37,7 @@ func NewRouter(services Services) http.Handler {
 	mux.HandleFunc("GET /health", Health)
 	registerAPIRoutes(mux, "/api", authService, auditService, authHandler, eventHandler, contentHandler, adminHandler)
 	registerAPIRoutes(mux, "/api/v1", authService, auditService, authHandler, eventHandler, contentHandler, adminHandler)
-	return mux
+	return withCORS(mux)
 }
 
 func registerAPIRoutes(
