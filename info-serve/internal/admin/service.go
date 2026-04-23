@@ -24,6 +24,7 @@ type Store interface {
 	ListChannels(ctx context.Context) ([]Channel, error)
 	CreateChannel(ctx context.Context, payload ChannelPayload) (Channel, error)
 	UpdateChannel(ctx context.Context, id int64, payload ChannelPayload) (Channel, error)
+	ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error)
 }
 
 type Service struct {
@@ -116,6 +117,17 @@ type ChannelPayload struct {
 	IsActive      int    `json:"is_active"`
 }
 
+type AuditLog struct {
+	ID          int64  `json:"id"`
+	AdminUserID int64  `json:"admin_user_id"`
+	AdminEmail  string `json:"admin_email"`
+	Action      string `json:"action"`
+	TargetType  string `json:"target_type"`
+	TargetID    string `json:"target_id"`
+	IPAddress   string `json:"ip_address"`
+	CreatedAt   string `json:"created_at"`
+}
+
 func NewService(store Store) *Service {
 	return &Service{store: store}
 }
@@ -192,6 +204,16 @@ func (s *Service) UpdateChannel(ctx context.Context, id int64, payload ChannelPa
 		return Channel{}, err
 	}
 	return s.store.UpdateChannel(ctx, id, normalized)
+}
+
+func (s *Service) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.store.ListAuditLogs(ctx, limit)
 }
 
 func normalizeCategoryPayload(payload CategoryPayload) (CategoryPayload, error) {

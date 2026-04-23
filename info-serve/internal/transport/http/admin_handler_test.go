@@ -63,6 +63,10 @@ func (s stubAdminStore) UpdateChannel(ctx context.Context, id int64, payload adm
 	return admin.Channel{ID: id, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
 }
 
+func (s stubAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]admin.AuditLog, error) {
+	return []admin.AuditLog{{ID: 1, AdminEmail: "admin@example.com", Action: "GET /api/v1/admin/overview"}}, nil
+}
+
 func (s notFoundAdminStore) UpdateCategory(ctx context.Context, id int64, payload admin.CategoryPayload) (admin.Category, error) {
 	return admin.Category{}, admin.ErrNotFound
 }

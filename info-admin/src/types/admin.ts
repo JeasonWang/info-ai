@@ -83,3 +83,14 @@ export interface ChannelPayload {
   crawl_interval: number
   is_active: number
 }
+
+export interface AuditLog {
+  id: number
+  admin_user_id: number
+  admin_email: string
+  action: string
+  target_type: string
+  target_id: string
+  ip_address: string
+  created_at: string
+}

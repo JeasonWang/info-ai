@@ -352,6 +352,42 @@ WHERE id = ?`,
 	return s.getChannelByID(ctx, id)
 }
 
+func (s *MySQLStore) ListAuditLogs(ctx context.Context, limit int) ([]admin.AuditLog, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT log.id, log.admin_user_id, user.email, log.action,
+		       log.target_type, log.target_id, log.ip_address,
+		       DATE_FORMAT(log.created_at, '%Y-%m-%d %H:%i:%s')
+FROM admin_audit_log AS log
+JOIN user_account AS user ON user.id = log.admin_user_id
+ORDER BY log.created_at DESC, log.id DESC
+LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []admin.AuditLog{}
+	for rows.Next() {
+		var item admin.AuditLog
+		if err := rows.Scan(
+			&item.ID,
+			&item.AdminUserID,
+			&item.AdminEmail,
+			&item.Action,
+			&item.TargetType,
+			&item.TargetID,
+			&item.IPAddress,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *MySQLStore) getCategoryByID(ctx context.Context, id int64) (admin.Category, error) {
 	row := s.db.QueryRowContext(
 		ctx,

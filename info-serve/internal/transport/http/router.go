@@ -73,6 +73,7 @@ func registerAPIRoutes(
 	mux.HandleFunc("GET "+prefix+"/admin/channels", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Channels))
 	mux.HandleFunc("POST "+prefix+"/admin/channels", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateChannel))
 	mux.HandleFunc("PUT "+prefix+"/admin/channels/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateChannel))
+	mux.HandleFunc("GET "+prefix+"/admin/audit-logs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.AuditLogs))
 }
 
 func resolveAuthService(service *auth.Service) *auth.Service {

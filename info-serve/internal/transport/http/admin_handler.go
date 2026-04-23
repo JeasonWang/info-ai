@@ -147,6 +147,15 @@ func (h *AdminHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) AuditLogs(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ListAuditLogs(r.Context(), queryLimit(r))
+	if err != nil {
+		response.InternalServerError(w, "审计日志查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func queryLimit(r *http.Request) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	return limit

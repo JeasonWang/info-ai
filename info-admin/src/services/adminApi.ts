@@ -4,6 +4,7 @@ import type {
   AdminCategory,
   AdminChannel,
   AdminOverview,
+  AuditLog,
   CategoryPayload,
   ChannelPayload,
   CrawlRunSummary,
@@ -25,6 +26,10 @@ export function getQualitySnapshots(limit = 20) {
 
 export function getCrawlTasks() {
   return apiRequest<CrawlTask[]>(apiV1('/admin/crawl-tasks'))
+}
+
+export function getAuditLogs(limit = 30) {
+  return apiRequest<AuditLog[]>(apiV1(`/admin/audit-logs?limit=${limit}`))
 }
 
 export function getCategories() {

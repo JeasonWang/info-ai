@@ -12,6 +12,7 @@ type fakeAdminStore struct {
 	crawlTasks       []CrawlTask
 	categories       []Category
 	channels         []Channel
+	auditLogs        []AuditLog
 }
 
 func (s fakeAdminStore) GetOverview(ctx context.Context) (Overview, error) {
@@ -70,6 +71,10 @@ func (s fakeAdminStore) UpdateChannel(ctx context.Context, id int64, payload Cha
 	}, nil
 }
 
+func (s fakeAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
+	return s.auditLogs[:min(limit, len(s.auditLogs))], nil
+}
+
 func TestServiceReturnsOverview(t *testing.T) {
 	service := NewService(fakeAdminStore{overview: Overview{
 		ChannelCount: 12,
@@ -105,6 +110,9 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 		crawlTasks: []CrawlTask{
 			{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"},
 		},
+		auditLogs: []AuditLog{
+			{ID: 1, AdminEmail: "admin@example.com", Action: "GET /api/v1/admin/overview"},
+		},
 	})
 
 	runs, err := service.ListCrawlRuns(context.Background(), 1)
@@ -129,6 +137,14 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 	}
 	if tasks[0].TaskCode != "weibo-hot" {
 		t.Fatalf("tasks = %+v", tasks)
+	}
+
+	logs, err := service.ListAuditLogs(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("ListAuditLogs returned error: %v", err)
+	}
+	if logs[0].Action != "GET /api/v1/admin/overview" {
+		t.Fatalf("logs = %+v", logs)
 	}
 }
 

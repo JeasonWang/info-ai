@@ -51,3 +51,7 @@ func (s *MemoryStore) CreateChannel(ctx context.Context, payload ChannelPayload)
 func (s *MemoryStore) UpdateChannel(ctx context.Context, id int64, payload ChannelPayload) (Channel, error) {
 	return Channel{ID: id, Name: payload.Name, Code: payload.Code, BaseURL: payload.BaseURL, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
 }
+
+func (s *MemoryStore) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
+	return []AuditLog{}, nil
+}
