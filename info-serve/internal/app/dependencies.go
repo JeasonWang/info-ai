@@ -11,6 +11,7 @@ import (
 	"info-serve/internal/events"
 	"info-serve/internal/repository"
 	transporthttp "info-serve/internal/transport/http"
+	"info-serve/internal/user"
 )
 
 // Stores 收拢服务装配所需的存储依赖，避免 cmd 入口直接感知各业务服务的构造细节。
@@ -21,6 +22,7 @@ type Stores struct {
 	Admin        admin.Store
 	AdminActions admin.ActionRunner
 	Audit        audit.Store
+	User         user.Store
 }
 
 // NewHTTPHandler 根据存储依赖装配完整 HTTP 路由，供生产入口和测试复用。
@@ -49,6 +51,10 @@ func NewHTTPHandler(stores Stores) http.Handler {
 	if adminActions == nil {
 		adminActions = admin.NewMemoryActionRunner()
 	}
+	userStore := stores.User
+	if userStore == nil {
+		userStore = user.NewMemoryStore()
+	}
 
 	return transporthttp.NewRouter(transporthttp.Services{
 		Auth:    auth.NewService(authStore),
@@ -56,6 +62,7 @@ func NewHTTPHandler(stores Stores) http.Handler {
 		Content: content.NewService(contentStore),
 		Admin:   admin.NewServiceWithActions(adminStore, adminActions),
 		Audit:   audit.NewService(auditStore),
+		User:    user.NewService(userStore),
 	})
 }
 
@@ -70,5 +77,6 @@ func NewHTTPHandlerFromDB(db *sql.DB, adminActions admin.ActionRunner) http.Hand
 		Admin:        store,
 		AdminActions: adminActions,
 		Audit:        store,
+		User:         store,
 	})
 }

@@ -9,6 +9,7 @@ import (
 	"info-serve/internal/content"
 	"info-serve/internal/events"
 	transportmiddleware "info-serve/internal/transport/http/middleware"
+	"info-serve/internal/user"
 )
 
 // Services 是 HTTP 层依赖的业务服务集合。
@@ -18,6 +19,7 @@ type Services struct {
 	Content *content.Service
 	Admin   *admin.Service
 	Audit   *audit.Service
+	User    *user.Service
 }
 
 // NewRouter 创建 info-serve HTTP 路由。
@@ -27,16 +29,18 @@ func NewRouter(services Services) http.Handler {
 	contentService := resolveContentService(services.Content)
 	adminService := resolveAdminService(services.Admin)
 	auditService := resolveAuditService(services.Audit)
+	userService := resolveUserService(services.User)
 
 	authHandler := NewAuthHandler(authService)
 	eventHandler := NewEventHandler(eventService)
 	contentHandler := NewContentHandler(contentService)
 	adminHandler := NewAdminHandler(adminService)
+	userHandler := NewUserHandler(authService, userService)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", Health)
-	registerAPIRoutes(mux, "/api", authService, auditService, authHandler, eventHandler, contentHandler, adminHandler)
-	registerAPIRoutes(mux, "/api/v1", authService, auditService, authHandler, eventHandler, contentHandler, adminHandler)
+	registerAPIRoutes(mux, "/api", authService, auditService, authHandler, eventHandler, contentHandler, adminHandler, userHandler)
+	registerAPIRoutes(mux, "/api/v1", authService, auditService, authHandler, eventHandler, contentHandler, adminHandler, userHandler)
 	return withCORS(mux)
 }
 
@@ -49,6 +53,7 @@ func registerAPIRoutes(
 	eventHandler *EventHandler,
 	contentHandler *ContentHandler,
 	adminHandler *AdminHandler,
+	userHandler *UserHandler,
 ) {
 	mux.HandleFunc("GET "+prefix+"/categories", contentHandler.Categories)
 	mux.HandleFunc("GET "+prefix+"/channels", contentHandler.Channels)
@@ -62,6 +67,9 @@ func registerAPIRoutes(
 	mux.HandleFunc("POST "+prefix+"/auth/login", authHandler.Login)
 	mux.HandleFunc("POST "+prefix+"/auth/logout", authHandler.Logout)
 	mux.HandleFunc("GET "+prefix+"/me", authHandler.Me)
+	mux.HandleFunc("GET "+prefix+"/me/favorites", userHandler.FavoriteEventIDs)
+	mux.HandleFunc("POST "+prefix+"/me/favorites", userHandler.AddFavoriteEvent)
+	mux.HandleFunc("DELETE "+prefix+"/me/favorites/{event_id}", userHandler.RemoveFavoriteEvent)
 	mux.HandleFunc("GET "+prefix+"/admin/health", transportmiddleware.RequireAdminWithAudit(authService, auditService, AdminHealth))
 	mux.HandleFunc("GET "+prefix+"/admin/overview", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
 	mux.HandleFunc("GET "+prefix+"/admin/crawl-runs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
@@ -116,4 +124,11 @@ func resolveAuditService(service *audit.Service) *audit.Service {
 		return service
 	}
 	return audit.NewService(audit.NewMemoryStore())
+}
+
+func resolveUserService(service *user.Service) *user.Service {
+	if service != nil {
+		return service
+	}
+	return user.NewService(user.NewMemoryStore())
 }

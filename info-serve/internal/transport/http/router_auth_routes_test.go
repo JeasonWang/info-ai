@@ -107,6 +107,67 @@ func TestLoginAndMeUseBearerSession(t *testing.T) {
 	}
 }
 
+func TestUserFavoriteRoutesUseBearerSession(t *testing.T) {
+	r := transporthttp.NewRouter(transporthttp.Services{})
+	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", registerPayload)
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerRes := httptest.NewRecorder()
+	r.ServeHTTP(registerRes, registerReq)
+	if registerRes.Code != http.StatusCreated {
+		t.Fatalf("register status = %d", registerRes.Code)
+	}
+
+	loginPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", loginPayload)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRes := httptest.NewRecorder()
+	r.ServeHTTP(loginRes, loginReq)
+
+	var loginBody struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(loginRes.Body.Bytes(), &loginBody)
+
+	addReq := httptest.NewRequest(http.MethodPost, "/api/v1/me/favorites", bytes.NewBufferString(`{"event_id":101}`))
+	addReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	addReq.Header.Set("Content-Type", "application/json")
+	addRes := httptest.NewRecorder()
+	r.ServeHTTP(addRes, addReq)
+	if addRes.Code != http.StatusOK {
+		t.Fatalf("add favorite status = %d, body=%s", addRes.Code, addRes.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/me/favorites", nil)
+	listReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	listRes := httptest.NewRecorder()
+	r.ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK {
+		t.Fatalf("list favorites status = %d, body=%s", listRes.Code, listRes.Body.String())
+	}
+	var listBody struct {
+		Data struct {
+			EventIDs []int64 `json:"event_ids"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRes.Body.Bytes(), &listBody); err != nil {
+		t.Fatalf("invalid favorites json: %v", err)
+	}
+	if len(listBody.Data.EventIDs) != 1 || listBody.Data.EventIDs[0] != 101 {
+		t.Fatalf("favorite ids = %+v", listBody.Data.EventIDs)
+	}
+
+	removeReq := httptest.NewRequest(http.MethodDelete, "/api/v1/me/favorites/101", nil)
+	removeReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	removeRes := httptest.NewRecorder()
+	r.ServeHTTP(removeRes, removeReq)
+	if removeRes.Code != http.StatusOK {
+		t.Fatalf("remove favorite status = %d, body=%s", removeRes.Code, removeRes.Body.String())
+	}
+}
+
 func TestAdminHealthRequiresAdminRole(t *testing.T) {
 	r := transporthttp.NewRouter(transporthttp.Services{})
 	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)

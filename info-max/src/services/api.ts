@@ -180,3 +180,27 @@ export async function logoutUser(token: string) {
   })
   return response.data
 }
+
+export async function getFavoriteEventIds(token: string) {
+  const response = await requestInfoServe<ApiResponse<{ event_ids: number[] }>>('/me/favorites', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data.event_ids
+}
+
+export async function addFavoriteEvent(token: string, eventId: number) {
+  const response = await requestInfoServe<ApiResponse<{ event_id: number; favorited: boolean }>>('/me/favorites', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ event_id: eventId }),
+  })
+  return response.data
+}
+
+export async function removeFavoriteEvent(token: string, eventId: number) {
+  const response = await requestInfoServe<ApiResponse<{ event_id: number; favorited: boolean }>>(`/me/favorites/${eventId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
+}

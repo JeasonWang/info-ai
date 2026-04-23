@@ -8,9 +8,12 @@ import {
   getInfoById,
   getInfos,
   getCurrentUser,
+  getFavoriteEventIds,
   loginUser,
   logoutUser,
   registerUser,
+  addFavoriteEvent,
+  removeFavoriteEvent,
   getStats,
 } from '@/services/api'
 
@@ -20,7 +23,7 @@ describe('api service routing', () => {
   })
 
   it('uses info-serve /api/v1 for event APIs', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/event-categories')) {
         return jsonResponse([{ code: 'all', name: '全网', display_order: 0 }])
@@ -82,7 +85,7 @@ describe('api service routing', () => {
   })
 
   it('uses info-serve /api/v1 for remaining user-facing APIs', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/categories')) {
         return jsonResponse([{ id: 1, name: '科技', code: 'tech', description: '科技热点' }])
@@ -117,7 +120,7 @@ describe('api service routing', () => {
   })
 
   it('uses /api/v1 auth APIs for user sessions', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/auth/login')) {
         return jsonResponse({ token: 'token', user: { id: 1, email: 'user@example.com', role: 'user', status: 'active' } })
@@ -128,6 +131,15 @@ describe('api service routing', () => {
       if (url.includes('/auth/logout')) {
         return jsonResponse({ revoked: true })
       }
+      if (url.includes('/me/favorites') && init?.method === 'POST') {
+        return jsonResponse({ event_id: 101, favorited: true })
+      }
+      if (url.includes('/me/favorites') && init?.method === 'DELETE') {
+        return jsonResponse({ event_id: 101, favorited: false })
+      }
+      if (url.includes('/me/favorites')) {
+        return jsonResponse({ event_ids: [101] })
+      }
       return jsonResponse({ id: 1, email: 'user@example.com', role: 'user', status: 'active' })
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -135,6 +147,9 @@ describe('api service routing', () => {
     await registerUser('user@example.com', 'StrongerPass123')
     await loginUser('user@example.com', 'StrongerPass123')
     await getCurrentUser('token')
+    await getFavoriteEventIds('token')
+    await addFavoriteEvent('token', 101)
+    await removeFavoriteEvent('token', 101)
     await logoutUser('token')
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -148,6 +163,18 @@ describe('api service routing', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/me',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/favorites',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/favorites',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ event_id: 101 }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/favorites/101',
+      expect.objectContaining({ method: 'DELETE' }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/auth/logout',
