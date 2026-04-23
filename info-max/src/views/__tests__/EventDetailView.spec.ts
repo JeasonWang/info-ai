@@ -12,7 +12,7 @@ describe('EventDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/events/9')) {
+      if (url.includes('/api/v1/events/9')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -98,7 +98,7 @@ describe('EventDetailView', () => {
 
     await flushPromises()
 
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/events/9'), expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/events/9'), expect.any(Object))
     expect(wrapper.find('[data-testid="event-detail-hero"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="event-detail-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="event-detail-core"]').exists()).toBe(true)
@@ -133,7 +133,7 @@ describe('EventDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/events/9')) {
+      if (url.includes('/api/v1/events/9')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -200,7 +200,7 @@ describe('EventDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/events/9')) {
+      if (url.includes('/api/v1/events/9')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -261,7 +261,7 @@ describe('EventDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/events/9')) {
+      if (url.includes('/api/v1/events/9')) {
         return new Response(
           JSON.stringify({
             code: 0,

@@ -8,14 +8,14 @@
 - 分类切换：支持 `全网 / 科技 / 财经 / 体育 / 国际`
 - 一句话看懂：每条事件卡片展示极短摘要
 - 事件详情页：展示事件时间线、事件解读、多平台观点、代表性原始来源
-- 配置页：保留现有管理入口，便于继续触发后端能力
 - 单元测试：覆盖首页、分类 tabs、事件卡片、时间线、事件详情
 
 ## 当前接口
 
-- `GET /api/event-categories`
-- `GET /api/events`
-- `GET /api/events/{id}`
+- 事件相关接口已切换到 `info-serve`：
+  - `GET /api/v1/event-categories`
+  - `GET /api/v1/events`
+  - `GET /api/v1/events/{id}`
 - 兼容保留旧接口：
   - `GET /api/categories`
   - `GET /api/channels`
@@ -26,8 +26,9 @@
 
 ## 本地启动
 
-1. 启动后端 `info_aggregation`，默认地址为 `http://localhost:8000`
-2. 在当前目录安装依赖并启动前端
+1. 启动采集侧旧后端 `info_aggregation`，默认地址为 `http://localhost:8000`
+2. 启动 Go API 服务 `info-serve`，默认地址为 `http://localhost:8080`
+3. 在当前目录安装依赖并启动前端
 
 ```bash
 npm install
@@ -38,6 +39,7 @@ npm run dev
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8000
+VITE_INFO_SERVE_BASE_URL=http://localhost:8080
 ```
 
 ## 测试与构建

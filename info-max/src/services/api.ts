@@ -13,6 +13,8 @@ import type {
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const INFO_SERVE_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8080'
+const INFO_SERVE_API_PREFIX = '/api/v1'
 
 function buildQuery(params: Record<string, string | number | undefined | null>) {
   const query = new URLSearchParams()
@@ -28,7 +30,15 @@ function buildQuery(params: Record<string, string | number | undefined | null>) 
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  return requestFromBase<T>(API_BASE_URL, path, init)
+}
+
+async function requestInfoServe<T>(path: string, init?: RequestInit): Promise<T> {
+  return requestFromBase<T>(INFO_SERVE_BASE_URL, `${INFO_SERVE_API_PREFIX}${path}`, init)
+}
+
+async function requestFromBase<T>(baseURL: string, path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${baseURL}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
@@ -73,7 +83,7 @@ export async function getCategories() {
 }
 
 export async function getEventCategories() {
-  const response = await request<ApiResponse<EventCategory[]>>('/api/event-categories')
+  const response = await requestInfoServe<ApiResponse<EventCategory[]>>('/event-categories')
   return response.data
 }
 
@@ -106,12 +116,12 @@ export async function getEvents(params: ListEventParams) {
     page: params.page,
     page_size: params.page_size,
   })
-  const response = await request<ApiResponse<EventPage>>(`/api/events${query}`)
+  const response = await requestInfoServe<ApiResponse<EventPage>>(`/events${query}`)
   return response.data
 }
 
 export async function getEventById(id: number) {
-  const response = await request<ApiResponse<EventDetail>>(`/api/events/${id}`)
+  const response = await requestInfoServe<ApiResponse<EventDetail>>(`/events/${id}`)
   return response.data
 }
 
