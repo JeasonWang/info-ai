@@ -9,6 +9,8 @@ import type {
   InfoPage,
   ListEventParams,
   ListInfoParams,
+  LoginResult,
+  PublicUser,
   StatsData,
 } from '@/types'
 
@@ -145,5 +147,36 @@ export async function getInfoById(id: number) {
 
 export async function getStats() {
   const response = await requestInfoServe<ApiResponse<StatsData>>('/stats')
+  return response.data
+}
+
+export async function registerUser(email: string, password: string) {
+  const response = await requestInfoServe<ApiResponse<PublicUser>>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  return response.data
+}
+
+export async function loginUser(email: string, password: string) {
+  const response = await requestInfoServe<ApiResponse<LoginResult>>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  return response.data
+}
+
+export async function getCurrentUser(token: string) {
+  const response = await requestInfoServe<ApiResponse<PublicUser>>('/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
+}
+
+export async function logoutUser(token: string) {
+  const response = await requestInfoServe<ApiResponse<{ revoked: boolean }>>('/auth/logout', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
   return response.data
 }

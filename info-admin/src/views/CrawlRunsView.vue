@@ -3,18 +3,20 @@ import { onMounted, ref } from 'vue'
 import DataPanel from '@/components/DataPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { getCrawlRuns, getCrawlTasks, rebuildEvents, triggerCrawlTask } from '@/services/adminApi'
-import type { CrawlRunSummary, CrawlTask } from '@/types/admin'
+import { getChannelHealth, getCrawlRuns, getCrawlTasks, rebuildEvents, triggerCrawlTask } from '@/services/adminApi'
+import type { ChannelHealth, CrawlRunSummary, CrawlTask } from '@/types/admin'
 
 const runs = ref<CrawlRunSummary[]>([])
 const tasks = ref<CrawlTask[]>([])
+const healthItems = ref<ChannelHealth[]>([])
 const actionMessage = ref('')
 const isRunning = ref(false)
 
 async function loadData() {
-  const [runItems, taskItems] = await Promise.all([getCrawlRuns(20), getCrawlTasks()])
+  const [runItems, taskItems, channelHealthItems] = await Promise.all([getCrawlRuns(20), getCrawlTasks(), getChannelHealth()])
   runs.value = runItems
   tasks.value = taskItems
+  healthItems.value = channelHealthItems
 }
 
 async function runAction(action: () => Promise<{ message: string }>) {
@@ -32,6 +34,24 @@ async function runAction(action: () => Promise<{ message: string }>) {
 }
 
 onMounted(loadData)
+
+function healthTone(level: ChannelHealth['health_level']) {
+  if (level === 'healthy') {
+    return 'success'
+  }
+  if (level === 'warning') {
+    return 'warning'
+  }
+  return 'muted'
+}
+
+function healthLabel(level: ChannelHealth['health_level']) {
+  return {
+    healthy: '健康',
+    warning: '关注',
+    risk: '风险',
+  }[level]
+}
 </script>
 
 <template>
@@ -50,6 +70,18 @@ onMounted(loadData)
         <button type="button" :disabled="isRunning" @click="runAction(rebuildEvents)">重建事件</button>
       </div>
       <p class="action-message">{{ actionMessage || '用于手动补采重点渠道，或在数据治理后重新生成事件流。' }}</p>
+    </DataPanel>
+
+    <DataPanel title="渠道健康" :status="`${healthItems.length} 个渠道`">
+      <ul v-if="healthItems.length" class="data-list data-list--health">
+        <li v-for="item in healthItems" :key="item.channel_code">
+          <strong>{{ item.channel_name }}</strong>
+          <span>健康 {{ item.health_score }} · 成功率 {{ item.success_rate }}% · 详情完整 {{ item.detail_complete_rate }}%</span>
+          <StatusBadge :label="healthLabel(item.health_level)" :tone="healthTone(item.health_level)" />
+          <small>{{ item.last_issue || `最近运行 ${item.last_run_at || '暂无记录'}` }}</small>
+        </li>
+      </ul>
+      <EmptyState v-else title="暂无渠道健康数据" description="采集任务运行后会自动计算成功率、完整率和风险状态。" />
     </DataPanel>
 
     <DataPanel title="采集运行日志" :status="`${runs.length} 条`">

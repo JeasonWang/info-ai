@@ -31,6 +31,10 @@ func (s stubAdminStore) ListCrawlRuns(ctx context.Context, limit int) ([]admin.C
 	return []admin.CrawlRunSummary{{ChannelCode: "weibo", Status: "success", SavedCount: 10}}, nil
 }
 
+func (s stubAdminStore) ListChannelHealth(ctx context.Context) ([]admin.ChannelHealth, error) {
+	return []admin.ChannelHealth{{ChannelCode: "weibo", ChannelName: "微博", HealthScore: 92, HealthLevel: "healthy"}}, nil
+}
+
 func (s stubAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]admin.QualitySnapshot, error) {
 	return []admin.QualitySnapshot{{CategoryCode: "all", TotalCount: 611}}, nil
 }

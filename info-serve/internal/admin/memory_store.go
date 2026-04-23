@@ -20,6 +20,10 @@ func (s *MemoryStore) ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunS
 	return []CrawlRunSummary{}, nil
 }
 
+func (s *MemoryStore) ListChannelHealth(ctx context.Context) ([]ChannelHealth, error) {
+	return []ChannelHealth{}, nil
+}
+
 func (s *MemoryStore) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
 	return []QualitySnapshot{}, nil
 }

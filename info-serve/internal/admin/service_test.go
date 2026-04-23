@@ -8,6 +8,7 @@ import (
 type fakeAdminStore struct {
 	overview         Overview
 	crawlRuns        []CrawlRunSummary
+	channelHealth    []ChannelHealth
 	qualitySnapshots []QualitySnapshot
 	lowQualityInfos  []LowQualityInfo
 	crawlTasks       []CrawlTask
@@ -53,6 +54,10 @@ func (s fakeAdminStore) GetOverview(ctx context.Context) (Overview, error) {
 
 func (s fakeAdminStore) ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunSummary, error) {
 	return s.crawlRuns[:min(limit, len(s.crawlRuns))], nil
+}
+
+func (s fakeAdminStore) ListChannelHealth(ctx context.Context) ([]ChannelHealth, error) {
+	return s.channelHealth, nil
 }
 
 func (s fakeAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
@@ -140,6 +145,9 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 			{ChannelCode: "weibo", Status: "success"},
 			{ChannelCode: "csdn", Status: "failed"},
 		},
+		channelHealth: []ChannelHealth{
+			{ChannelCode: "weibo", ChannelName: "微博", HealthScore: 92, HealthLevel: "healthy"},
+		},
 		qualitySnapshots: []QualitySnapshot{
 			{CategoryCode: "all", TotalCount: 611},
 		},
@@ -160,6 +168,14 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 	}
 	if len(runs) != 1 || runs[0].ChannelCode != "weibo" {
 		t.Fatalf("runs = %+v", runs)
+	}
+
+	healthItems, err := service.ListChannelHealth(context.Background())
+	if err != nil {
+		t.Fatalf("ListChannelHealth returned error: %v", err)
+	}
+	if len(healthItems) != 1 || healthItems[0].HealthLevel != "healthy" {
+		t.Fatalf("healthItems = %+v", healthItems)
 	}
 
 	snapshots, err := service.ListQualitySnapshots(context.Background(), 5)

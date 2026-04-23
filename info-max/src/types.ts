@@ -4,6 +4,18 @@ export interface ApiResponse<T> {
   data: T
 }
 
+export interface PublicUser {
+  id: number
+  email: string
+  role: string
+  status: string
+}
+
+export interface LoginResult {
+  token: string
+  user: PublicUser
+}
+
 export interface Category {
   id: number
   name: string

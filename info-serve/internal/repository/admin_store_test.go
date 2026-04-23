@@ -36,6 +36,30 @@ func TestMySQLStoreGetsAdminOverviewFromMigratedData(t *testing.T) {
 	}
 }
 
+func TestMySQLStoreListsChannelHealth(t *testing.T) {
+	dsn := os.Getenv("INFO_SERVE_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("INFO_SERVE_TEST_MYSQL_DSN 未设置，跳过真实 MySQL 集成测试")
+	}
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open mysql: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	items, err := NewMySQLStore(db).ListChannelHealth(context.Background())
+	if err != nil {
+		t.Fatalf("ListChannelHealth returned error: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected channel health items")
+	}
+	if items[0].ChannelCode == "" {
+		t.Fatalf("channel health missing code: %+v", items[0])
+	}
+}
+
 func TestMySQLStoreListsAdminConfigurationsFromMigratedData(t *testing.T) {
 	dsn := os.Getenv("INFO_SERVE_TEST_MYSQL_DSN")
 	if dsn == "" {

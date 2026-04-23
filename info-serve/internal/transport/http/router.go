@@ -65,6 +65,7 @@ func registerAPIRoutes(
 	mux.HandleFunc("GET "+prefix+"/admin/health", transportmiddleware.RequireAdminWithAudit(authService, auditService, AdminHealth))
 	mux.HandleFunc("GET "+prefix+"/admin/overview", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
 	mux.HandleFunc("GET "+prefix+"/admin/crawl-runs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))
+	mux.HandleFunc("GET "+prefix+"/admin/channel-health", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.ChannelHealth))
 	mux.HandleFunc("GET "+prefix+"/admin/quality-snapshots", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.QualitySnapshots))
 	mux.HandleFunc("GET "+prefix+"/admin/low-quality-infos", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.LowQualityInfos))
 	mux.HandleFunc("GET "+prefix+"/admin/crawl-tasks", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlTasks))

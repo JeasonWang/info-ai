@@ -7,6 +7,10 @@ import {
   getEvents,
   getInfoById,
   getInfos,
+  getCurrentUser,
+  loginUser,
+  logoutUser,
+  registerUser,
   getStats,
 } from '@/services/api'
 
@@ -110,6 +114,45 @@ describe('api service routing', () => {
     )
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/infos/9', expect.any(Object))
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/stats', expect.any(Object))
+  })
+
+  it('uses /api/v1 auth APIs for user sessions', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/login')) {
+        return jsonResponse({ token: 'token', user: { id: 1, email: 'user@example.com', role: 'user', status: 'active' } })
+      }
+      if (url.includes('/auth/register')) {
+        return jsonResponse({ id: 1, email: 'user@example.com', role: 'user', status: 'active' })
+      }
+      if (url.includes('/auth/logout')) {
+        return jsonResponse({ revoked: true })
+      }
+      return jsonResponse({ id: 1, email: 'user@example.com', role: 'user', status: 'active' })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await registerUser('user@example.com', 'StrongerPass123')
+    await loginUser('user@example.com', 'StrongerPass123')
+    await getCurrentUser('token')
+    await logoutUser('token')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/auth/register',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/auth/login',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/auth/logout',
+      expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
   })
 })
 

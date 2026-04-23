@@ -109,6 +109,94 @@ LIMIT ?`,
 	return result, nil
 }
 
+func (s *MySQLStore) ListChannelHealth(ctx context.Context) ([]admin.ChannelHealth, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT ch.code, ch.name, c.name, COALESCE(t.status, 'inactive'),
+		       COUNT(log.id) AS recent_run_count,
+		       COALESCE(SUM(CASE WHEN log.status = 'success' THEN 1 ELSE 0 END), 0) AS success_count,
+		       COALESCE(SUM(CASE WHEN log.status IN ('failed', 'partial') THEN 1 ELSE 0 END), 0) AS failure_count,
+		       COALESCE(SUM(log.detail_success_count), 0) AS detail_success_count,
+		       COALESCE(SUM(log.detail_failed_count), 0) AS detail_failed_count,
+		       COALESCE(DATE_FORMAT(MAX(log.started_at), '%Y-%m-%d %H:%i:%s'), ''),
+		       COALESCE(SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN log.status <> 'success' THEN log.error_message END ORDER BY log.started_at DESC SEPARATOR '||'), '||', 1), '')
+FROM channel AS ch
+JOIN category AS c ON c.id = ch.category_id
+LEFT JOIN crawl_task AS t ON t.channel_id = ch.id
+LEFT JOIN crawl_run_log AS log ON log.channel_code = ch.code
+GROUP BY ch.id, ch.code, ch.name, c.name, t.status
+ORDER BY ch.id ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []admin.ChannelHealth{}
+	for rows.Next() {
+		var item admin.ChannelHealth
+		var successCount int
+		var detailSuccessCount int
+		var detailFailedCount int
+		if err := rows.Scan(
+			&item.ChannelCode,
+			&item.ChannelName,
+			&item.CategoryName,
+			&item.Status,
+			&item.RecentRunCount,
+			&successCount,
+			&item.FailureCount,
+			&detailSuccessCount,
+			&detailFailedCount,
+			&item.LastRunAt,
+			&item.LastIssue,
+		); err != nil {
+			return nil, err
+		}
+		item.SuccessRate = percentage(successCount, item.RecentRunCount)
+		item.DetailCompleteRate = percentage(detailSuccessCount, detailSuccessCount+detailFailedCount)
+		item.HealthScore = calculateHealthScore(item.SuccessRate, item.DetailCompleteRate, item.RecentRunCount, item.Status)
+		item.HealthLevel = healthLevel(item.HealthScore)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func percentage(part int, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	return part * 100 / total
+}
+
+func calculateHealthScore(successRate int, detailCompleteRate int, runCount int, status string) int {
+	score := successRate*7/10 + detailCompleteRate*3/10
+	if runCount == 0 {
+		score = 40
+	}
+	if status != "active" {
+		score -= 20
+	}
+	if score < 0 {
+		return 0
+	}
+	if score > 100 {
+		return 100
+	}
+	return score
+}
+
+func healthLevel(score int) string {
+	switch {
+	case score >= 85:
+		return "healthy"
+	case score >= 60:
+		return "warning"
+	default:
+		return "risk"
+	}
+}
+
 func (s *MySQLStore) ListQualitySnapshots(ctx context.Context, limit int) ([]admin.QualitySnapshot, error) {
 	rows, err := s.db.QueryContext(
 		ctx,

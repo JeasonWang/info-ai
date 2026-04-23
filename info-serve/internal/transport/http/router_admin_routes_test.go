@@ -38,6 +38,10 @@ func (s stubAdminStore) ListCrawlRuns(ctx context.Context, limit int) ([]admin.C
 	return []admin.CrawlRunSummary{{ChannelCode: "weibo", Status: "success", SavedCount: 10}}, nil
 }
 
+func (s stubAdminStore) ListChannelHealth(ctx context.Context) ([]admin.ChannelHealth, error) {
+	return []admin.ChannelHealth{{ChannelCode: "weibo", ChannelName: "微博", HealthScore: 92, HealthLevel: "healthy", SuccessRate: 100}}, nil
+}
+
 func (s stubAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]admin.QualitySnapshot, error) {
 	return []admin.QualitySnapshot{{CategoryCode: "all", TotalCount: 611, DuplicateTitleCount: 3}}, nil
 }
@@ -164,6 +168,7 @@ func TestAdminMonitoringRoutesReturnListsForAdmin(t *testing.T) {
 		key  string
 	}{
 		{path: "/api/admin/crawl-runs", key: "channel_code"},
+		{path: "/api/admin/channel-health", key: "health_level"},
 		{path: "/api/admin/quality-snapshots", key: "category_code"},
 		{path: "/api/admin/low-quality-infos", key: "issue_reason"},
 		{path: "/api/admin/crawl-tasks", key: "task_code"},

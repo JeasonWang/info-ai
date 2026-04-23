@@ -202,6 +202,15 @@ p {
   background: rgba(255, 255, 255, 0.52);
 }
 
+.data-list--health li {
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+}
+
+.data-list--health small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
 .data-list strong {
   color: var(--ink);
   font-size: 14px;

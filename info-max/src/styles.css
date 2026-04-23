@@ -55,6 +55,73 @@ select {
   padding: 16px 24px 24px;
 }
 
+.user-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 760px);
+  margin: 0 auto 10px;
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
+.user-topbar__brand {
+  color: var(--accent-deep);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.user-topbar__account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-topbar__account a,
+.user-topbar__account button,
+.auth-switch {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: var(--accent-deep);
+  background: rgba(255, 107, 61, 0.1);
+  cursor: pointer;
+}
+
+.auth-dashboard {
+  width: min(100%, 520px);
+  margin: 0 auto;
+}
+
+.auth-card h1 {
+  margin: 8px 0 10px;
+}
+
+.auth-copy,
+.auth-message {
+  color: var(--text-subtle);
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.auth-form input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.auth-switch {
+  margin-top: 14px;
+}
+
 .eyebrow,
 .panel__eyebrow {
   margin: 0;

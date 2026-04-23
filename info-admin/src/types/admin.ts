@@ -17,6 +17,21 @@ export interface CrawlRunSummary {
   finished_at: string
 }
 
+export interface ChannelHealth {
+  channel_code: string
+  channel_name: string
+  category_name: string
+  status: string
+  recent_run_count: number
+  success_rate: number
+  detail_complete_rate: number
+  health_score: number
+  health_level: 'healthy' | 'warning' | 'risk'
+  failure_count: number
+  last_run_at: string
+  last_issue: string
+}
+
 export interface AdminOverview {
   channel_count: number
   event_count: number

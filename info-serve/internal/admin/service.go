@@ -16,6 +16,7 @@ var (
 type Store interface {
 	GetOverview(ctx context.Context) (Overview, error)
 	ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunSummary, error)
+	ListChannelHealth(ctx context.Context) ([]ChannelHealth, error)
 	ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error)
 	ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error)
 	ListCrawlTasks(ctx context.Context) ([]CrawlTask, error)
@@ -58,6 +59,21 @@ type CrawlRunSummary struct {
 	DetailFailedCount  int    `json:"detail_failed_count"`
 	StartedAt          string `json:"started_at"`
 	FinishedAt         string `json:"finished_at"`
+}
+
+type ChannelHealth struct {
+	ChannelCode        string `json:"channel_code"`
+	ChannelName        string `json:"channel_name"`
+	CategoryName       string `json:"category_name"`
+	Status             string `json:"status"`
+	RecentRunCount     int    `json:"recent_run_count"`
+	SuccessRate        int    `json:"success_rate"`
+	DetailCompleteRate int    `json:"detail_complete_rate"`
+	HealthScore        int    `json:"health_score"`
+	HealthLevel        string `json:"health_level"`
+	FailureCount       int    `json:"failure_count"`
+	LastRunAt          string `json:"last_run_at"`
+	LastIssue          string `json:"last_issue"`
 }
 
 type QualitySnapshot struct {
@@ -165,6 +181,10 @@ func (s *Service) ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunSumma
 		limit = 50
 	}
 	return s.store.ListCrawlRuns(ctx, limit)
+}
+
+func (s *Service) ListChannelHealth(ctx context.Context) ([]ChannelHealth, error) {
+	return s.store.ListChannelHealth(ctx)
 }
 
 func (s *Service) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {

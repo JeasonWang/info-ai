@@ -45,6 +45,15 @@ func (h *AdminHandler) CrawlRuns(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) ChannelHealth(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ListChannelHealth(r.Context())
+	if err != nil {
+		response.InternalServerError(w, "渠道健康查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListQualitySnapshots(r.Context(), queryLimit(r))
 	if err != nil {

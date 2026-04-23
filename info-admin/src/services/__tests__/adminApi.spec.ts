@@ -4,6 +4,7 @@ import {
   archiveLowQualityInfos,
   getAdminOverview,
   getAuditLogs,
+  getChannelHealth,
   getLowQualityInfos,
   rebuildEvents,
   refreshQuality,
@@ -33,6 +34,12 @@ describe('admin API versioned paths', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/audit-logs?limit=10',
+      expect.any(Object),
+    )
+
+    await getChannelHealth()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/channel-health',
       expect.any(Object),
     )
 
