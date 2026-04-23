@@ -1,4 +1,4 @@
-package router
+package transporthttp_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"info-serve/internal/admin"
 	"info-serve/internal/auth"
+	transporthttp "info-serve/internal/transport/http"
 )
 
 type stubAdminStore struct{}
@@ -74,7 +75,7 @@ func (s notFoundAdminStore) UpdateCategory(ctx context.Context, id int64, payloa
 }
 
 func TestAdminOverviewRequiresLogin(t *testing.T) {
-	r := NewWithDependencies(nil, nil, admin.NewService(stubAdminStore{}), nil)
+	r := transporthttp.NewRouter(transporthttp.Services{Admin: admin.NewService(stubAdminStore{})})
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	res := httptest.NewRecorder()
 
@@ -86,7 +87,7 @@ func TestAdminOverviewRequiresLogin(t *testing.T) {
 }
 
 func TestAdminOverviewRequiresAdminRole(t *testing.T) {
-	r := NewWithDependencies(nil, nil, admin.NewService(stubAdminStore{}), nil)
+	r := transporthttp.NewRouter(transporthttp.Services{Admin: admin.NewService(stubAdminStore{})})
 	token := registerAndLogin(t, r, "user@example.com", "StrongerPass123")
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -111,7 +112,7 @@ func TestAdminOverviewReturnsMetricsForAdmin(t *testing.T) {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
 
-	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}), nil)
+	r := transporthttp.NewRouter(transporthttp.Services{Auth: service, Admin: admin.NewService(stubAdminStore{})})
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -147,7 +148,7 @@ func TestAdminMonitoringRoutesReturnListsForAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
-	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}), nil)
+	r := transporthttp.NewRouter(transporthttp.Services{Auth: service, Admin: admin.NewService(stubAdminStore{})})
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 
 	cases := []struct {
@@ -190,7 +191,7 @@ func TestAdminConfigurationRoutesManageCategoriesAndChannels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
-	r := NewWithDependencies(service, nil, admin.NewService(stubAdminStore{}), nil)
+	r := transporthttp.NewRouter(transporthttp.Services{Auth: service, Admin: admin.NewService(stubAdminStore{})})
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 
 	cases := []struct {
@@ -240,7 +241,7 @@ func TestAdminConfigurationUpdateReturnsNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
-	r := NewWithDependencies(service, nil, admin.NewService(notFoundAdminStore{}), nil)
+	r := transporthttp.NewRouter(transporthttp.Services{Auth: service, Admin: admin.NewService(notFoundAdminStore{})})
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 
 	req := httptest.NewRequest(http.MethodPut, "/api/admin/categories/404", stringsReader(`{"name":"不存在","code":"missing","description":""}`))

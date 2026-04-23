@@ -6,7 +6,7 @@
 
 `info-serve` 是信息达人 Pro 版本的业务 API 服务，负责用户端 API、管理后台 API、用户鉴权、权限控制、审计、业务查询和后续个性化能力。它不能演变成随手堆 handler 和 SQL 的薄接口服务，必须提前确立稳定的 Go 分层架构。
 
-当前 `info-serve` 已经具备雏形：`cmd`、`internal/auth`、`internal/admin`、`internal/events`、`internal/repository`、`internal/router` 等目录已经存在。下一阶段不是推倒重写，而是在现有代码上逐步收敛到清晰边界。
+当前 `info-serve` 已经具备雏形：`cmd`、`internal/auth`、`internal/admin`、`internal/events`、`internal/repository`、`internal/transport/http` 等目录已经存在。下一阶段不是推倒重写，而是在现有代码上逐步收敛到清晰边界。
 
 ## 架构原则
 
@@ -76,7 +76,7 @@ info-serve/
   README.md
 ```
 
-说明：可以分阶段迁移，短期允许保留现有 `internal/admin`、`internal/auth`、`internal/events` 包。HTTP 路由入口、健康检查、鉴权 handler、事件 handler、管理后台 handler 和管理鉴权中间件已经迁入 `internal/transport/http`，后续新增 HTTP 代码必须进入该目录。
+说明：可以分阶段迁移，短期允许保留现有 `internal/admin`、`internal/auth`、`internal/events` 包。HTTP 路由入口、健康检查、鉴权 handler、事件 handler、管理后台 handler 和管理鉴权中间件已经迁入 `internal/transport/http`，历史 `internal/router` 包已移除，后续新增 HTTP 代码必须进入该目录。
 
 ## 分层职责
 
@@ -188,6 +188,12 @@ Handler 职责：
 ```
 
 升级时需要兼容旧路径一个版本周期。
+
+执行策略：
+
+- Pro 当前阶段保留 `/api/*`，避免打断 `info-max` 与 `info-admin` 联调。
+- 下一阶段通过测试先补齐 `/api/v1/*` 等价入口，保证同一 handler 同时服务新旧路径。
+- 前端统一切换到 `/api/v1/*` 后，再评估旧路径下线窗口；下线前必须同步 API 文档、回归测试和部署说明。
 
 ### 响应结构
 

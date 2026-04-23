@@ -1,4 +1,4 @@
-package router
+package transporthttp_test
 
 import (
 	"bytes"
@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	transporthttp "info-serve/internal/transport/http"
 )
 
 func TestHealthRoute(t *testing.T) {
-	r := New()
+	r := transporthttp.NewRouter(transporthttp.Services{})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	res := httptest.NewRecorder()
 
@@ -29,7 +31,7 @@ func TestHealthRoute(t *testing.T) {
 }
 
 func TestRegisterRejectsInvalidEmail(t *testing.T) {
-	r := New()
+	r := transporthttp.NewRouter(transporthttp.Services{})
 	payload := bytes.NewBufferString(`{"email":"not-email","password":"StrongerPass123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", payload)
 	req.Header.Set("Content-Type", "application/json")
@@ -43,7 +45,7 @@ func TestRegisterRejectsInvalidEmail(t *testing.T) {
 }
 
 func TestRegisterAcceptsEmailAndPasswordContract(t *testing.T) {
-	r := New()
+	r := transporthttp.NewRouter(transporthttp.Services{})
 	payload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", payload)
 	req.Header.Set("Content-Type", "application/json")
@@ -65,7 +67,7 @@ func TestRegisterAcceptsEmailAndPasswordContract(t *testing.T) {
 }
 
 func TestLoginAndMeUseBearerSession(t *testing.T) {
-	r := New()
+	r := transporthttp.NewRouter(transporthttp.Services{})
 	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
 	registerReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", registerPayload)
 	registerReq.Header.Set("Content-Type", "application/json")
@@ -106,7 +108,7 @@ func TestLoginAndMeUseBearerSession(t *testing.T) {
 }
 
 func TestAdminHealthRequiresAdminRole(t *testing.T) {
-	r := New()
+	r := transporthttp.NewRouter(transporthttp.Services{})
 	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
 	registerReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", registerPayload)
 	registerReq.Header.Set("Content-Type", "application/json")

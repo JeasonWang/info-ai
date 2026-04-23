@@ -1,4 +1,4 @@
-package router
+package transporthttp_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"info-serve/internal/admin"
 	"info-serve/internal/audit"
 	"info-serve/internal/auth"
+	transporthttp "info-serve/internal/transport/http"
 )
 
 type stubAuditStore struct {
@@ -32,12 +33,11 @@ func TestAdminRouteWritesAuditLogForAdmin(t *testing.T) {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
 	auditStore := &stubAuditStore{}
-	r := NewWithDependencies(
-		authService,
-		nil,
-		admin.NewService(stubAdminStore{}),
-		audit.NewService(auditStore),
-	)
+	r := transporthttp.NewRouter(transporthttp.Services{
+		Auth:  authService,
+		Admin: admin.NewService(stubAdminStore{}),
+		Audit: audit.NewService(auditStore),
+	})
 	token := loginOnly(t, r, "admin@example.com", "Admin123456")
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	req.Header.Set("Authorization", "Bearer "+token)

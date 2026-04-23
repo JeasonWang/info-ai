@@ -26,11 +26,10 @@ internal/
   events/          # 用户侧事件查询服务
   repository/      # MySQL 数据访问
   response/        # 统一 JSON 响应
-  router/          # 历史兼容路由包装
   transport/http/  # HTTP 路由、handler、中间件入口
 ```
 
-后续新增 HTTP 代码必须进入 `internal/transport/http`。`health`、`auth`、`events`、管理后台 handler 以及管理鉴权中间件均已迁入该目录；`internal/handler` 和 `internal/middleware` 已不再承载业务文件。
+后续新增 HTTP 代码必须进入 `internal/transport/http`。`health`、`auth`、`events`、管理后台 handler 以及管理鉴权中间件均已迁入该目录；`internal/handler`、`internal/middleware` 和历史 `internal/router` 包已不再承载业务文件。
 
 ## 本地启动
 
@@ -81,10 +80,16 @@ go run ./cmd/create-admin -email admin@example.com -password StrongerPass123
 
 - `cmd/server/main.go` 只保留进程入口和启动逻辑。
 - `handler` 只解析 HTTP 请求和响应，不写 SQL，不写复杂业务规则。
-- `internal/router` 只保留兼容入口，新路由统一放入 `internal/transport/http`。
+- `internal/transport/http` 是唯一 HTTP 路由入口，不再新增历史兼容路由包装。
 - `service` 处理业务规则、参数归一化、权限语义。
 - `repository` 只负责 SQL、事务和数据映射。
 - `response` 统一输出 `{ code, message, data }`。
 - 管理接口必须经过管理员鉴权，并写入审计日志。
 - 新增接口必须先写测试，再写实现。
 - 数据库结构变更必须保存 SQL 文件，字段必须带中文注释。
+
+## API 版本化计划
+
+- Pro 当前阶段继续保留 `/api/*` 路径，保证 `info-max` 和 `info-admin` 已有联调不被打断。
+- 下一阶段先以测试驱动方式补充 `/api/v1/*` 等价入口，旧路径和新路径并行一个版本周期。
+- 前端切换完成后，再评估是否废弃旧路径；废弃前必须更新文档、联调清单和回归测试。
