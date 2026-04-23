@@ -130,3 +130,48 @@ func TestMySQLStorePersistsFavoriteEventIDs(t *testing.T) {
 		t.Fatalf("favorite event ids after remove = %+v, want empty", ids)
 	}
 }
+
+func TestMySQLStorePersistsUserPreferences(t *testing.T) {
+	dsn := os.Getenv("INFO_SERVE_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("INFO_SERVE_TEST_MYSQL_DSN 未设置，跳过真实 MySQL 集成测试")
+	}
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open mysql: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	store := NewMySQLStore(db)
+	ctx := context.Background()
+	email := "integration-preference-user@example.com"
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_preference WHERE user_id IN (SELECT id FROM user_account WHERE email = ?)", email)
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_session WHERE user_id IN (SELECT id FROM user_account WHERE email = ?)", email)
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_account WHERE email = ?", email)
+
+	user, err := store.CreateUser(ctx, auth.CreateUserParams{
+		Email:        email,
+		PasswordHash: "hash-for-test",
+		Role:         "user",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, "DELETE FROM user_preference WHERE user_id = ?", user.ID)
+		_, _ = db.ExecContext(ctx, "DELETE FROM user_account WHERE id = ?", user.ID)
+	})
+
+	if err := store.SetPreference(ctx, user.ID, "home_filter", `{"category_code":"sports","sort":"latest","keyword":"NBA"}`); err != nil {
+		t.Fatalf("SetPreference returned error: %v", err)
+	}
+
+	value, err := store.GetPreference(ctx, user.ID, "home_filter")
+	if err != nil {
+		t.Fatalf("GetPreference returned error: %v", err)
+	}
+	if value != `{"category_code":"sports","sort":"latest","keyword":"NBA"}` {
+		t.Fatalf("preference value = %q", value)
+	}
+}

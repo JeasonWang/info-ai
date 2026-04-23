@@ -13,6 +13,7 @@ import type {
   PublicUser,
   StatsData,
 } from '@/types'
+import type { HomeFilterMemory } from '@/services/homeFilterMemory'
 
 const INFO_SERVE_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8080'
 const INFO_SERVE_API_PREFIX = '/api/v1'
@@ -203,4 +204,38 @@ export async function removeFavoriteEvent(token: string, eventId: number) {
     headers: { Authorization: `Bearer ${token}` },
   })
   return response.data
+}
+
+interface HomeFilterPreferenceResponse {
+  category_code: string
+  sort: 'composite' | 'latest'
+  keyword: string
+}
+
+function normalizeHomeFilterPreference(data: HomeFilterPreferenceResponse): HomeFilterMemory {
+  return {
+    categoryCode: data.category_code || 'all',
+    sortMode: data.sort === 'latest' ? 'latest' : 'composite',
+    keyword: data.keyword || '',
+  }
+}
+
+export async function getHomeFilterPreference(token: string): Promise<HomeFilterMemory> {
+  const response = await requestInfoServe<ApiResponse<HomeFilterPreferenceResponse>>('/me/preferences/home-filter', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return normalizeHomeFilterPreference(response.data)
+}
+
+export async function saveHomeFilterPreference(token: string, preference: HomeFilterMemory): Promise<HomeFilterMemory> {
+  const response = await requestInfoServe<ApiResponse<HomeFilterPreferenceResponse>>('/me/preferences/home-filter', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      category_code: preference.categoryCode,
+      sort: preference.sortMode,
+      keyword: preference.keyword,
+    }),
+  })
+  return normalizeHomeFilterPreference(response.data)
 }

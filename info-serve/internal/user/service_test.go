@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -40,5 +41,54 @@ func TestServiceRejectsInvalidFavoriteInput(t *testing.T) {
 	}
 	if err := service.AddFavoriteEvent(context.Background(), 1, 0); err == nil {
 		t.Fatal("AddFavoriteEvent accepted invalid event id")
+	}
+}
+
+func TestServiceManagesHomeFilterPreference(t *testing.T) {
+	service := NewService(NewMemoryStore())
+
+	defaultPreference, err := service.GetHomeFilterPreference(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("GetHomeFilterPreference returned error: %v", err)
+	}
+	if defaultPreference.CategoryCode != "all" || defaultPreference.Sort != "composite" || defaultPreference.Keyword != "" {
+		t.Fatalf("default preference = %+v", defaultPreference)
+	}
+
+	saved, err := service.SaveHomeFilterPreference(context.Background(), 7, HomeFilterPreference{
+		CategoryCode: "sports",
+		Sort:         "latest",
+		Keyword:      "NBA",
+	})
+	if err != nil {
+		t.Fatalf("SaveHomeFilterPreference returned error: %v", err)
+	}
+	if saved.CategoryCode != "sports" || saved.Sort != "latest" || saved.Keyword != "NBA" {
+		t.Fatalf("saved preference = %+v", saved)
+	}
+
+	loaded, err := service.GetHomeFilterPreference(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("GetHomeFilterPreference after save returned error: %v", err)
+	}
+	if loaded != saved {
+		t.Fatalf("loaded preference = %+v, want %+v", loaded, saved)
+	}
+}
+
+func TestServiceTruncatesHomeFilterKeywordByCharacters(t *testing.T) {
+	service := NewService(NewMemoryStore())
+	longKeyword := strings.Repeat("人工智能", 40)
+
+	saved, err := service.SaveHomeFilterPreference(context.Background(), 7, HomeFilterPreference{
+		CategoryCode: "tech",
+		Sort:         "latest",
+		Keyword:      longKeyword,
+	})
+	if err != nil {
+		t.Fatalf("SaveHomeFilterPreference returned error: %v", err)
+	}
+	if len([]rune(saved.Keyword)) != 100 {
+		t.Fatalf("keyword length = %d, want 100", len([]rune(saved.Keyword)))
 	}
 }

@@ -8,12 +8,14 @@ import {
   getInfoById,
   getInfos,
   getCurrentUser,
+  getHomeFilterPreference,
   getFavoriteEventIds,
   loginUser,
   logoutUser,
   registerUser,
   addFavoriteEvent,
   removeFavoriteEvent,
+  saveHomeFilterPreference,
   getStats,
 } from '@/services/api'
 
@@ -140,6 +142,12 @@ describe('api service routing', () => {
       if (url.includes('/me/favorites')) {
         return jsonResponse({ event_ids: [101] })
       }
+      if (url.includes('/me/preferences/home-filter') && init?.method === 'PUT') {
+        return jsonResponse({ category_code: 'sports', sort: 'latest', keyword: 'NBA' })
+      }
+      if (url.includes('/me/preferences/home-filter')) {
+        return jsonResponse({ category_code: 'sports', sort: 'latest', keyword: 'NBA' })
+      }
       return jsonResponse({ id: 1, email: 'user@example.com', role: 'user', status: 'active' })
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -150,6 +158,8 @@ describe('api service routing', () => {
     await getFavoriteEventIds('token')
     await addFavoriteEvent('token', 101)
     await removeFavoriteEvent('token', 101)
+    await getHomeFilterPreference('token')
+    await saveHomeFilterPreference('token', { categoryCode: 'sports', sortMode: 'latest', keyword: 'NBA' })
     await logoutUser('token')
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -175,6 +185,17 @@ describe('api service routing', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/me/favorites/101',
       expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/preferences/home-filter',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/preferences/home-filter',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ category_code: 'sports', sort: 'latest', keyword: 'NBA' }),
+      }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/auth/logout',

@@ -37,7 +37,7 @@ async function submitAuth() {
     <section class="panel auth-card">
       <p class="panel__eyebrow">Account</p>
       <h1>{{ mode === 'login' ? '登录信息达人' : '注册账号' }}</h1>
-      <p class="auth-copy">不登录也可以浏览热点；登录后会逐步开放收藏同步、阅读历史和关注主题。</p>
+      <p class="auth-copy">不登录也可以浏览热点；登录后可同步收藏和首页筛选偏好，后续继续开放阅读历史和关注主题。</p>
 
       <form class="auth-form" @submit.prevent="submitAuth">
         <input v-model="email" type="email" autocomplete="username" placeholder="邮箱" />

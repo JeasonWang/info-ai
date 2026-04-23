@@ -2,8 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EventCategoryTabs from '@/components/EventCategoryTabs.vue'
 import EventList from '@/components/EventList.vue'
-import { getEventCategories, getEvents } from '@/services/api'
+import { getEventCategories, getEvents, getHomeFilterPreference, saveHomeFilterPreference } from '@/services/api'
 import { loadHomeFilterMemory, saveHomeFilterMemory } from '@/services/homeFilterMemory'
+import { getUserToken } from '@/services/userSession'
 import type { EventCategory, EventPage } from '@/types'
 
 const pageSize = 10
@@ -36,18 +37,57 @@ const hasMore = computed(() => eventPage.value.items.length < eventPage.value.to
 
 async function loadCategories() {
   categories.value = await getEventCategories()
+  ensureActiveCategoryExists()
+}
+
+function ensureActiveCategoryExists() {
   const categoryExists = categories.value.some((item) => item.code === activeCategoryCode.value)
   if (!categoryExists) {
     activeCategoryCode.value = 'all'
   }
 }
 
-function rememberCurrentFilter() {
-  saveHomeFilterMemory({
+async function rememberCurrentFilter() {
+  const preference = {
     categoryCode: activeCategoryCode.value,
     sortMode: sortMode.value,
     keyword: appliedKeyword.value,
-  })
+  }
+  saveHomeFilterMemory(preference)
+
+  const token = getUserToken()
+  if (!token) {
+    return
+  }
+
+  try {
+    await saveHomeFilterPreference(token, preference)
+  } catch {
+    // 偏好同步是登录增强能力，同步失败不应该阻塞首页浏览。
+  }
+}
+
+async function restoreServerFilterPreference() {
+  const token = getUserToken()
+  if (!token) {
+    return
+  }
+
+  try {
+    const preference = await getHomeFilterPreference(token)
+    activeCategoryCode.value = preference.categoryCode
+    sortMode.value = preference.sortMode
+    keyword.value = preference.keyword
+    appliedKeyword.value = preference.keyword
+    ensureActiveCategoryExists()
+    saveHomeFilterMemory({
+      categoryCode: activeCategoryCode.value,
+      sortMode: sortMode.value,
+      keyword: appliedKeyword.value,
+    })
+  } catch {
+    // 服务端偏好不可用时，继续使用本地缓存，避免影响首页首屏速度。
+  }
 }
 
 async function loadEvents(page = 1, mode: 'replace' | 'append' = 'replace') {
@@ -98,7 +138,7 @@ async function loadMoreEvents() {
 async function selectCategory(code: string) {
   if (code === activeCategoryCode.value) return
   activeCategoryCode.value = code
-  rememberCurrentFilter()
+  await rememberCurrentFilter()
   await loadEvents(1)
   filterExpanded.value = false
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -106,14 +146,14 @@ async function selectCategory(code: string) {
 
 async function submitSearch() {
   appliedKeyword.value = keyword.value.trim()
-  rememberCurrentFilter()
+  await rememberCurrentFilter()
   await loadEvents(1)
 }
 
 async function selectSort(mode: 'composite' | 'latest') {
   if (mode === sortMode.value) return
   sortMode.value = mode
-  rememberCurrentFilter()
+  await rememberCurrentFilter()
   await loadEvents(1)
   filterExpanded.value = false
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -126,7 +166,8 @@ function toggleFilterPanel() {
 async function loadHome() {
   try {
     await loadCategories()
-    rememberCurrentFilter()
+    await restoreServerFilterPreference()
+    await rememberCurrentFilter()
     await loadEvents()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '首页初始化失败'

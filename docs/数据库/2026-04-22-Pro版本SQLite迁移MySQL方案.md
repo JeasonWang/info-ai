@@ -7,7 +7,7 @@
 ## 不迁移的数据
 
 - `user_account`、`user_session`、`admin_audit_log` 等 Pro 新增表没有历史数据，不从 SQLite 迁移。
-- 本地前端缓存的筛选条件仍由浏览器保存，后续登录用户偏好再同步到 `user_preference`。
+- 本地前端缓存的筛选条件仍用于匿名用户；登录用户首页筛选偏好已同步到 `user_preference`。
 
 ## 迁移命令
 

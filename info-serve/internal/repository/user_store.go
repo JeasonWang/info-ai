@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"info-serve/internal/user"
 )
@@ -54,6 +56,33 @@ func (s *MySQLStore) RemoveFavoriteEvent(ctx context.Context, userID int64, even
 		return err
 	}
 	return nil
+}
+
+func (s *MySQLStore) GetPreference(ctx context.Context, userID int64, key string) (string, error) {
+	var value string
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT preference_value FROM user_preference WHERE user_id = ? AND preference_key = ? LIMIT 1`,
+		userID,
+		key,
+	).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", user.ErrPreferenceNotFound
+	}
+	return value, err
+}
+
+func (s *MySQLStore) SetPreference(ctx context.Context, userID int64, key string, value string) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO user_preference (user_id, preference_key, preference_value)
+VALUES (?, ?, ?)
+ON DUPLICATE KEY UPDATE preference_value = VALUES(preference_value)`,
+		userID,
+		key,
+		value,
+	)
+	return err
 }
 
 var _ user.Store = (*MySQLStore)(nil)

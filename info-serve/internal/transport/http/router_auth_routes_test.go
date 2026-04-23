@@ -168,6 +168,62 @@ func TestUserFavoriteRoutesUseBearerSession(t *testing.T) {
 	}
 }
 
+func TestUserHomeFilterPreferenceRoutesUseBearerSession(t *testing.T) {
+	r := transporthttp.NewRouter(transporthttp.Services{})
+	registerPayload := bytes.NewBufferString(`{"email":"preference@example.com","password":"StrongerPass123"}`)
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", registerPayload)
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerRes := httptest.NewRecorder()
+	r.ServeHTTP(registerRes, registerReq)
+	if registerRes.Code != http.StatusCreated {
+		t.Fatalf("register status = %d", registerRes.Code)
+	}
+
+	loginPayload := bytes.NewBufferString(`{"email":"preference@example.com","password":"StrongerPass123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", loginPayload)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRes := httptest.NewRecorder()
+	r.ServeHTTP(loginRes, loginReq)
+
+	var loginBody struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(loginRes.Body.Bytes(), &loginBody)
+
+	saveReq := httptest.NewRequest(http.MethodPut, "/api/v1/me/preferences/home-filter", bytes.NewBufferString(`{"category_code":"sports","sort":"latest","keyword":"NBA"}`))
+	saveReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	saveReq.Header.Set("Content-Type", "application/json")
+	saveRes := httptest.NewRecorder()
+	r.ServeHTTP(saveRes, saveReq)
+	if saveRes.Code != http.StatusOK {
+		t.Fatalf("save preference status = %d, body=%s", saveRes.Code, saveRes.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/me/preferences/home-filter", nil)
+	getReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	getRes := httptest.NewRecorder()
+	r.ServeHTTP(getRes, getReq)
+	if getRes.Code != http.StatusOK {
+		t.Fatalf("get preference status = %d, body=%s", getRes.Code, getRes.Body.String())
+	}
+
+	var getBody struct {
+		Data struct {
+			CategoryCode string `json:"category_code"`
+			Sort         string `json:"sort"`
+			Keyword      string `json:"keyword"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(getRes.Body.Bytes(), &getBody); err != nil {
+		t.Fatalf("invalid preference json: %v", err)
+	}
+	if getBody.Data.CategoryCode != "sports" || getBody.Data.Sort != "latest" || getBody.Data.Keyword != "NBA" {
+		t.Fatalf("home filter preference = %+v", getBody.Data)
+	}
+}
+
 func TestAdminHealthRequiresAdminRole(t *testing.T) {
 	r := transporthttp.NewRouter(transporthttp.Services{})
 	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)
