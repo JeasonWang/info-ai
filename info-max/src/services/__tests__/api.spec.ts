@@ -46,6 +46,37 @@ describe('api service routing', () => {
     )
   })
 
+  it('normalizes nullable event source badges from info-serve', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        total: 1,
+        page: 1,
+        page_size: 10,
+        items: [
+          {
+            id: 7,
+            representative_info_id: null,
+            title: '热点事件',
+            one_line_summary: '来源暂未识别',
+            primary_category: { code: 'tech', name: '科技' },
+            heat_score: 80,
+            freshness_score: 70,
+            composite_score: 90,
+            last_updated_at: '2026-04-22 10:00:00',
+            source_count: 1,
+            source_badges: null,
+            new_update_count: 0,
+          },
+        ],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const page = await getEvents({ category_code: 'all', sort: 'composite', page: 1, page_size: 10 })
+
+    expect(page.items[0].source_badges).toEqual([])
+  })
+
   it('uses info-serve /api/v1 for remaining user-facing APIs', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)

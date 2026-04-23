@@ -41,6 +41,33 @@ func TestServiceNormalizesListParams(t *testing.T) {
 	}
 }
 
+func TestServiceNormalizesNilSourceBadges(t *testing.T) {
+	service := NewService(fakeEventStore{listResult: EventPage{
+		Total:    1,
+		Page:     1,
+		PageSize: 10,
+		Items: []EventListItem{
+			{
+				ID:           7,
+				Title:        "热点事件",
+				SourceBadges: nil,
+			},
+		},
+	}})
+
+	page, err := service.ListEvents(context.Background(), ListEventsParams{Page: 1, PageSize: 10})
+
+	if err != nil {
+		t.Fatalf("ListEvents returned error: %v", err)
+	}
+	if page.Items[0].SourceBadges == nil {
+		t.Fatal("source badges should be an empty array instead of nil")
+	}
+	if len(page.Items[0].SourceBadges) != 0 {
+		t.Fatalf("source badges = %+v, want empty", page.Items[0].SourceBadges)
+	}
+}
+
 func TestEventCategoriesAreStableForFrontendTabs(t *testing.T) {
 	categories := EventCategories()
 

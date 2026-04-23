@@ -141,7 +141,16 @@ func (s *Service) ListEvents(ctx context.Context, params ListEventsParams) (Even
 	if params.PageSize > 50 {
 		params.PageSize = 50
 	}
-	return s.store.ListEvents(ctx, params)
+	page, err := s.store.ListEvents(ctx, params)
+	if err != nil {
+		return EventPage{}, err
+	}
+	for index := range page.Items {
+		if page.Items[index].SourceBadges == nil {
+			page.Items[index].SourceBadges = []string{}
+		}
+	}
+	return page, nil
 }
 
 func (s *Service) GetEventDetail(ctx context.Context, id int64) (EventDetail, error) {

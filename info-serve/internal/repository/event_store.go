@@ -55,8 +55,16 @@ JOIN category AS c ON c.id = e.primary_category_id `+whereSQL+` `+orderSQL+` LIM
 		); err != nil {
 			return events.EventPage{}, err
 		}
-		item.RepresentativeInfoID, _ = s.representativeInfoID(ctx, item.ID)
-		item.SourceBadges, _ = s.sourceBadges(ctx, item.ID)
+		representativeInfoID, err := s.representativeInfoID(ctx, item.ID)
+		if err != nil {
+			return events.EventPage{}, err
+		}
+		item.RepresentativeInfoID = representativeInfoID
+		sourceBadges, err := s.sourceBadges(ctx, item.ID)
+		if err != nil {
+			return events.EventPage{}, err
+		}
+		item.SourceBadges = sourceBadges
 		if item.SourceCount > 1 {
 			item.NewUpdateCount = item.SourceCount - 1
 		}
@@ -160,12 +168,13 @@ func (s *MySQLStore) representativeInfoID(ctx context.Context, eventID int64) (*
 func (s *MySQLStore) sourceBadges(ctx context.Context, eventID int64) ([]string, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT DISTINCT ch.name
+		`SELECT ch.name
 FROM event_item_link AS link
 JOIN info AS i ON i.id = link.item_id
 JOIN channel AS ch ON ch.id = i.channel_id
 WHERE link.event_id = ?
-ORDER BY link.weight DESC
+GROUP BY ch.name
+ORDER BY MAX(link.weight) DESC
 LIMIT 3`,
 		eventID,
 	)

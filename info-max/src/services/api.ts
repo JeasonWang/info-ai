@@ -72,6 +72,21 @@ function normalizeInfoItem(info: InfoItem): InfoItem {
   }
 }
 
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+function normalizeEventListItem(item: EventPage['items'][number]) {
+  return {
+    ...item,
+    source_badges: normalizeStringList(item.source_badges),
+  }
+}
+
 export async function getCategories() {
   const response = await requestInfoServe<ApiResponse<Category[]>>('/categories')
   return response.data
@@ -112,7 +127,10 @@ export async function getEvents(params: ListEventParams) {
     page_size: params.page_size,
   })
   const response = await requestInfoServe<ApiResponse<EventPage>>(`/events${query}`)
-  return response.data
+  return {
+    ...response.data,
+    items: response.data.items.map(normalizeEventListItem),
+  }
 }
 
 export async function getEventById(id: number) {
