@@ -16,19 +16,17 @@
   - `GET /api/v1/event-categories`
   - `GET /api/v1/events`
   - `GET /api/v1/events/{id}`
-- 兼容保留旧接口：
-  - `GET /api/categories`
-  - `GET /api/channels`
-  - `GET /api/infos`
-  - `GET /api/infos/{id}`
-  - `GET /api/stats`
-  - `POST /api/crawl/trigger`
+- 基础内容接口已切换到 `info-serve`：
+  - `GET /api/v1/categories`
+  - `GET /api/v1/channels`
+  - `GET /api/v1/infos`
+  - `GET /api/v1/infos/{id}`
+  - `GET /api/v1/stats`
 
 ## 本地启动
 
-1. 启动采集侧旧后端 `info_aggregation`，默认地址为 `http://localhost:8000`
-2. 启动 Go API 服务 `info-serve`，默认地址为 `http://localhost:8080`
-3. 在当前目录安装依赖并启动前端
+1. 启动 Go API 服务 `info-serve`，默认地址为 `http://localhost:8080`
+2. 在当前目录安装依赖并启动前端
 
 ```bash
 npm install
@@ -38,7 +36,6 @@ npm run dev
 如需自定义后端地址，请在 `.env` 中设置：
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8000
 VITE_INFO_SERVE_BASE_URL=http://localhost:8080
 ```
 

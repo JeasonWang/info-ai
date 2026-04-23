@@ -12,7 +12,7 @@ describe('InfoDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/infos/7')) {
+      if (url.includes('/api/v1/infos/7')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -83,7 +83,7 @@ describe('InfoDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/infos/7')) {
+      if (url.includes('/api/v1/infos/7')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -175,7 +175,7 @@ describe('InfoDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/infos/7')) {
+      if (url.includes('/api/v1/infos/7')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -248,7 +248,7 @@ describe('InfoDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/infos/7')) {
+      if (url.includes('/api/v1/infos/7')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -317,7 +317,7 @@ describe('InfoDetailView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.includes('/api/infos/7')) {
+      if (url.includes('/api/v1/infos/7')) {
         return new Response(
           JSON.stringify({
             code: 0,

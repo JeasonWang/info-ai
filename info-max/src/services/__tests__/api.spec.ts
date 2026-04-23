@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getEventById, getEventCategories, getEvents, getInfoById } from '@/services/api'
+import {
+  getCategories,
+  getChannels,
+  getEventById,
+  getEventCategories,
+  getEvents,
+  getInfoById,
+  getInfos,
+  getStats,
+} from '@/services/api'
 
 describe('api service routing', () => {
   afterEach(() => {
@@ -37,15 +46,39 @@ describe('api service routing', () => {
     )
   })
 
-  it('keeps legacy FastAPI path for info detail before Go API is ready', async () => {
-    const fetchMock = vi.fn(async () => {
-      return jsonResponse({ id: 9, title: '原始资讯详情' })
+  it('uses info-serve /api/v1 for remaining user-facing APIs', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/categories')) {
+        return jsonResponse([{ id: 1, name: '科技', code: 'tech', description: '科技热点' }])
+      }
+      if (url.includes('/channels')) {
+        return jsonResponse([{ id: 2, name: 'CSDN', code: 'csdn', category_id: 1 }])
+      }
+      if (url.includes('/infos/9')) {
+        return jsonResponse({ id: 9, title: '原始资讯详情', tech_entities: 'OpenAI,MCP' })
+      }
+      if (url.includes('/infos?')) {
+        return jsonResponse({ total: 1, page: 1, page_size: 10, items: [{ id: 9, title: '原始资讯详情' }] })
+      }
+      return jsonResponse({ total: 1, categories: [{ name: '科技', count: 1 }] })
     })
     vi.stubGlobal('fetch', fetchMock)
 
+    await getCategories()
+    await getChannels(1)
+    await getInfos({ category_id: 1, channel_id: 2, keyword: 'OpenAI', page: 1, page_size: 10 })
     await getInfoById(9)
+    await getStats()
 
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/api/infos/9', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/categories', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/channels?category_id=1', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/infos?category_id=1&channel_id=2&keyword=OpenAI&page=1&page_size=10',
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/infos/9', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/stats', expect.any(Object))
   })
 })
 

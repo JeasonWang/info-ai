@@ -12,7 +12,6 @@ import type {
   StatsData,
 } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const INFO_SERVE_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8080'
 const INFO_SERVE_API_PREFIX = '/api/v1'
 
@@ -27,10 +26,6 @@ function buildQuery(params: Record<string, string | number | undefined | null>) 
 
   const queryString = query.toString()
   return queryString ? `?${queryString}` : ''
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  return requestFromBase<T>(API_BASE_URL, path, init)
 }
 
 async function requestInfoServe<T>(path: string, init?: RequestInit): Promise<T> {
@@ -78,7 +73,7 @@ function normalizeInfoItem(info: InfoItem): InfoItem {
 }
 
 export async function getCategories() {
-  const response = await request<ApiResponse<Category[]>>('/api/categories')
+  const response = await requestInfoServe<ApiResponse<Category[]>>('/categories')
   return response.data
 }
 
@@ -88,8 +83,8 @@ export async function getEventCategories() {
 }
 
 export async function getChannels(categoryId?: number) {
-  const query = buildQuery({ category_id: categoryId })
-  const response = await request<ApiResponse<Channel[]>>(`/api/channels${query}`)
+	const query = buildQuery({ category_id: categoryId })
+  const response = await requestInfoServe<ApiResponse<Channel[]>>(`/channels${query}`)
   return response.data
 }
 
@@ -101,7 +96,7 @@ export async function getInfos(params: ListInfoParams) {
     page: params.page,
     page_size: params.page_size,
   })
-  const response = await request<ApiResponse<InfoPage>>(`/api/infos${query}`)
+  const response = await requestInfoServe<ApiResponse<InfoPage>>(`/infos${query}`)
   return {
     ...response.data,
     items: response.data.items.map(normalizeInfoItem),
@@ -126,11 +121,11 @@ export async function getEventById(id: number) {
 }
 
 export async function getInfoById(id: number) {
-  const response = await request<ApiResponse<InfoItem>>(`/api/infos/${id}`)
+  const response = await requestInfoServe<ApiResponse<InfoItem>>(`/infos/${id}`)
   return normalizeInfoItem(response.data)
 }
 
 export async function getStats() {
-  const response = await request<ApiResponse<StatsData>>('/api/stats')
+  const response = await requestInfoServe<ApiResponse<StatsData>>('/stats')
   return response.data
 }
