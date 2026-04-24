@@ -22,13 +22,14 @@ from database import (
     Info,
 )
 from services import (
-    archive_duplicate_title_infos,
-    archive_low_quality_infos,
-    build_data_quality_report,
-    rebuild_events,
-    refresh_info_semantics,
+	archive_duplicate_title_infos,
+	archive_low_quality_infos,
+	build_data_quality_report,
+	rebuild_events,
+	refresh_info_semantics,
 )
 from services.data_quality import text_similarity
+from services.data_quality_report import save_data_quality_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -650,6 +651,75 @@ def admin_refresh_quality():
             "message": "success",
             "data": {
                 **semantic_result,
+                "event_count": event_count,
+            },
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/retry-low-quality-details")
+def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, description="本次最多重抓的低完整内容数量")):
+    """按渠道重抓低完整详情，解决详情页正文缺失或质量分偏低的问题。"""
+    from scheduler import _fetch_details_for_items
+
+    session = get_session()
+    try:
+        infos = (
+            session.query(Info)
+            .join(Channel, Channel.id == Info.channel_id)
+            .filter(Info.is_deleted == 0)
+            .filter(
+                (Info.detail_fetch_status != "complete")
+                | (Info.detail_score < 80)
+                | (Info.detail_content_length < 120)
+                | (Info.content == None)
+                | (Info.content == "")
+            )
+            .order_by(Info.detail_score.asc(), Info.detail_content_length.asc(), Info.updated_at.desc())
+            .limit(limit)
+            .all()
+        )
+        grouped_ids = {}
+        for info in infos:
+            channel_code = info.channel.code if info.channel else ""
+            if not channel_code:
+                continue
+            grouped_ids.setdefault(channel_code, []).append(info.id)
+    finally:
+        session.close()
+
+    total_success = 0
+    total_failed = 0
+    channel_results = {}
+    for channel_code, ids in grouped_ids.items():
+        result = _fetch_details_for_items(channel_code, ids)
+        success_count = int(result.get("detail_success_count", 0))
+        failed_count = int(result.get("detail_failed_count", 0))
+        total_success += success_count
+        total_failed += failed_count
+        channel_results[channel_code] = {
+            "info_ids": ids,
+            "detail_success_count": success_count,
+            "detail_failed_count": failed_count,
+        }
+
+    session = get_session()
+    try:
+        semantic_result = refresh_info_semantics(session)
+        rebuild_events(session)
+        snapshot = save_data_quality_snapshot(session)
+        event_count = session.query(Event).count()
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "selected_count": len(infos),
+                "detail_success_count": total_success,
+                "detail_failed_count": total_failed,
+                "channel_results": channel_results,
+                "semantic_updated_count": semantic_result.get("updated_count", 0),
+                "quality_snapshot_id": snapshot.id,
                 "event_count": event_count,
             },
         }

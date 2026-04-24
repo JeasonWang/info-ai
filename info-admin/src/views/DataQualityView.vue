@@ -8,6 +8,7 @@ import {
   getLowQualityInfos,
   getQualitySnapshots,
   refreshQuality,
+  retryLowQualityDetails,
 } from '@/services/adminApi'
 import type { LowQualityInfo, QualitySnapshot } from '@/types/admin'
 
@@ -44,10 +45,11 @@ onMounted(loadData)
     <DataPanel title="质量治理操作" status="人工治理">
       <div class="action-strip">
         <button type="button" :disabled="isRunning" @click="runAction(refreshQuality)">刷新质量</button>
+        <button type="button" :disabled="isRunning" @click="runAction(() => retryLowQualityDetails(20))">重抓低完整详情</button>
         <button type="button" :disabled="isRunning" @click="runAction(archiveLowQualityInfos)">归档低质量</button>
         <button type="button" :disabled="isRunning" @click="runAction(archiveDuplicateTitles)">归档重复标题</button>
       </div>
-      <p class="action-message">{{ actionMessage || '建议先刷新质量，再处理明显低质或重复数据。治理动作会触发事件流更新。' }}</p>
+      <p class="action-message">{{ actionMessage || '建议先刷新质量，再重抓低完整详情；仍明显低质或重复的数据再归档。治理动作会触发事件流更新。' }}</p>
     </DataPanel>
 
     <DataPanel title="数据质量快照" :status="`${snapshots.length} 条`">

@@ -290,6 +290,16 @@ func (s *Service) RefreshQuality(ctx context.Context) (ActionResult, error) {
 	return s.runner.RefreshQuality(ctx)
 }
 
+func (s *Service) RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	return s.runner.RetryLowQualityDetails(ctx, limit)
+}
+
 func (s *Service) ArchiveLowQuality(ctx context.Context) (ActionResult, error) {
 	return s.runner.ArchiveLowQuality(ctx)
 }

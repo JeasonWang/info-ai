@@ -92,6 +92,7 @@ func registerAPIRoutes(
 	mux.HandleFunc("POST "+prefix+"/admin/crawl-tasks/{channel_code}/trigger", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.TriggerCrawl))
 	mux.HandleFunc("POST "+prefix+"/admin/rebuild-events", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.RebuildEvents))
 	mux.HandleFunc("POST "+prefix+"/admin/refresh-quality", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.RefreshQuality))
+	mux.HandleFunc("POST "+prefix+"/admin/retry-low-quality-details", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.RetryLowQualityDetails))
 	mux.HandleFunc("POST "+prefix+"/admin/archive-low-quality", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.ArchiveLowQuality))
 	mux.HandleFunc("POST "+prefix+"/admin/archive-duplicate-titles", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.ArchiveDuplicateTitles))
 }

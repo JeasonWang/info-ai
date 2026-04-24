@@ -20,6 +20,7 @@ type fakeAdminStore struct {
 type fakeActionRunner struct {
 	action      string
 	channelCode string
+	limit       int
 }
 
 func (r *fakeActionRunner) TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error) {
@@ -36,6 +37,12 @@ func (r *fakeActionRunner) RebuildEvents(ctx context.Context) (ActionResult, err
 func (r *fakeActionRunner) RefreshQuality(ctx context.Context) (ActionResult, error) {
 	r.action = "refresh_quality"
 	return ActionResult{Action: r.action, Message: "已刷新质量"}, nil
+}
+
+func (r *fakeActionRunner) RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "retry_low_quality_details"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已重抓低完整详情", Data: map[string]any{"limit": limit}}, nil
 }
 
 func (r *fakeActionRunner) ArchiveLowQuality(ctx context.Context) (ActionResult, error) {
@@ -303,6 +310,17 @@ func TestServiceRunsAdminActions(t *testing.T) {
 	}
 	if result.Action != "refresh_quality" {
 		t.Fatalf("action = %q, want refresh_quality", result.Action)
+	}
+
+	result, err = service.RetryLowQualityDetails(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("RetryLowQualityDetails returned error: %v", err)
+	}
+	if result.Action != "retry_low_quality_details" {
+		t.Fatalf("action = %q, want retry_low_quality_details", result.Action)
+	}
+	if runner.limit != 50 {
+		t.Fatalf("retry limit = %d, want 50", runner.limit)
 	}
 }
 

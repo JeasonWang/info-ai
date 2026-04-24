@@ -201,6 +201,15 @@ func (h *AdminHandler) RefreshQuality(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) RetryLowQualityDetails(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.RetryLowQualityDetails(r.Context(), queryLimit(r))
+	if err != nil {
+		writeAdminActionError(w, err, "低完整详情重抓失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) ArchiveLowQuality(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ArchiveLowQuality(r.Context())
 	if err != nil {

@@ -97,6 +97,12 @@ export function refreshQuality() {
   })
 }
 
+export function retryLowQualityDetails(limit = 20) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/retry-low-quality-details?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
 export function archiveLowQualityInfos() {
   return apiRequest<AdminActionResult>(apiV1('/admin/archive-low-quality'), {
     method: 'POST',

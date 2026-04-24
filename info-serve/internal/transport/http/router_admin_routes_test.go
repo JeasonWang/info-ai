@@ -294,6 +294,7 @@ func TestAdminActionRoutesReturnResultForAdmin(t *testing.T) {
 		{path: "/api/v1/admin/crawl-tasks/weibo/trigger", action: "trigger_crawl"},
 		{path: "/api/v1/admin/rebuild-events", action: "rebuild_events"},
 		{path: "/api/v1/admin/refresh-quality", action: "refresh_quality"},
+		{path: "/api/v1/admin/retry-low-quality-details?limit=5", action: "retry_low_quality_details"},
 		{path: "/api/v1/admin/archive-low-quality", action: "archive_low_quality"},
 		{path: "/api/v1/admin/archive-duplicate-titles", action: "archive_duplicate_titles"},
 	}

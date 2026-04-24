@@ -188,6 +188,60 @@ def test_admin_archive_low_quality_infos_api_rebuilds_quality_report(session):
     assert payload["quality_report"]["info"]["total"] == 0
 
 
+def test_admin_retry_low_quality_details_api_groups_records_by_channel(session, monkeypatch):
+    category, channel = _seed_category_and_channel(session)
+    weak_info = Info(
+        title="OpenAI 讨论升温",
+        content="OpenAI 讨论升温",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="retry-detail-weak",
+        source_url="https://example.com/retry-detail-weak",
+        event_time=datetime(2026, 4, 21, 9, 0, 0),
+        detail_fetch_status="list_only",
+        detail_score=10,
+        detail_content_length=8,
+    )
+    strong_info = Info(
+        title="芯片行业新进展",
+        content=(
+            "芯片行业新进展带来供应链和算力平台讨论，信息正文已经足够完整。"
+            "报道进一步补充了产业链上下游、先进封装、云端推理和终端应用的多方观点，"
+            "可以作为完整详情样例，不应该进入低完整详情重抓队列。"
+        ),
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="retry-detail-strong",
+        source_url="https://example.com/retry-detail-strong",
+        event_time=datetime(2026, 4, 21, 10, 0, 0),
+        detail_fetch_status="complete",
+        detail_score=95,
+        detail_content_length=130,
+        tech_entities="芯片",
+        tech_keywords="供应链,算力",
+    )
+    session.add_all([weak_info, strong_info])
+    session.commit()
+
+    calls = []
+
+    def fake_fetch_details(channel_code, info_ids):
+        calls.append((channel_code, info_ids))
+        return {"detail_success_count": len(info_ids), "detail_failed_count": 0}
+
+    monkeypatch.setattr("scheduler._fetch_details_for_items", fake_fetch_details)
+
+    client = TestClient(app)
+    response = client.post("/api/admin/retry-low-quality-details?limit=10")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["selected_count"] == 1
+    assert payload["detail_success_count"] == 1
+    assert payload["detail_failed_count"] == 0
+    assert calls == [("weibo", [weak_info.id])]
+
+
 def test_archive_duplicate_title_infos_keeps_highest_quality_record(session):
     category, channel = _seed_category_and_channel(session)
     weak = Info(

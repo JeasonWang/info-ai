@@ -38,6 +38,11 @@ func (r *AggregationActionRunner) RefreshQuality(ctx context.Context) (ActionRes
 	return r.post(ctx, "refresh_quality", "/api/admin/refresh-quality")
 }
 
+func (r *AggregationActionRunner) RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error) {
+	path := fmt.Sprintf("/api/admin/retry-low-quality-details?limit=%d", limit)
+	return r.post(ctx, "retry_low_quality_details", path)
+}
+
 func (r *AggregationActionRunner) ArchiveLowQuality(ctx context.Context) (ActionResult, error) {
 	return r.post(ctx, "archive_low_quality", "/api/admin/archive-low-quality")
 }

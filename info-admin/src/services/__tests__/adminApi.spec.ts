@@ -8,6 +8,7 @@ import {
   getLowQualityInfos,
   rebuildEvents,
   refreshQuality,
+  retryLowQualityDetails,
   triggerCrawlTask,
 } from '@/services/adminApi'
 import { loginAdmin } from '@/services/authApi'
@@ -65,6 +66,12 @@ describe('admin API versioned paths', () => {
     await refreshQuality()
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/refresh-quality',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await retryLowQualityDetails(15)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/retry-low-quality-details?limit=15',
       expect.objectContaining({ method: 'POST' }),
     )
 

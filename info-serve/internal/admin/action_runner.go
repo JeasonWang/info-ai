@@ -14,6 +14,7 @@ type ActionRunner interface {
 	TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error)
 	RebuildEvents(ctx context.Context) (ActionResult, error)
 	RefreshQuality(ctx context.Context) (ActionResult, error)
+	RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error)
 	ArchiveLowQuality(ctx context.Context) (ActionResult, error)
 	ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error)
 }
@@ -39,6 +40,14 @@ func (r *MemoryActionRunner) RebuildEvents(ctx context.Context) (ActionResult, e
 
 func (r *MemoryActionRunner) RefreshQuality(ctx context.Context) (ActionResult, error) {
 	return ActionResult{Action: "refresh_quality", Message: "本地测试模式已模拟刷新质量", Data: map[string]any{}}, nil
+}
+
+func (r *MemoryActionRunner) RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error) {
+	return ActionResult{
+		Action:  "retry_low_quality_details",
+		Message: "本地测试模式已模拟重抓低完整详情",
+		Data:    map[string]any{"limit": limit},
+	}, nil
 }
 
 func (r *MemoryActionRunner) ArchiveLowQuality(ctx context.Context) (ActionResult, error) {
