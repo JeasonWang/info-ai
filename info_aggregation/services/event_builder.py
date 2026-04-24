@@ -176,7 +176,7 @@ def rebuild_events(session, limit: int = 200):
     items = (
         session.query(Info)
         .filter(Info.is_deleted == 0)
-        .order_by(Info.event_time.asc(), Info.created_at.asc())
+        .order_by(Info.event_time.desc(), Info.created_at.desc(), Info.id.desc())
         .limit(limit)
         .all()
     )
