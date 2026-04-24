@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class ZhihuCrawler(BaseCrawler):
@@ -162,7 +162,7 @@ class ZhihuCrawler(BaseCrawler):
 
             merged = " ".join(segments).strip()
             if len(merged) >= 20:
-                return DetailStrategyResult(strategy="answer_api", content=merged[:500])
+                return DetailStrategyResult(strategy="answer_api", content=limit_detail_content(merged))
         except Exception as e:
             self.logger.warning(f"知乎回答API解析失败: {e}")
 
@@ -189,7 +189,7 @@ class ZhihuCrawler(BaseCrawler):
                 content = re.sub(r"<[^>]+>", "", content)
                 content = re.sub(r"\s+", " ", content).strip()
                 if len(content) >= 20:
-                    return DetailStrategyResult(strategy="fetch_detail", content=content[:500])
+                    return DetailStrategyResult(strategy="fetch_detail", content=limit_detail_content(content))
         except Exception as e:
             self.logger.warning(f"知乎页面正文解析失败: {e}")
 
@@ -206,7 +206,7 @@ class ZhihuCrawler(BaseCrawler):
             response = self.fetch(source_url, headers=headers)
             text = self._extract_text_from_html(response.text)
             if text and len(text) >= 20:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
         except Exception as e:
             self.logger.warning(f"知乎网页兜底解析失败: {e}")
 

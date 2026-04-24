@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import limit_detail_content
 
 
 class ReutersCrawler(BaseCrawler):
@@ -169,13 +170,13 @@ class ReutersCrawler(BaseCrawler):
                                 texts.append(text)
                     full_text = " ".join(texts)
                     if len(full_text) >= 50:
-                        return full_text[:500]
+                        return limit_detail_content(full_text)
                 rn_text = article.get("rn_text", "")
                 if rn_text:
                     rn_text = re.sub(r'<[^>]+>', '', rn_text)
                     rn_text = re.sub(r'\s+', ' ', rn_text).strip()
                     if len(rn_text) >= 50:
-                        return rn_text[:500]
+                        return limit_detail_content(rn_text)
             except Exception:
                 pass
 
@@ -184,7 +185,7 @@ class ReutersCrawler(BaseCrawler):
                 html = response.text
                 text = self._extract_text_from_html(html)
                 if len(text) >= 50:
-                    return text[:500]
+                    return limit_detail_content(text)
             except Exception:
                 pass
 

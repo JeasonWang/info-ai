@@ -8,7 +8,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class ToutiaoCrawler(BaseCrawler):
@@ -170,7 +170,7 @@ class ToutiaoCrawler(BaseCrawler):
 
             combined = self._merge_distinct_parts(content_parts)
             if combined:
-                return DetailStrategyResult(strategy="hot_board_detail", content=combined[:500])
+                return DetailStrategyResult(strategy="hot_board_detail", content=limit_detail_content(combined))
         except Exception:
             return None
         return None
@@ -200,7 +200,7 @@ class ToutiaoCrawler(BaseCrawler):
                         merged_parts.append(value)
             combined = self._merge_distinct_parts(merged_parts, prefix=" ".join(str(part).strip() for part in prefix_parts if str(part).strip()))
             if combined:
-                return DetailStrategyResult(strategy="search_content", content=combined[:500])
+                return DetailStrategyResult(strategy="search_content", content=limit_detail_content(combined))
         except Exception:
             return None
         return None
@@ -220,7 +220,7 @@ class ToutiaoCrawler(BaseCrawler):
             if not text:
                 text = self._extract_text_from_html(html)
             if text:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
         except Exception:
             return None
         return None

@@ -112,6 +112,7 @@ def test_admin_rebuild_events_keeps_stable_event_identity_for_user_dependencies(
     assert response.status_code == 200
     rebuilt_event = session.query(Event).filter(Event.event_key == event_key).one()
     assert rebuilt_event.id == event_id
+    assert rebuilt_event.status == "active"
     assert session.execute(text("SELECT event_id FROM user_favorite_event")).scalar() == event_id
     assert session.execute(text("SELECT event_id FROM user_read_history")).scalar() == event_id
 

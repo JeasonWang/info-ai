@@ -1,4 +1,19 @@
 from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from crawlers.base import BaseCrawler
+
+
+class LongContentCrawler(BaseCrawler):
+    """测试用爬虫，模拟渠道已经抓到完整详情正文。"""
+
+    def __init__(self, detail_content: str):
+        super().__init__("long_content_test", "长正文测试")
+        self.detail_content = detail_content
+
+    def crawl(self) -> list:
+        return []
+
+    def fetch_detail(self, source_url: str, item: dict) -> str:
+        return self.detail_content
 
 
 def test_pipeline_marks_shell_page_as_failed():
@@ -51,3 +66,18 @@ def test_pipeline_recognizes_relevant_mixed_keyword_content_as_complete():
     assert result.status == "complete"
     assert result.strategy == "topic_search"
     assert result.failure_reason == ""
+
+
+def test_safe_fetch_detail_preserves_long_complete_content():
+    long_content = "OpenAI 发布新模型后，开发者重点关注 API 接入、推理成本和企业部署。" * 80
+    crawler = LongContentCrawler(long_content)
+
+    detail_content, status, error_message, pipeline = crawler.safe_fetch_detail(
+        "https://example.com/openai-long-article",
+        {"title": "OpenAI 发布新模型", "content": "列表摘要"},
+    )
+
+    assert status == "complete"
+    assert error_message == ""
+    assert detail_content == long_content
+    assert pipeline.content_length == len(long_content)

@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class JuejinCrawler(BaseCrawler):
@@ -225,7 +225,7 @@ class JuejinCrawler(BaseCrawler):
 
             combined = self._merge_distinct_parts(parts)
             if len(combined) >= 20:
-                return DetailStrategyResult(strategy="fetch_detail", content=combined[:500])
+                return DetailStrategyResult(strategy="fetch_detail", content=limit_detail_content(combined))
         except Exception as e:
             self.logger.warning(f"掘金API详情解析失败: {e}")
 
@@ -244,7 +244,7 @@ class JuejinCrawler(BaseCrawler):
             html = response.text
             text = self._extract_web_fallback_content(html, item.get("title", ""))
             if text and len(text) >= 20:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
         except Exception as e:
             self.logger.warning(f"掘金网页兜底解析失败: {e}")
 

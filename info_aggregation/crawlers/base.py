@@ -12,7 +12,7 @@ from datetime import datetime
 import requests
 
 from config import CRAWLER_USER_AGENTS, CRAWLER_REQUEST_TIMEOUT, CRAWLER_RETRY_TIMES, CRAWLER_RETRY_INTERVAL
-from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class BaseCrawler(ABC):
@@ -249,7 +249,10 @@ class BaseCrawler(ABC):
             return "", "failed", "详情页URL为空", pipeline
         try:
             pipeline = self.resolve_detail(item)
-            return pipeline.content[:500], pipeline.status, pipeline.failure_reason, pipeline
+            detail_content = limit_detail_content(pipeline.content)
+            pipeline.content = detail_content
+            pipeline.content_length = len(detail_content)
+            return detail_content, pipeline.status, pipeline.failure_reason, pipeline
         except requests.Timeout:
             pipeline = DetailPipelineResult("", "failed", "", 0, 0, "详情页请求超时", ["network_timeout"])
             return "", "failed", "详情页请求超时", pipeline

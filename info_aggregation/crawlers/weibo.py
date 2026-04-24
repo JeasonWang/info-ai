@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class WeiboCrawler(BaseCrawler):
@@ -353,7 +353,7 @@ class WeiboCrawler(BaseCrawler):
             # 网页兜底只抽正文相关区块，不直接使用整页文本，避免把导航壳页面误当成详情。
             text = self._extract_web_fallback_content(response.text, word)
             if text:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
             return None
         except Exception as e:
             self.logger.warning(f"微博详情爬取失败: {e}")

@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class CSDNCrawler(BaseCrawler):
@@ -177,7 +177,7 @@ class CSDNCrawler(BaseCrawler):
                 content = self._clean_content_text(match.group(1))
 
             if content and len(content) >= 50:
-                return DetailStrategyResult(strategy="fetch_detail", content=content[:500])
+                return DetailStrategyResult(strategy="fetch_detail", content=limit_detail_content(content))
         except Exception as e:
             self.logger.warning(f"CSDN详情页正文解析失败: {e}")
 
@@ -195,7 +195,7 @@ class CSDNCrawler(BaseCrawler):
             html = response.text
             text = self._extract_web_fallback_content(html, item.get("title", ""))
             if text and len(text) >= 50:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
         except Exception as e:
             self.logger.warning(f"CSDN网页兜底解析失败: {e}")
 

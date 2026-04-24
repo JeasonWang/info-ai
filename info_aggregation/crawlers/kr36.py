@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class Kr36Crawler(BaseCrawler):
@@ -296,7 +296,7 @@ class Kr36Crawler(BaseCrawler):
 
         combined = self._merge_distinct_parts(cleaned_parts)
         if len(combined) >= 20:
-            return combined[:500]
+            return limit_detail_content(combined)
 
         return ""
 
@@ -314,7 +314,7 @@ class Kr36Crawler(BaseCrawler):
 
             text = self._extract_web_fallback_content(html, item.get("title", ""))
             if text and len(text) >= 20:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
         except Exception as e:
             self.logger.warning(f"36氪网页兜底解析失败: {e}")
 

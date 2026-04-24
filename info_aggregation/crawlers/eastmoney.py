@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import limit_detail_content
 
 
 class EastmoneyCrawler(BaseCrawler):
@@ -104,7 +105,7 @@ class EastmoneyCrawler(BaseCrawler):
                                 art_response = self.fetch(article_url, headers=headers)
                                 art_text = self._extract_text_from_html(art_response.text)
                                 if len(art_text) >= 50:
-                                    return art_text[:500]
+                                    return limit_detail_content(art_text)
                             except Exception:
                                 pass
                         content = article.get("content", "")
@@ -112,7 +113,7 @@ class EastmoneyCrawler(BaseCrawler):
                             content = re.sub(r'<[^>]+>', '', content)
                             content = re.sub(r'\s+', ' ', content).strip()
                             if len(content) >= 50:
-                                return content[:500]
+                                return limit_detail_content(content)
                         title = article.get("title", "")
                         summary = article.get("content", article.get("description", ""))
                         if summary:
@@ -120,7 +121,7 @@ class EastmoneyCrawler(BaseCrawler):
                             summary = re.sub(r'\s+', ' ', summary).strip()
                         combined = f"{title}。{summary}" if title and summary else (title or summary or "")
                         if len(combined) >= 50:
-                            return combined[:500]
+                            return limit_detail_content(combined)
             except Exception:
                 pass
 

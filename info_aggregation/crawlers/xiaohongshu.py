@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import limit_detail_content
 
 
 class XiaohongshuCrawler(BaseCrawler):
@@ -161,11 +162,11 @@ class XiaohongshuCrawler(BaseCrawler):
             if state:
                 content = self._extract_content_from_state(state)
                 if content and self._is_valid_content(content):
-                    return content[:500]
+                    return limit_detail_content(content)
             
             text = self._extract_text_from_html(html)
             if text and self._is_valid_content(text):
-                return text[:500]
+                return limit_detail_content(text)
             
             self.logger.warning("详情页未提取到有效内容")
             return ""

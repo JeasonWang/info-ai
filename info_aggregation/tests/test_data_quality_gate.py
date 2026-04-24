@@ -8,6 +8,7 @@ from crawlers.registry import crawler_registry
 from services.detail_pipeline import DetailPipelineResult
 from sql.init_data import init_mock_data
 from services.data_maintenance import refresh_info_semantics
+from crawlers.sports_utils import extract_article_text
 
 
 def test_clean_info_list_removes_near_duplicate_title_and_content():
@@ -149,6 +150,16 @@ def test_fetch_details_marks_title_duplicate_detail_as_low_quality(session, monk
     assert refreshed.content == "列表摘要包含少量背景。"
     assert refreshed.detail_fetch_status == "list_only"
     assert refreshed.detail_fetch_error == "title_content_duplicate"
+
+
+def test_sports_article_extraction_preserves_long_body_text():
+    body = "中国女排在比赛中展现出稳定的一传、防守韧性和关键分把握能力。" * 90
+    html = f'<html><body><div class="content_area"><p>{body}</p></div></body></html>'
+
+    content = extract_article_text(html, [r'<div[^>]+class=["\'][^"\']*content_area[^"\']*["\'][^>]*>(.*?)</div>'])
+
+    assert content == body
+    assert len(content) > 500
 
 
 def test_seed_data_populates_tech_semantic_fields(session):

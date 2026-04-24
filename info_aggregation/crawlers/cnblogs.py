@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import limit_detail_content
 
 
 class CnblogsCrawler(BaseCrawler):
@@ -92,11 +93,10 @@ class CnblogsCrawler(BaseCrawler):
                     content = match.group(1)
                     content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL | re.IGNORECASE)
                     content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL | re.IGNORECASE)
-                    content = re.sub(r'<pre[^>]*>.*?</pre>', '', content, flags=re.DOTALL | re.IGNORECASE)
                     content = re.sub(r'<[^>]+>', '', content)
                     content = re.sub(r'\s+', ' ', content).strip()
                     if len(content) >= 50:
-                        return content[:500]
+                        return limit_detail_content(content)
             except Exception:
                 pass
 
@@ -105,7 +105,7 @@ class CnblogsCrawler(BaseCrawler):
                 html = response.text
                 text = self._extract_text_from_html(html)
                 if len(text) >= 50:
-                    return text[:500]
+                    return limit_detail_content(text)
             except Exception:
                 pass
 

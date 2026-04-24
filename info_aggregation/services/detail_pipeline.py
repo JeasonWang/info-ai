@@ -2,6 +2,9 @@ from dataclasses import dataclass, field
 import re
 
 
+FULL_CONTENT_MAX_LENGTH = 12000
+
+
 INVALID_PATTERNS = {
     "shell_page": [
         "你访问的页面不见了",
@@ -62,6 +65,14 @@ def normalize_content(content: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def limit_detail_content(content: str, max_length: int = FULL_CONTENT_MAX_LENGTH) -> str:
+    """限制异常超长正文，正常文章不再按摘要长度截断。"""
+
+    if not content:
+        return ""
+    return content[:max_length]
 
 
 def extract_meaningful_markers(title: str) -> list[str]:

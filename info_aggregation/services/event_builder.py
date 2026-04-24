@@ -191,7 +191,7 @@ def rebuild_events(session, limit: int = 200):
     session.query(EventItemLink).delete()
     session.query(EventTimelineEntry).delete()
     session.query(EventSummarySnapshot).delete()
-    session.query(Event).update({Event.status: "archived"}, synchronize_session=False)
+    session.query(Event).update({Event.status: "archived"}, synchronize_session="fetch")
     session.flush()
 
     for (category_id, anchor), group in grouped_items.items():
