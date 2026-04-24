@@ -2,12 +2,14 @@ name: Deploy
 
 on:
   push:
-    branches: [main, master, feature/*]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      VITE_INFO_SERVE_BASE_URL: ${{ vars.VITE_INFO_SERVE_BASE_URL || secrets.VITE_INFO_SERVE_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,14 +17,26 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate deployment config
+        run: |
+          if [ -z "${VITE_INFO_SERVE_BASE_URL}" ]; then
+            echo "请在 GitHub repository variable 或 secret 中配置 VITE_INFO_SERVE_BASE_URL，例如 https://api.example.com"
+            exit 1
+          fi
+
       - name: Build images
         run: |
-          docker-compose build
+          docker compose -f docker-compose.yml build
 
       - name: Export images
         run: |
           mkdir -p images
-          docker save info-ai_info-aggregation info-ai_info-serve info-ai_info-max info-ai_info-admin | gzip > images/info-ai-images.tar.gz
+          docker save \
+            info-ai-info-aggregation:pro \
+            info-ai-info-serve:pro \
+            info-ai-info-max:pro \
+            info-ai-info-admin:pro \
+            | gzip > images/info-ai-images.tar.gz
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -41,7 +55,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd ${{ secrets.SERVER_DEPLOY_PATH || '/opt/info-ai' }}
-            docker load < images/info-ai-images.tar.gz
-            docker-compose up -d
-            docker-compose ps
+            ./deploy.sh prod image-tar
+            docker ps --filter "name=info-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
             docker system prune -f

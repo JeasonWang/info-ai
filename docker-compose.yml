@@ -18,6 +18,7 @@ services:
       retries: 5
 
   info-aggregation:
+    image: info-ai-info-aggregation:pro
     build:
       context: ./info_aggregation
       dockerfile: Dockerfile
@@ -44,6 +45,7 @@ services:
         condition: service_healthy
 
   info-serve:
+    image: info-ai-info-serve:pro
     build:
       context: ./info-serve
       dockerfile: Dockerfile
@@ -63,6 +65,7 @@ services:
         condition: service_started
 
   info-max:
+    image: info-ai-info-max:pro
     build:
       context: ./info-max
       dockerfile: Dockerfile
@@ -76,6 +79,7 @@ services:
       - info-serve
 
   info-admin:
+    image: info-ai-info-admin:pro
     build:
       context: ./info-admin
       dockerfile: Dockerfile
