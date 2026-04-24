@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"sort"
+	"strconv"
 	"sync"
 )
 
@@ -32,6 +33,29 @@ func (s *MemoryStore) ListFavoriteEventIDs(ctx context.Context, userID int64) ([
 		return result[i] > result[j]
 	})
 	return result, nil
+}
+
+func (s *MemoryStore) ListFavoriteEvents(ctx context.Context, userID int64, limit int) ([]FavoriteEventItem, error) {
+	ids, err := s.ListFavoriteEventIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	items := make([]FavoriteEventItem, 0, len(ids))
+	for _, id := range ids {
+		items = append(items, FavoriteEventItem{
+			ID:             id,
+			Title:          "收藏事件",
+			OneLineSummary: "",
+			CategoryName:   "",
+			SourceLabel:    "",
+			FavoritedAt:    "2026-04-24 00:00:00",
+			TargetPath:     "/events/" + strconv.FormatInt(id, 10),
+		})
+	}
+	return items, nil
 }
 
 func (s *MemoryStore) AddFavoriteEvent(ctx context.Context, userID int64, eventID int64) error {

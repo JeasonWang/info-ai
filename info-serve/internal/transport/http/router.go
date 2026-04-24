@@ -68,6 +68,7 @@ func registerAPIRoutes(
 	mux.HandleFunc("POST "+prefix+"/auth/logout", authHandler.Logout)
 	mux.HandleFunc("GET "+prefix+"/me", authHandler.Me)
 	mux.HandleFunc("GET "+prefix+"/me/favorites", userHandler.FavoriteEventIDs)
+	mux.HandleFunc("GET "+prefix+"/me/favorite-events", userHandler.FavoriteEvents)
 	mux.HandleFunc("POST "+prefix+"/me/favorites", userHandler.AddFavoriteEvent)
 	mux.HandleFunc("DELETE "+prefix+"/me/favorites/{event_id}", userHandler.RemoveFavoriteEvent)
 	mux.HandleFunc("GET "+prefix+"/me/preferences/home-filter", userHandler.HomeFilterPreference)

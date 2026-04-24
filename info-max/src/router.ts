@@ -28,6 +28,11 @@ export const routes: RouteRecordRaw[] = [
     name: 'history',
     component: () => import('./views/ReadHistoryView.vue'),
   },
+  {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('./views/FavoriteEventsView.vue'),
+  },
 ]
 
 export const appScrollBehavior: RouterScrollBehavior = (

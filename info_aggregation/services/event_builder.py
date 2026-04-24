@@ -1,6 +1,8 @@
 from collections import defaultdict
 from difflib import SequenceMatcher
 
+from sqlalchemy import inspect, text
+
 from database import Event, EventItemLink, EventSummarySnapshot, EventTimelineEntry, Info
 
 
@@ -150,6 +152,16 @@ def _build_latest_update(items: list[Info]) -> str:
     return latest_content
 
 
+def _clear_event_user_dependencies(session):
+    """清理依赖旧事件ID的用户数据，避免全量重建事件时触发外键约束。"""
+
+    table_names = set(inspect(session.get_bind()).get_table_names())
+    if "user_favorite_event" in table_names:
+        session.execute(text("DELETE FROM user_favorite_event WHERE event_id IS NOT NULL"))
+    if "user_read_history" in table_names:
+        session.execute(text("DELETE FROM user_read_history WHERE event_id IS NOT NULL"))
+
+
 def rebuild_events(session, limit: int = 200):
     items = (
         session.query(Info)
@@ -165,6 +177,7 @@ def rebuild_events(session, limit: int = 200):
             continue
         grouped_items[_build_event_key(item)].append(item)
 
+    _clear_event_user_dependencies(session)
     session.query(EventItemLink).delete()
     session.query(EventTimelineEntry).delete()
     session.query(EventSummarySnapshot).delete()

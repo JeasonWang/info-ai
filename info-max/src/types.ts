@@ -177,6 +177,16 @@ export interface ReadHistoryItem {
   primary_remark: string
 }
 
+export interface FavoriteEventItem {
+  id: number
+  title: string
+  one_line_summary: string
+  category_name: string
+  source_label: string
+  favorited_at: string
+  target_path: string
+}
+
 export interface ListInfoParams {
   category_id?: number
   channel_id?: number

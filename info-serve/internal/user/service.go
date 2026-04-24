@@ -13,6 +13,7 @@ const HomeFilterPreferenceKey = "home_filter"
 
 type Store interface {
 	ListFavoriteEventIDs(ctx context.Context, userID int64) ([]int64, error)
+	ListFavoriteEvents(ctx context.Context, userID int64, limit int) ([]FavoriteEventItem, error)
 	AddFavoriteEvent(ctx context.Context, userID int64, eventID int64) error
 	RemoveFavoriteEvent(ctx context.Context, userID int64, eventID int64) error
 	GetPreference(ctx context.Context, userID int64, key string) (string, error)
@@ -43,6 +44,16 @@ type ReadHistoryItem struct {
 	PrimaryRemark string `json:"primary_remark"`
 }
 
+type FavoriteEventItem struct {
+	ID             int64  `json:"id"`
+	Title          string `json:"title"`
+	OneLineSummary string `json:"one_line_summary"`
+	CategoryName   string `json:"category_name"`
+	SourceLabel    string `json:"source_label"`
+	FavoritedAt    string `json:"favorited_at"`
+	TargetPath     string `json:"target_path"`
+}
+
 func NewService(store Store) *Service {
 	return &Service{store: store}
 }
@@ -52,6 +63,19 @@ func (s *Service) ListFavoriteEventIDs(ctx context.Context, userID int64) ([]int
 		return nil, ErrInvalidInput
 	}
 	return s.store.ListFavoriteEventIDs(ctx, userID)
+}
+
+func (s *Service) ListFavoriteEvents(ctx context.Context, userID int64, limit int) ([]FavoriteEventItem, error) {
+	if userID < 1 {
+		return nil, ErrInvalidInput
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	return s.store.ListFavoriteEvents(ctx, userID, limit)
 }
 
 func (s *Service) AddFavoriteEvent(ctx context.Context, userID int64, eventID int64) error {

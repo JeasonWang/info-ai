@@ -34,6 +34,57 @@ ORDER BY created_at DESC, id DESC`,
 	return ids, rows.Err()
 }
 
+func (s *MySQLStore) ListFavoriteEvents(ctx context.Context, userID int64, limit int) ([]user.FavoriteEventItem, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT
+  e.id,
+  e.title,
+  e.one_line_summary,
+  c.name,
+  COALESCE(ch.name, '') AS source_label,
+  ufe.created_at
+FROM user_favorite_event AS ufe
+JOIN event AS e ON e.id = ufe.event_id
+JOIN category AS c ON c.id = e.primary_category_id
+LEFT JOIN info AS ri ON ri.id = (
+  SELECT link.item_id
+  FROM event_item_link AS link
+  WHERE link.event_id = e.id
+  ORDER BY link.is_primary DESC, link.weight DESC, link.id ASC
+  LIMIT 1
+)
+LEFT JOIN channel AS ch ON ch.id = ri.channel_id
+WHERE ufe.user_id = ?
+ORDER BY ufe.created_at DESC, ufe.id DESC
+LIMIT ?`,
+		userID,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []user.FavoriteEventItem{}
+	for rows.Next() {
+		var item user.FavoriteEventItem
+		if err := rows.Scan(
+			&item.ID,
+			&item.Title,
+			&item.OneLineSummary,
+			&item.CategoryName,
+			&item.SourceLabel,
+			&item.FavoritedAt,
+		); err != nil {
+			return nil, err
+		}
+		item.TargetPath = fmt.Sprintf("/events/%d", item.ID)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *MySQLStore) AddFavoriteEvent(ctx context.Context, userID int64, eventID int64) error {
 	_, err := s.db.ExecContext(
 		ctx,

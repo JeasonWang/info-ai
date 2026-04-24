@@ -9,6 +9,7 @@ import {
   getInfos,
   getCurrentUser,
   getHomeFilterPreference,
+  getFavoriteEvents,
   getReadHistory,
   getFavoriteEventIds,
   loginUser,
@@ -141,6 +142,11 @@ describe('api service routing', () => {
       if (url.includes('/me/favorites') && init?.method === 'DELETE') {
         return jsonResponse({ event_id: 101, favorited: false })
       }
+      if (url.includes('/me/favorite-events')) {
+        return jsonResponse([
+          { id: 101, title: '收藏事件', one_line_summary: '收藏摘要', category_name: '科技', source_label: '微博', favorited_at: '2026-04-24 10:00:00', target_path: '/events/101' },
+        ])
+      }
       if (url.includes('/me/favorites')) {
         return jsonResponse({ event_ids: [101] })
       }
@@ -166,6 +172,7 @@ describe('api service routing', () => {
     await loginUser('user@example.com', 'StrongerPass123')
     await getCurrentUser('token')
     await getFavoriteEventIds('token')
+    await getFavoriteEvents('token')
     await addFavoriteEvent('token', 101)
     await removeFavoriteEvent('token', 101)
     await getHomeFilterPreference('token')
@@ -188,6 +195,10 @@ describe('api service routing', () => {
     )
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/me/favorites',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/favorite-events',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(

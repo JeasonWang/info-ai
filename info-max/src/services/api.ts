@@ -5,6 +5,7 @@ import type {
   EventDetail,
   EventCategory,
   EventPage,
+  FavoriteEventItem,
   InfoItem,
   InfoPage,
   ListEventParams,
@@ -188,6 +189,13 @@ export async function getFavoriteEventIds(token: string) {
     headers: { Authorization: `Bearer ${token}` },
   })
   return response.data.event_ids
+}
+
+export async function getFavoriteEvents(token: string): Promise<FavoriteEventItem[]> {
+  const response = await requestInfoServe<ApiResponse<FavoriteEventItem[]>>('/me/favorite-events', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
 }
 
 export async function addFavoriteEvent(token: string, eventId: number) {

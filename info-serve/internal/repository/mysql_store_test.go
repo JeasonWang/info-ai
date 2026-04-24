@@ -118,6 +118,14 @@ func TestMySQLStorePersistsFavoriteEventIDs(t *testing.T) {
 		t.Fatalf("favorite event ids = %+v, want [%d]", ids, eventID)
 	}
 
+	items, err := store.ListFavoriteEvents(ctx, user.ID, 20)
+	if err != nil {
+		t.Fatalf("ListFavoriteEvents returned error: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != eventID || items[0].TargetPath == "" {
+		t.Fatalf("favorite event items = %+v", items)
+	}
+
 	if err := store.RemoveFavoriteEvent(ctx, user.ID, eventID); err != nil {
 		t.Fatalf("RemoveFavoriteEvent returned error: %v", err)
 	}

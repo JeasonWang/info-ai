@@ -34,6 +34,7 @@ onBeforeUnmount(() => {
     <header class="user-topbar">
       <RouterLink class="user-topbar__brand" to="/">Info Daren</RouterLink>
       <div class="user-topbar__account">
+        <RouterLink v-if="user" to="/favorites">我的收藏</RouterLink>
         <RouterLink v-if="user" to="/history">阅读历史</RouterLink>
         <span>{{ userLabel }}</span>
         <button v-if="user" type="button" @click="logout">退出</button>

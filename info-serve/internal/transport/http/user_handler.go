@@ -42,6 +42,19 @@ func (h *UserHandler) FavoriteEventIDs(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, map[string][]int64{"event_ids": ids})
 }
 
+func (h *UserHandler) FavoriteEvents(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.userService.ListFavoriteEvents(r.Context(), currentUser.ID, 50)
+	if err != nil {
+		response.InternalServerError(w, "收藏事件查询失败")
+		return
+	}
+	response.OK(w, items)
+}
+
 func (h *UserHandler) AddFavoriteEvent(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := h.currentUser(w, r)
 	if !ok {
