@@ -62,18 +62,25 @@ type CrawlRunSummary struct {
 }
 
 type ChannelHealth struct {
-	ChannelCode        string `json:"channel_code"`
-	ChannelName        string `json:"channel_name"`
-	CategoryName       string `json:"category_name"`
-	Status             string `json:"status"`
-	RecentRunCount     int    `json:"recent_run_count"`
-	SuccessRate        int    `json:"success_rate"`
-	DetailCompleteRate int    `json:"detail_complete_rate"`
-	HealthScore        int    `json:"health_score"`
-	HealthLevel        string `json:"health_level"`
-	FailureCount       int    `json:"failure_count"`
-	LastRunAt          string `json:"last_run_at"`
-	LastIssue          string `json:"last_issue"`
+	ChannelCode          string   `json:"channel_code"`
+	ChannelName          string   `json:"channel_name"`
+	CategoryName         string   `json:"category_name"`
+	Status               string   `json:"status"`
+	RecentRunCount       int      `json:"recent_run_count"`
+	SuccessRate          int      `json:"success_rate"`
+	DetailCompleteRate   int      `json:"detail_complete_rate"`
+	HealthScore          int      `json:"health_score"`
+	HealthLevel          string   `json:"health_level"`
+	FailureCount         int      `json:"failure_count"`
+	LastRunAt            string   `json:"last_run_at"`
+	LastIssue            string   `json:"last_issue"`
+	LatestInfoAt         string   `json:"latest_info_at"`
+	LatestEventAt        string   `json:"latest_event_at"`
+	InfoCount            int      `json:"info_count"`
+	ActiveEventCount     int      `json:"active_event_count"`
+	AverageContentLength int      `json:"average_content_length"`
+	IncompleteInfoCount  int      `json:"incomplete_info_count"`
+	TopFailureReasons    []string `json:"top_failure_reasons"`
 }
 
 type QualitySnapshot struct {

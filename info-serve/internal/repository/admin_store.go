@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"info-serve/internal/admin"
 )
@@ -113,18 +114,56 @@ func (s *MySQLStore) ListChannelHealth(ctx context.Context) ([]admin.ChannelHeal
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT ch.code, ch.name, c.name, COALESCE(t.status, 'inactive'),
-		       COUNT(log.id) AS recent_run_count,
-		       COALESCE(SUM(CASE WHEN log.status = 'success' THEN 1 ELSE 0 END), 0) AS success_count,
-		       COALESCE(SUM(CASE WHEN log.status IN ('failed', 'partial') THEN 1 ELSE 0 END), 0) AS failure_count,
-		       COALESCE(SUM(log.detail_success_count), 0) AS detail_success_count,
-		       COALESCE(SUM(log.detail_failed_count), 0) AS detail_failed_count,
-		       COALESCE(DATE_FORMAT(MAX(log.started_at), '%Y-%m-%d %H:%i:%s'), ''),
-		       COALESCE(SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN log.status <> 'success' THEN log.error_message END ORDER BY log.started_at DESC SEPARATOR '||'), '||', 1), '')
+		       COALESCE(log_stats.recent_run_count, 0),
+		       COALESCE(log_stats.success_count, 0),
+		       COALESCE(log_stats.failure_count, 0),
+		       COALESCE(log_stats.detail_success_count, 0),
+		       COALESCE(log_stats.detail_failed_count, 0),
+		       COALESCE(log_stats.last_run_at, ''),
+		       COALESCE(log_stats.last_issue, ''),
+		       COALESCE(info_stats.latest_info_at, ''),
+		       COALESCE(event_stats.latest_event_at, ''),
+		       COALESCE(info_stats.info_count, 0),
+		       COALESCE(event_stats.active_event_count, 0),
+		       COALESCE(info_stats.average_content_length, 0),
+		       COALESCE(info_stats.incomplete_info_count, 0),
+		       COALESCE(info_stats.top_failure_reasons, '')
 FROM channel AS ch
 JOIN category AS c ON c.id = ch.category_id
 LEFT JOIN crawl_task AS t ON t.channel_id = ch.id
-LEFT JOIN crawl_run_log AS log ON log.channel_code = ch.code
-GROUP BY ch.id, ch.code, ch.name, c.name, t.status
+LEFT JOIN (
+  SELECT channel_code,
+         COUNT(id) AS recent_run_count,
+         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
+         SUM(CASE WHEN status IN ('failed', 'partial') THEN 1 ELSE 0 END) AS failure_count,
+         SUM(detail_success_count) AS detail_success_count,
+         SUM(detail_failed_count) AS detail_failed_count,
+         DATE_FORMAT(MAX(started_at), '%Y-%m-%d %H:%i:%s') AS last_run_at,
+         SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN status <> 'success' THEN error_message END ORDER BY started_at DESC SEPARATOR '||'), '||', 1) AS last_issue
+  FROM crawl_run_log
+  GROUP BY channel_code
+) AS log_stats ON log_stats.channel_code = ch.code
+LEFT JOIN (
+  SELECT channel_id,
+         DATE_FORMAT(MAX(created_at), '%Y-%m-%d %H:%i:%s') AS latest_info_at,
+         COUNT(id) AS info_count,
+         ROUND(AVG(detail_content_length)) AS average_content_length,
+         COUNT(CASE WHEN detail_fetch_status <> 'complete' OR detail_score < 80 OR detail_content_length < 120 THEN 1 END) AS incomplete_info_count,
+         GROUP_CONCAT(NULLIF(detail_fetch_error, '') ORDER BY updated_at DESC SEPARATOR '||') AS top_failure_reasons
+  FROM info
+  WHERE is_deleted = 0
+  GROUP BY channel_id
+) AS info_stats ON info_stats.channel_id = ch.id
+LEFT JOIN (
+  SELECT i.channel_id,
+         DATE_FORMAT(MAX(e.last_updated_at), '%Y-%m-%d %H:%i:%s') AS latest_event_at,
+         COUNT(DISTINCT e.id) AS active_event_count
+  FROM event AS e
+  JOIN event_item_link AS link ON link.event_id = e.id
+  JOIN info AS i ON i.id = link.item_id
+  WHERE e.status = 'active' AND i.is_deleted = 0
+  GROUP BY i.channel_id
+) AS event_stats ON event_stats.channel_id = ch.id
 ORDER BY ch.id ASC`,
 	)
 	if err != nil {
@@ -138,6 +177,7 @@ ORDER BY ch.id ASC`,
 		var successCount int
 		var detailSuccessCount int
 		var detailFailedCount int
+		var rawFailureReasons string
 		if err := rows.Scan(
 			&item.ChannelCode,
 			&item.ChannelName,
@@ -150,6 +190,13 @@ ORDER BY ch.id ASC`,
 			&detailFailedCount,
 			&item.LastRunAt,
 			&item.LastIssue,
+			&item.LatestInfoAt,
+			&item.LatestEventAt,
+			&item.InfoCount,
+			&item.ActiveEventCount,
+			&item.AverageContentLength,
+			&item.IncompleteInfoCount,
+			&rawFailureReasons,
 		); err != nil {
 			return nil, err
 		}
@@ -157,9 +204,27 @@ ORDER BY ch.id ASC`,
 		item.DetailCompleteRate = percentage(detailSuccessCount, detailSuccessCount+detailFailedCount)
 		item.HealthScore = calculateHealthScore(item.SuccessRate, item.DetailCompleteRate, item.RecentRunCount, item.Status)
 		item.HealthLevel = healthLevel(item.HealthScore)
+		item.TopFailureReasons = splitFailureReasons(rawFailureReasons)
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func splitFailureReasons(raw string) []string {
+	reasons := []string{}
+	seen := map[string]bool{}
+	for _, part := range strings.Split(raw, "||") {
+		reason := strings.TrimSpace(part)
+		if reason == "" || seen[reason] {
+			continue
+		}
+		reasons = append(reasons, reason)
+		seen[reason] = true
+		if len(reasons) >= 3 {
+			break
+		}
+	}
+	return reasons
 }
 
 func percentage(part int, total int) int {

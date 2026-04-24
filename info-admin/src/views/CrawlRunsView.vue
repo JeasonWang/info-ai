@@ -52,6 +52,23 @@ function healthLabel(level: ChannelHealth['health_level']) {
     risk: '风险',
   }[level]
 }
+
+function freshnessText(item: ChannelHealth) {
+  const latestInfo = item.latest_info_at || '暂无资讯'
+  const latestEvent = item.latest_event_at || '暂无事件'
+  return `资讯 ${latestInfo} · 事件 ${latestEvent}`
+}
+
+function qualityText(item: ChannelHealth) {
+  return `内容均长 ${item.average_content_length || 0} · 低完整 ${item.incomplete_info_count || 0}/${item.info_count || 0}`
+}
+
+function issueText(item: ChannelHealth) {
+  if (item.top_failure_reasons?.length) {
+    return `失败原因：${item.top_failure_reasons.join('、')}`
+  }
+  return item.last_issue || `最近运行 ${item.last_run_at || '暂无记录'}`
+}
 </script>
 
 <template>
@@ -77,8 +94,10 @@ function healthLabel(level: ChannelHealth['health_level']) {
         <li v-for="item in healthItems" :key="item.channel_code">
           <strong>{{ item.channel_name }}</strong>
           <span>健康 {{ item.health_score }} · 成功率 {{ item.success_rate }}% · 详情完整 {{ item.detail_complete_rate }}%</span>
+          <span>{{ freshnessText(item) }}</span>
+          <span>{{ qualityText(item) }} · 活跃事件 {{ item.active_event_count || 0 }}</span>
           <StatusBadge :label="healthLabel(item.health_level)" :tone="healthTone(item.health_level)" />
-          <small>{{ item.last_issue || `最近运行 ${item.last_run_at || '暂无记录'}` }}</small>
+          <small>{{ issueText(item) }}</small>
         </li>
       </ul>
       <EmptyState v-else title="暂无渠道健康数据" description="采集任务运行后会自动计算成功率、完整率和风险状态。" />

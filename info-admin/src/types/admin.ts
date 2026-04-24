@@ -30,6 +30,13 @@ export interface ChannelHealth {
   failure_count: number
   last_run_at: string
   last_issue: string
+  latest_info_at: string
+  latest_event_at: string
+  info_count: number
+  active_event_count: number
+  average_content_length: number
+  incomplete_info_count: number
+  top_failure_reasons: string[]
 }
 
 export interface AdminOverview {
