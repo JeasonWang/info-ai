@@ -20,6 +20,11 @@ type favoriteRequest struct {
 	EventID int64 `json:"event_id"`
 }
 
+type readHistoryRequest struct {
+	EventID *int64 `json:"event_id"`
+	InfoID  *int64 `json:"info_id"`
+}
+
 func NewUserHandler(authService *auth.Service, userService *user.Service) *UserHandler {
 	return &UserHandler{authService: authService, userService: userService}
 }
@@ -100,6 +105,36 @@ func (h *UserHandler) SaveHomeFilterPreference(w http.ResponseWriter, r *http.Re
 		return
 	}
 	response.OK(w, preference)
+}
+
+func (h *UserHandler) ReadHistory(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.userService.ListReadHistory(r.Context(), currentUser.ID, 50)
+	if err != nil {
+		writeUserError(w, err, "阅读历史查询失败")
+		return
+	}
+	response.OK(w, items)
+}
+
+func (h *UserHandler) RecordReadHistory(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var req readHistoryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "请求体不是有效JSON")
+		return
+	}
+	if err := h.userService.RecordReadHistory(r.Context(), currentUser.ID, req.EventID, req.InfoID); err != nil {
+		writeUserError(w, err, "阅读历史记录失败")
+		return
+	}
+	response.OK(w, map[string]any{"recorded": true})
 }
 
 func (h *UserHandler) currentUser(w http.ResponseWriter, r *http.Request) (auth.PublicUser, bool) {

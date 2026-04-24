@@ -17,6 +17,8 @@ type Store interface {
 	RemoveFavoriteEvent(ctx context.Context, userID int64, eventID int64) error
 	GetPreference(ctx context.Context, userID int64, key string) (string, error)
 	SetPreference(ctx context.Context, userID int64, key string, value string) error
+	ListReadHistory(ctx context.Context, userID int64, limit int) ([]ReadHistoryItem, error)
+	RecordReadHistory(ctx context.Context, userID int64, eventID *int64, infoID *int64) error
 }
 
 type Service struct {
@@ -27,6 +29,18 @@ type HomeFilterPreference struct {
 	CategoryCode string `json:"category_code"`
 	Sort         string `json:"sort"`
 	Keyword      string `json:"keyword"`
+}
+
+type ReadHistoryItem struct {
+	ItemType      string `json:"item_type"`
+	EventID       *int64 `json:"event_id,omitempty"`
+	InfoID        *int64 `json:"info_id,omitempty"`
+	Title         string `json:"title"`
+	Subtitle      string `json:"subtitle"`
+	SourceLabel   string `json:"source_label"`
+	ReadAt        string `json:"read_at"`
+	TargetPath    string `json:"target_path"`
+	PrimaryRemark string `json:"primary_remark"`
 }
 
 func NewService(store Store) *Service {
@@ -111,4 +125,29 @@ func truncateRunes(value string, limit int) string {
 		return value
 	}
 	return string(runes[:limit])
+}
+
+func (s *Service) ListReadHistory(ctx context.Context, userID int64, limit int) ([]ReadHistoryItem, error) {
+	if userID < 1 {
+		return nil, ErrInvalidInput
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	return s.store.ListReadHistory(ctx, userID, limit)
+}
+
+func (s *Service) RecordReadHistory(ctx context.Context, userID int64, eventID *int64, infoID *int64) error {
+	if userID < 1 {
+		return ErrInvalidInput
+	}
+	hasEvent := eventID != nil && *eventID > 0
+	hasInfo := infoID != nil && *infoID > 0
+	if hasEvent == hasInfo {
+		return ErrInvalidInput
+	}
+	return s.store.RecordReadHistory(ctx, userID, eventID, infoID)
 }

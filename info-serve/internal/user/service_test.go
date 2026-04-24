@@ -92,3 +92,30 @@ func TestServiceTruncatesHomeFilterKeywordByCharacters(t *testing.T) {
 		t.Fatalf("keyword length = %d, want 100", len([]rune(saved.Keyword)))
 	}
 }
+
+func TestServiceRecordsAndListsReadHistory(t *testing.T) {
+	service := NewService(NewMemoryStore())
+	eventID := int64(9)
+	infoID := int64(7)
+
+	if err := service.RecordReadHistory(context.Background(), 7, &eventID, nil); err != nil {
+		t.Fatalf("RecordReadHistory(event) returned error: %v", err)
+	}
+	if err := service.RecordReadHistory(context.Background(), 7, nil, &infoID); err != nil {
+		t.Fatalf("RecordReadHistory(info) returned error: %v", err)
+	}
+
+	items, err := service.ListReadHistory(context.Background(), 7, 20)
+	if err != nil {
+		t.Fatalf("ListReadHistory returned error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("history size = %d, want 2", len(items))
+	}
+	if items[0].ItemType != "info" || items[0].InfoID == nil || *items[0].InfoID != 7 {
+		t.Fatalf("first history item = %+v", items[0])
+	}
+	if items[1].ItemType != "event" || items[1].EventID == nil || *items[1].EventID != 9 {
+		t.Fatalf("second history item = %+v", items[1])
+	}
+}

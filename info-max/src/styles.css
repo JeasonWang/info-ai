@@ -77,6 +77,7 @@ select {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .user-topbar__account a,
@@ -1006,6 +1007,41 @@ select {
 .error-banner {
   background: rgba(207, 75, 95, 0.08);
   color: #9d2235;
+}
+
+.history-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 12px 32px rgba(49, 67, 96, 0.08);
+}
+
+.history-card strong {
+  color: var(--text-main);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.history-card p {
+  margin: 0;
+  color: var(--text-subtle);
+  line-height: 1.65;
+}
+
+.history-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-subtle);
+  font-size: 0.84rem;
+}
+
+.history-card--placeholder {
+  min-height: 118px;
+  background: linear-gradient(90deg, rgba(23, 32, 51, 0.04), rgba(23, 32, 51, 0.08), rgba(23, 32, 51, 0.04));
 }
 
 .pagination {

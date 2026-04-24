@@ -175,3 +175,67 @@ func TestMySQLStorePersistsUserPreferences(t *testing.T) {
 		t.Fatalf("preference value = %q", value)
 	}
 }
+
+func TestMySQLStorePersistsReadHistory(t *testing.T) {
+	dsn := os.Getenv("INFO_SERVE_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("INFO_SERVE_TEST_MYSQL_DSN 未设置，跳过真实 MySQL 集成测试")
+	}
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open mysql: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	store := NewMySQLStore(db)
+	ctx := context.Background()
+	email := "integration-read-history-user@example.com"
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_read_history WHERE user_id IN (SELECT id FROM user_account WHERE email = ?)", email)
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_session WHERE user_id IN (SELECT id FROM user_account WHERE email = ?)", email)
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_account WHERE email = ?", email)
+
+	var eventID int64
+	if err := db.QueryRowContext(ctx, "SELECT id FROM event ORDER BY id LIMIT 1").Scan(&eventID); err != nil {
+		t.Skipf("当前 MySQL 没有 event 数据，跳过阅读历史集成测试: %v", err)
+	}
+
+	var infoID int64
+	if err := db.QueryRowContext(ctx, "SELECT id FROM info ORDER BY id LIMIT 1").Scan(&infoID); err != nil {
+		t.Skipf("当前 MySQL 没有 info 数据，跳过阅读历史集成测试: %v", err)
+	}
+
+	user, err := store.CreateUser(ctx, auth.CreateUserParams{
+		Email:        email,
+		PasswordHash: "hash-for-test",
+		Role:         "user",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, "DELETE FROM user_read_history WHERE user_id = ?", user.ID)
+		_, _ = db.ExecContext(ctx, "DELETE FROM user_account WHERE id = ?", user.ID)
+	})
+
+	if err := store.RecordReadHistory(ctx, user.ID, &eventID, nil); err != nil {
+		t.Fatalf("RecordReadHistory(event) returned error: %v", err)
+	}
+	if err := store.RecordReadHistory(ctx, user.ID, nil, &infoID); err != nil {
+		t.Fatalf("RecordReadHistory(info) returned error: %v", err)
+	}
+
+	items, err := store.ListReadHistory(ctx, user.ID, 20)
+	if err != nil {
+		t.Fatalf("ListReadHistory returned error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("history size = %d, want 2", len(items))
+	}
+	if items[0].ItemType != "info" || items[0].InfoID == nil || *items[0].InfoID != infoID {
+		t.Fatalf("first history item = %+v", items[0])
+	}
+	if items[1].ItemType != "event" || items[1].EventID == nil || *items[1].EventID != eventID {
+		t.Fatalf("second history item = %+v", items[1])
+	}
+}

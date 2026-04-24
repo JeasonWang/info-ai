@@ -165,6 +165,18 @@ export interface StatsData {
   }>
 }
 
+export interface ReadHistoryItem {
+  item_type: 'event' | 'info'
+  event_id?: number | null
+  info_id?: number | null
+  title: string
+  subtitle: string
+  source_label: string
+  read_at: string
+  target_path: string
+  primary_remark: string
+}
+
 export interface ListInfoParams {
   category_id?: number
   channel_id?: number

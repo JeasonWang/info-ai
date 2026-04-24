@@ -72,6 +72,8 @@ func registerAPIRoutes(
 	mux.HandleFunc("DELETE "+prefix+"/me/favorites/{event_id}", userHandler.RemoveFavoriteEvent)
 	mux.HandleFunc("GET "+prefix+"/me/preferences/home-filter", userHandler.HomeFilterPreference)
 	mux.HandleFunc("PUT "+prefix+"/me/preferences/home-filter", userHandler.SaveHomeFilterPreference)
+	mux.HandleFunc("GET "+prefix+"/me/read-history", userHandler.ReadHistory)
+	mux.HandleFunc("POST "+prefix+"/me/read-history", userHandler.RecordReadHistory)
 	mux.HandleFunc("GET "+prefix+"/admin/health", transportmiddleware.RequireAdminWithAudit(authService, auditService, AdminHealth))
 	mux.HandleFunc("GET "+prefix+"/admin/overview", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Overview))
 	mux.HandleFunc("GET "+prefix+"/admin/crawl-runs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlRuns))

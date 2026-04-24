@@ -10,6 +10,7 @@ import type {
   ListEventParams,
   ListInfoParams,
   LoginResult,
+  ReadHistoryItem,
   PublicUser,
   StatsData,
 } from '@/types'
@@ -238,4 +239,23 @@ export async function saveHomeFilterPreference(token: string, preference: HomeFi
     }),
   })
   return normalizeHomeFilterPreference(response.data)
+}
+
+export async function getReadHistory(token: string): Promise<ReadHistoryItem[]> {
+  const response = await requestInfoServe<ApiResponse<ReadHistoryItem[]>>('/me/read-history', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
+}
+
+export async function recordReadHistory(token: string, payload: { eventId?: number; infoId?: number }) {
+  const response = await requestInfoServe<ApiResponse<{ recorded: boolean }>>('/me/read-history', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      event_id: payload.eventId,
+      info_id: payload.infoId,
+    }),
+  })
+  return response.data
 }

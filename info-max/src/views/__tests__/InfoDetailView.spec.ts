@@ -238,6 +238,81 @@ describe('InfoDetailView', () => {
     expect(wrapper.text()).not.toContain('暂无')
   })
 
+  it('records info read history for signed-in users after loading detail', async () => {
+    localStorage.setItem('info-max-token', 'session-token')
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url.includes('/api/v1/me/read-history') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 0, message: 'success', data: { recorded: true } }))
+      }
+
+      if (url.includes('/api/v1/infos/7')) {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: {
+              id: 7,
+              title: '自动记录阅读历史的资讯',
+              content: '这里是正文。',
+              category_id: 1,
+              category_name: '热点事件',
+              channel_id: 1,
+              channel_name: '微博',
+              source_id: 'wb-7',
+              source_url: 'https://example.com/source',
+              event_time: '2026-04-20 10:00:00',
+              core_entity: '',
+              location: '',
+              indicator_name: '',
+              indicator_value: '',
+              detail_fetch_status: 'complete',
+              detail_fetch_error: '',
+              detail_strategy: 'topic_search',
+              detail_score: 88,
+              detail_content_length: 128,
+              detail_fetched_at: '2026-04-20 10:05:00',
+              tech_topic_type: '',
+              tech_entities: [],
+              tech_keywords: [],
+              created_at: '2026-04-20 10:05:00',
+              updated_at: '2026-04-20 10:05:00',
+            },
+          }),
+        )
+      }
+
+      return new Response('not found', { status: 404 })
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/info/:id', component: InfoDetailView }],
+    })
+
+    router.push('/info/7')
+    await router.isReady()
+
+    mount(InfoDetailView, {
+      global: { plugins: [router] },
+    })
+
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/me/read-history'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer session-token' }),
+        body: JSON.stringify({ info_id: 7 }),
+      }),
+    )
+  })
+
   it('deduplicates detail body and does not repeat raw content in the hero', async () => {
     const repeatedBody = [
       'OpenAI 发布新模型',

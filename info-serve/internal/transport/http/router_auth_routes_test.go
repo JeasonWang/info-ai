@@ -224,6 +224,77 @@ func TestUserHomeFilterPreferenceRoutesUseBearerSession(t *testing.T) {
 	}
 }
 
+func TestUserReadHistoryRoutesUseBearerSession(t *testing.T) {
+	r := transporthttp.NewRouter(transporthttp.Services{})
+	registerPayload := bytes.NewBufferString(`{"email":"history@example.com","password":"StrongerPass123"}`)
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", registerPayload)
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerRes := httptest.NewRecorder()
+	r.ServeHTTP(registerRes, registerReq)
+	if registerRes.Code != http.StatusCreated {
+		t.Fatalf("register status = %d", registerRes.Code)
+	}
+
+	loginPayload := bytes.NewBufferString(`{"email":"history@example.com","password":"StrongerPass123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", loginPayload)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRes := httptest.NewRecorder()
+	r.ServeHTTP(loginRes, loginReq)
+
+	var loginBody struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(loginRes.Body.Bytes(), &loginBody)
+
+	recordEventReq := httptest.NewRequest(http.MethodPost, "/api/v1/me/read-history", bytes.NewBufferString(`{"event_id":101}`))
+	recordEventReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	recordEventReq.Header.Set("Content-Type", "application/json")
+	recordEventRes := httptest.NewRecorder()
+	r.ServeHTTP(recordEventRes, recordEventReq)
+	if recordEventRes.Code != http.StatusOK {
+		t.Fatalf("record event history status = %d, body=%s", recordEventRes.Code, recordEventRes.Body.String())
+	}
+
+	recordInfoReq := httptest.NewRequest(http.MethodPost, "/api/v1/me/read-history", bytes.NewBufferString(`{"info_id":7}`))
+	recordInfoReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	recordInfoReq.Header.Set("Content-Type", "application/json")
+	recordInfoRes := httptest.NewRecorder()
+	r.ServeHTTP(recordInfoRes, recordInfoReq)
+	if recordInfoRes.Code != http.StatusOK {
+		t.Fatalf("record info history status = %d, body=%s", recordInfoRes.Code, recordInfoRes.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/me/read-history", nil)
+	listReq.Header.Set("Authorization", "Bearer "+loginBody.Data.Token)
+	listRes := httptest.NewRecorder()
+	r.ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK {
+		t.Fatalf("list read history status = %d, body=%s", listRes.Code, listRes.Body.String())
+	}
+
+	var listBody struct {
+		Data []struct {
+			ItemType string `json:"item_type"`
+			EventID  *int64 `json:"event_id"`
+			InfoID   *int64 `json:"info_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRes.Body.Bytes(), &listBody); err != nil {
+		t.Fatalf("invalid history json: %v", err)
+	}
+	if len(listBody.Data) != 2 {
+		t.Fatalf("history size = %d, want 2", len(listBody.Data))
+	}
+	if listBody.Data[0].ItemType != "info" || listBody.Data[0].InfoID == nil || *listBody.Data[0].InfoID != 7 {
+		t.Fatalf("first history item = %+v", listBody.Data[0])
+	}
+	if listBody.Data[1].ItemType != "event" || listBody.Data[1].EventID == nil || *listBody.Data[1].EventID != 101 {
+		t.Fatalf("second history item = %+v", listBody.Data[1])
+	}
+}
+
 func TestAdminHealthRequiresAdminRole(t *testing.T) {
 	r := transporthttp.NewRouter(transporthttp.Services{})
 	registerPayload := bytes.NewBufferString(`{"email":"user@example.com","password":"StrongerPass123"}`)

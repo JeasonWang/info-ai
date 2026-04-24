@@ -9,9 +9,11 @@ import {
   getInfos,
   getCurrentUser,
   getHomeFilterPreference,
+  getReadHistory,
   getFavoriteEventIds,
   loginUser,
   logoutUser,
+  recordReadHistory,
   registerUser,
   addFavoriteEvent,
   removeFavoriteEvent,
@@ -148,6 +150,14 @@ describe('api service routing', () => {
       if (url.includes('/me/preferences/home-filter')) {
         return jsonResponse({ category_code: 'sports', sort: 'latest', keyword: 'NBA' })
       }
+      if (url.includes('/me/read-history') && init?.method === 'POST') {
+        return jsonResponse({ recorded: true })
+      }
+      if (url.includes('/me/read-history')) {
+        return jsonResponse([
+          { item_type: 'event', event_id: 101, title: '最近阅读事件', subtitle: '科技', source_label: '微博', read_at: '2026-04-24 09:00:00', target_path: '/events/101', primary_remark: '摘要' },
+        ])
+      }
       return jsonResponse({ id: 1, email: 'user@example.com', role: 'user', status: 'active' })
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -160,6 +170,8 @@ describe('api service routing', () => {
     await removeFavoriteEvent('token', 101)
     await getHomeFilterPreference('token')
     await saveHomeFilterPreference('token', { categoryCode: 'sports', sortMode: 'latest', keyword: 'NBA' })
+    await getReadHistory('token')
+    await recordReadHistory('token', { eventId: 101 })
     await logoutUser('token')
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -196,6 +208,14 @@ describe('api service routing', () => {
         method: 'PUT',
         body: JSON.stringify({ category_code: 'sports', sort: 'latest', keyword: 'NBA' }),
       }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/read-history',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/me/read-history',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ event_id: 101 }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/auth/logout',

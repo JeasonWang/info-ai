@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import EventTimeline from '@/components/EventTimeline.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useEventFavorites } from '@/composables/useEventFavorites'
-import { getEventById } from '@/services/api'
+import { getEventById, recordReadHistory } from '@/services/api'
+import { getUserToken } from '@/services/userSession'
 import type { EventDetail, EventTimelineItem } from '@/types'
 import { formatDateTime } from '@/utils'
 
@@ -109,6 +110,10 @@ async function loadDetail() {
 
   try {
     detail.value = await getEventById(eventId.value)
+    const token = getUserToken()
+    if (token) {
+      await recordReadHistory(token, { eventId: eventId.value }).catch(() => undefined)
+    }
     try {
       await syncFavoritesFromServer()
     } catch {

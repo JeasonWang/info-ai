@@ -418,6 +418,73 @@ describe('EventDetailView', () => {
     expect(localStorage.getItem('info-max:favorites')).toBeNull()
   })
 
+  it('records event read history for signed-in users after loading detail', async () => {
+    localStorage.setItem('info-max-token', 'session-token')
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url.includes('/api/v1/me/read-history') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 0, message: 'success', data: { recorded: true } }))
+      }
+      if (url.includes('/api/v1/me/favorites')) {
+        return new Response(JSON.stringify({ code: 0, message: 'success', data: { event_ids: [] } }))
+      }
+      if (url.includes('/api/v1/events/9')) {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: {
+              event: {
+                id: 9,
+                title: '自动记录阅读历史的事件',
+                one_line_summary: '一句话摘要。',
+                primary_category: { code: 'tech', name: '科技' },
+                heat_score: 80,
+                last_updated_at: '2026-04-19 12:00:00',
+              },
+              timeline: [],
+              summaries: {
+                what_happened: '这是发生了什么的摘要。',
+                why_it_matters: '这件事为什么重要。',
+                latest_update: '最新进展已经出现。',
+              },
+              source_views: [],
+              representative_sources: [],
+              tech_context: { topics: [], entities: [], keywords: [] },
+            },
+          }),
+        )
+      }
+      return new Response('not found', { status: 404 })
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/events/:id', component: EventDetailView }],
+    })
+    router.push('/events/9')
+    await router.isReady()
+
+    mount(EventDetailView, {
+      global: { plugins: [router] },
+    })
+
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/me/read-history'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer session-token' }),
+        body: JSON.stringify({ event_id: 9 }),
+      }),
+    )
+  })
+
   it('keeps event detail visible when favorite sync fails', async () => {
     localStorage.setItem('info-max-token', 'expired-token')
 

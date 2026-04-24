@@ -10,12 +10,14 @@ type MemoryStore struct {
 	mu        sync.Mutex
 	favorites map[int64]map[int64]bool
 	prefs     map[int64]map[string]string
+	history   map[int64][]ReadHistoryItem
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		favorites: map[int64]map[int64]bool{},
 		prefs:     map[int64]map[string]string{},
+		history:   map[int64][]ReadHistoryItem{},
 	}
 }
 
@@ -66,5 +68,52 @@ func (s *MemoryStore) SetPreference(ctx context.Context, userID int64, key strin
 		s.prefs[userID] = map[string]string{}
 	}
 	s.prefs[userID][key] = value
+	return nil
+}
+
+func (s *MemoryStore) ListReadHistory(ctx context.Context, userID int64, limit int) ([]ReadHistoryItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items := s.history[userID]
+	if len(items) <= limit {
+		result := make([]ReadHistoryItem, len(items))
+		copy(result, items)
+		return result, nil
+	}
+	result := make([]ReadHistoryItem, limit)
+	copy(result, items[:limit])
+	return result, nil
+}
+
+func (s *MemoryStore) RecordReadHistory(ctx context.Context, userID int64, eventID *int64, infoID *int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	items := s.history[userID]
+	filtered := items[:0]
+	for _, item := range items {
+		if eventID != nil && item.EventID != nil && *item.EventID == *eventID {
+			continue
+		}
+		if infoID != nil && item.InfoID != nil && *item.InfoID == *infoID {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+
+	entry := ReadHistoryItem{ReadAt: "2026-04-24 00:00:00"}
+	if eventID != nil {
+		entry.ItemType = "event"
+		entry.EventID = eventID
+		entry.Title = "事件"
+		entry.TargetPath = "/events/1"
+	} else {
+		entry.ItemType = "info"
+		entry.InfoID = infoID
+		entry.Title = "资讯"
+		entry.TargetPath = "/info/1"
+	}
+
+	s.history[userID] = append([]ReadHistoryItem{entry}, filtered...)
 	return nil
 }

@@ -23,6 +23,11 @@ export const routes: RouteRecordRaw[] = [
     name: 'login',
     component: () => import('./views/LoginView.vue'),
   },
+  {
+    path: '/history',
+    name: 'history',
+    component: () => import('./views/ReadHistoryView.vue'),
+  },
 ]
 
 export const appScrollBehavior: RouterScrollBehavior = (
