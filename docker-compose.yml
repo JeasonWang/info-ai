@@ -58,6 +58,8 @@ services:
       INFO_SERVE_MYSQL_DSN: ${INFO_SERVE_MYSQL_DSN:-root:root1234@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local}
       INFO_SERVE_SESSION_SECRET: ${INFO_SERVE_SESSION_SECRET:-change-me-in-production}
       INFO_AGGREGATION_BASE_URL: http://info-aggregation:8000
+      INFO_ADMIN_EMAIL: ${INFO_ADMIN_EMAIL:-admin@info-daren.local}
+      INFO_ADMIN_PASSWORD: ${INFO_ADMIN_PASSWORD:-Admin123456}
     depends_on:
       mysql:
         condition: service_healthy

@@ -55,6 +55,8 @@ LOG_LEVEL=INFO
 # info-serve 配置
 INFO_SERVE_MYSQL_DSN=root:root1234@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
 INFO_SERVE_SESSION_SECRET=${session_secret}
+INFO_ADMIN_EMAIL=admin@info-daren.local
+INFO_ADMIN_PASSWORD=Admin123456
 
 # 浏览器访问 info-serve 的公开地址。
 # 本机部署可用 http://127.0.0.1:8080，服务器部署请改成真实域名或公网 IP。
@@ -101,8 +103,25 @@ deploy_services() {
     ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d --remove-orphans --no-build
 }
 
+bootstrap_admin() {
+    echo "[5/6] 初始化管理员账号..."
+    local retries=12
+    local attempt=1
+    while [ "${attempt}" -le "${retries}" ]; do
+        if ${COMPOSE_CMD} -f "${COMPOSE_FILE}" exec -T info-serve sh -c './create-admin -email "$INFO_ADMIN_EMAIL" -password "$INFO_ADMIN_PASSWORD"'; then
+            return
+        fi
+        echo "  等待 info-serve 可用后重试管理员初始化 (${attempt}/${retries})..."
+        attempt=$((attempt + 1))
+        sleep 3
+    done
+
+    echo "错误: 管理员账号初始化失败，请查看日志: ${COMPOSE_CMD} -f ${COMPOSE_FILE} logs info-serve"
+    exit 1
+}
+
 check_services() {
-    echo "[5/5] 检查服务状态..."
+    echo "[6/6] 检查服务状态..."
     sleep 8
 
     local failed=0
@@ -129,6 +148,7 @@ check_services() {
 check_runtime
 prepare_env
 deploy_services
+bootstrap_admin
 check_services
 
 echo ""
