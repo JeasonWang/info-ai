@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS `info_acquisition_log` (
 
 CREATE TABLE IF NOT EXISTS `event` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件ID',
+  `event_key` VARCHAR(120) NULL COMMENT '事件稳定键：用于重建时识别同一热点事件',
   `title` VARCHAR(200) NOT NULL COMMENT '事件标题',
   `one_line_summary` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '一句话看懂，要求避免与标题重复',
   `primary_category_id` BIGINT UNSIGNED NOT NULL COMMENT '主分类ID',
@@ -107,6 +108,7 @@ CREATE TABLE IF NOT EXISTS `event` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_event_key` (`event_key`),
   KEY `idx_event_category_score` (`primary_category_id`, `composite_score`, `last_updated_at`),
   KEY `idx_event_status_updated` (`status`, `last_updated_at`),
   CONSTRAINT `fk_event_category` FOREIGN KEY (`primary_category_id`) REFERENCES `category` (`id`)

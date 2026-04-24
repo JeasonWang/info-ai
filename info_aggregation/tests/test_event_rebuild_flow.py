@@ -47,7 +47,7 @@ def test_admin_rebuild_events_refreshes_event_tables(session):
     assert session.query(Event).count() == 1
 
 
-def test_admin_rebuild_events_clears_user_event_dependencies(session):
+def test_admin_rebuild_events_keeps_stable_event_identity_for_user_dependencies(session):
     category = Category(name="科技", code="tech", description="科技事件")
     session.add(category)
     session.flush()
@@ -81,6 +81,7 @@ def test_admin_rebuild_events_clears_user_event_dependencies(session):
     response = client.post("/api/admin/rebuild-events")
     assert response.status_code == 200
     event_id = session.query(Event.id).scalar()
+    event_key = session.query(Event.event_key).scalar()
 
     session.execute(text("CREATE TABLE user_account (id INTEGER PRIMARY KEY, email TEXT)"))
     session.execute(
@@ -109,8 +110,10 @@ def test_admin_rebuild_events_clears_user_event_dependencies(session):
     response = client.post("/api/admin/rebuild-events")
 
     assert response.status_code == 200
-    assert session.execute(text("SELECT COUNT(*) FROM user_favorite_event")).scalar() == 0
-    assert session.execute(text("SELECT COUNT(*) FROM user_read_history")).scalar() == 0
+    rebuilt_event = session.query(Event).filter(Event.event_key == event_key).one()
+    assert rebuilt_event.id == event_id
+    assert session.execute(text("SELECT event_id FROM user_favorite_event")).scalar() == event_id
+    assert session.execute(text("SELECT event_id FROM user_read_history")).scalar() == event_id
 
 
 def test_admin_refresh_quality_recomputes_semantics_and_rebuilds_events(session):

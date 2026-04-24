@@ -190,6 +190,7 @@ class Event(Base):
     __tablename__ = "event"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="事件ID")
+    event_key = Column(String(120), nullable=True, comment="事件稳定键：用于重建时识别同一热点事件")
     title = Column(String(200), nullable=False, comment="事件标题")
     one_line_summary = Column(String(255), default="", comment="一句话看懂")
     primary_category_id = Column(Integer, ForeignKey("category.id"), nullable=False, comment="主分类ID")
@@ -206,6 +207,7 @@ class Event(Base):
     category = relationship("Category", lazy="joined")
 
     __table_args__ = (
+        UniqueConstraint("event_key", name="uk_event_key"),
         Index("idx_event_category_score", "primary_category_id", "composite_score", "last_updated_at"),
         Index("idx_event_status_updated", "status", "last_updated_at"),
     )
