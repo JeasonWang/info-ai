@@ -1,17 +1,32 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import MetricCard from '@/components/MetricCard.vue'
 import DataPanel from '@/components/DataPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { getAdminOverview } from '@/services/adminApi'
-import type { AdminOverview } from '@/types/admin'
+import { getAdminOverview, getChannelHealth } from '@/services/adminApi'
+import type { AdminOverview, ChannelHealth } from '@/types/admin'
 
 const overview = ref<AdminOverview | null>(null)
+const channelHealth = ref<ChannelHealth[]>([])
 const errorMessage = ref('')
+
+const staleChannels = computed(() => {
+  const now = Date.now()
+  return channelHealth.value
+    .filter((item) => {
+      if (!item.latest_info_at) return true
+      const timestamp = new Date(item.latest_info_at.replace(' ', 'T')).getTime()
+      if (Number.isNaN(timestamp)) return true
+      return now - timestamp > 1000 * 60 * 60 * 6
+    })
+    .sort((a, b) => a.health_score - b.health_score)
+})
 
 onMounted(async () => {
   try {
-    overview.value = await getAdminOverview()
+    const [overviewData, healthData] = await Promise.all([getAdminOverview(), getChannelHealth()])
+    overview.value = overviewData
+    channelHealth.value = healthData
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '管理总览加载失败'
   }
@@ -35,6 +50,7 @@ onMounted(async () => {
       <MetricCard label="采集渠道" :value="overview?.channel_count ?? '--'" hint="来自 Pro MySQL 数据库" />
       <MetricCard label="热点事件" :value="overview?.event_count ?? '--'" hint="当前可展示事件" />
       <MetricCard label="原始内容" :value="overview?.info_count ?? '--'" hint="进入 Pro 数据底座" />
+      <MetricCard label="新鲜度风险" :value="staleChannels.length || '--'" hint="6 小时未入库内容的渠道" />
     </section>
 
     <section class="panel-grid">
@@ -56,6 +72,17 @@ onMounted(async () => {
           </li>
         </ul>
         <EmptyState v-else title="暂无运行日志" description="采集任务写入后会展示最近运行状态。" />
+      </DataPanel>
+
+      <DataPanel title="新鲜度风险" :status="staleChannels.length ? `${staleChannels.length} 个渠道` : '健康'">
+        <ul v-if="staleChannels.length" class="data-list">
+          <li v-for="item in staleChannels.slice(0, 6)" :key="item.channel_code">
+            <strong>{{ item.channel_name }} · {{ item.health_level }}</strong>
+            <span>最新内容 {{ item.latest_info_at || '暂无' }} / 健康分 {{ item.health_score }}</span>
+            <small>{{ item.last_issue || '等待下一轮采集验证' }}</small>
+          </li>
+        </ul>
+        <EmptyState v-else title="渠道新鲜度健康" description="核心渠道最近 6 小时内均有内容更新。" />
       </DataPanel>
     </section>
   </section>

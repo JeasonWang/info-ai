@@ -11,6 +11,8 @@ import type {
   ChannelPayload,
   CrawlRunSummary,
   CrawlTask,
+  DetailJobDetail,
+  DetailJobReport,
   LowQualityInfo,
   QualitySnapshot,
 } from '@/types/admin'
@@ -33,6 +35,29 @@ export function getQualitySnapshots(limit = 20) {
 
 export function getLowQualityInfos(limit = 20) {
   return apiRequest<LowQualityInfo[]>(apiV1(`/admin/low-quality-infos?limit=${limit}`))
+}
+
+interface DetailJobQuery {
+  limit?: number
+  channelCode?: string
+  failureReason?: string
+}
+
+function detailJobQuery(params: DetailJobQuery = {}) {
+  const query = new URLSearchParams()
+  query.set('limit', String(params.limit ?? 10))
+  if (params.channelCode) query.set('channel_code', params.channelCode)
+  if (params.failureReason) query.set('failure_reason', params.failureReason)
+  return query.toString()
+}
+
+export function getDetailJobReport(params: DetailJobQuery | number = {}) {
+  const query = typeof params === 'number' ? detailJobQuery({ limit: params }) : detailJobQuery(params)
+  return apiRequest<DetailJobReport>(apiV1(`/admin/detail-jobs?${query}`))
+}
+
+export function getDetailJob(id: number) {
+  return apiRequest<DetailJobDetail>(apiV1(`/admin/detail-jobs/${id}`))
 }
 
 export function getCrawlTasks() {
@@ -99,6 +124,30 @@ export function refreshQuality() {
 
 export function retryLowQualityDetails(limit = 20) {
   return apiRequest<AdminActionResult>(apiV1(`/admin/retry-low-quality-details?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
+export function retryDetailJob(id: number) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/detail-jobs/${id}/retry`), {
+    method: 'POST',
+  })
+}
+
+export function batchRetryDetailJobs(params: DetailJobQuery = {}) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/detail-jobs/retry?${detailJobQuery(params)}`), {
+    method: 'POST',
+  })
+}
+
+export function batchCancelDetailJobs(params: DetailJobQuery = {}) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/detail-jobs/cancel?${detailJobQuery(params)}`), {
+    method: 'POST',
+  })
+}
+
+export function cancelDetailJob(id: number) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/detail-jobs/${id}/cancel`), {
     method: 'POST',
   })
 }

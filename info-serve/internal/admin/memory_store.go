@@ -32,6 +32,33 @@ func (s *MemoryStore) ListLowQualityInfos(ctx context.Context, limit int) ([]Low
 	return []LowQualityInfo{}, nil
 }
 
+func (s *MemoryStore) GetDetailJobReport(ctx context.Context, filter DetailJobFilter) (DetailJobReport, error) {
+	return DetailJobReport{
+		StatusCounts:  map[string]int{},
+		ChannelCounts: map[string]int{},
+	}, nil
+}
+
+func (s *MemoryStore) GetDetailJob(ctx context.Context, id int64) (DetailJobDetail, error) {
+	return DetailJobDetail{ID: id, Title: "本地测试详情补偿任务", Status: "pending"}, nil
+}
+
+func (s *MemoryStore) RetryDetailJob(ctx context.Context, id int64) (ActionResult, error) {
+	return ActionResult{Action: "retry_detail_job", Message: "本地测试模式已模拟重新入队详情补偿任务", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s *MemoryStore) CancelDetailJob(ctx context.Context, id int64) (ActionResult, error) {
+	return ActionResult{Action: "cancel_detail_job", Message: "本地测试模式已模拟取消详情补偿任务", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s *MemoryStore) BatchRetryDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error) {
+	return ActionResult{Action: "batch_retry_detail_jobs", Message: "本地测试模式已模拟批量重新入队详情补偿任务", Data: map[string]any{"matched_count": 0}}, nil
+}
+
+func (s *MemoryStore) BatchCancelDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error) {
+	return ActionResult{Action: "batch_cancel_detail_jobs", Message: "本地测试模式已模拟批量取消详情补偿任务", Data: map[string]any{"matched_count": 0}}, nil
+}
+
 func (s *MemoryStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
 	return []CrawlTask{}, nil
 }

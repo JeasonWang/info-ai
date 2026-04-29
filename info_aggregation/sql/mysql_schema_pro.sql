@@ -27,6 +27,13 @@ CREATE TABLE IF NOT EXISTS `channel` (
   `base_url` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '渠道基础URL',
   `category_id` BIGINT UNSIGNED NOT NULL COMMENT '关联分类ID',
   `crawl_interval` INT NOT NULL DEFAULT 60 COMMENT '采集间隔，单位分钟',
+  `base_interval_minutes` INT NOT NULL DEFAULT 60 COMMENT '基础采集间隔，单位分钟，由管理后台配置',
+  `hot_interval_minutes` INT NOT NULL DEFAULT 10 COMMENT '热点加速采集间隔，单位分钟',
+  `min_interval_minutes` INT NOT NULL DEFAULT 3 COMMENT '允许的最小采集间隔，单位分钟',
+  `max_interval_minutes` INT NOT NULL DEFAULT 240 COMMENT '失败退避后的最大采集间隔，单位分钟',
+  `manual_interval_enabled` TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用人工配置间隔：1启用，0禁用',
+  `effective_interval_minutes` INT NOT NULL DEFAULT 60 COMMENT '当前实际生效采集间隔，单位分钟',
+  `schedule_version` INT NOT NULL DEFAULT 1 COMMENT '调度配置版本，用于调度器热更新',
   `is_active` TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1启用，0停用',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -91,6 +98,26 @@ CREATE TABLE IF NOT EXISTS `info_acquisition_log` (
   KEY `idx_info_acquisition_channel_strategy` (`channel_code`, `strategy`),
   CONSTRAINT `fk_info_acquisition_info` FOREIGN KEY (`info_id`) REFERENCES `info` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='详情采集日志表：记录单条内容的详情抓取过程';
+
+CREATE TABLE IF NOT EXISTS `detail_job` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '详情补偿任务ID',
+  `info_id` BIGINT UNSIGNED NOT NULL COMMENT '信息ID',
+  `channel_code` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '渠道编码',
+  `status` VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT '任务状态：pending/running/succeeded/failed/cancelled',
+  `priority` INT NOT NULL DEFAULT 50 COMMENT '任务优先级，数值越大越优先',
+  `attempt_count` INT NOT NULL DEFAULT 0 COMMENT '已尝试次数',
+  `max_attempts` INT NOT NULL DEFAULT 3 COMMENT '最大尝试次数',
+  `next_run_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下次可执行时间',
+  `last_failure_reason` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '最近失败原因',
+  `strategy_hint` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '建议使用的详情策略',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_detail_job_info_status` (`info_id`, `status`),
+  KEY `idx_detail_job_status_priority` (`status`, `priority`, `next_run_at`),
+  KEY `idx_detail_job_channel_status` (`channel_code`, `status`),
+  CONSTRAINT `fk_detail_job_info` FOREIGN KEY (`info_id`) REFERENCES `info` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='详情补偿任务表：保存低分、失败或列表态内容的二次抓取任务';
 
 CREATE TABLE IF NOT EXISTS `event` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件ID',
@@ -258,6 +285,7 @@ CREATE TABLE IF NOT EXISTS `crawl_task` (
   `task_name` VARCHAR(100) NOT NULL COMMENT '任务名称',
   `schedule_type` VARCHAR(20) NOT NULL DEFAULT 'interval' COMMENT '调度类型：interval/manual/cron',
   `schedule_value` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '调度配置值',
+  `schedule_version` INT NOT NULL DEFAULT 0 COMMENT '已同步的调度配置版本',
   `status` VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '任务状态：active/paused/disabled',
   `last_run_at` DATETIME NULL COMMENT '最近运行时间',
   `next_run_at` DATETIME NULL COMMENT '下次计划运行时间',

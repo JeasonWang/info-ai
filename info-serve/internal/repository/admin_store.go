@@ -345,6 +345,327 @@ LIMIT ?`,
 	return items, rows.Err()
 }
 
+func (s *MySQLStore) GetDetailJobReport(ctx context.Context, filter admin.DetailJobFilter) (admin.DetailJobReport, error) {
+	report := admin.DetailJobReport{
+		StatusCounts:  map[string]int{},
+		ChannelCounts: map[string]int{},
+	}
+	whereClause, args := detailJobWhereClause(filter, "WHERE")
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM detail_job `+whereClause, args...).Scan(&report.Total); err != nil {
+		return admin.DetailJobReport{}, err
+	}
+	statusCounts, err := s.countByString(ctx, `SELECT status, COUNT(*) FROM detail_job `+whereClause+` GROUP BY status`, args...)
+	if err != nil {
+		return admin.DetailJobReport{}, err
+	}
+	report.StatusCounts = statusCounts
+	channelWhereClause, channelArgs := detailJobWhereClause(filter, "WHERE")
+	if channelWhereClause == "" {
+		channelWhereClause = "WHERE channel_code <> ''"
+	} else {
+		channelWhereClause += " AND channel_code <> ''"
+	}
+	channelCounts, err := s.countByString(ctx, `SELECT channel_code, COUNT(*) FROM detail_job `+channelWhereClause+` GROUP BY channel_code`, channelArgs...)
+	if err != nil {
+		return admin.DetailJobReport{}, err
+	}
+	report.ChannelCounts = channelCounts
+	reasons, err := s.listDetailJobFailureReasons(ctx, filter)
+	if err != nil {
+		return admin.DetailJobReport{}, err
+	}
+	report.TopFailureReasons = reasons
+	pendingSamples, err := s.listDetailJobSamples(ctx, "pending", filter)
+	if err != nil {
+		return admin.DetailJobReport{}, err
+	}
+	report.PendingSamples = pendingSamples
+	failedSamples, err := s.listDetailJobSamples(ctx, "failed", filter)
+	if err != nil {
+		return admin.DetailJobReport{}, err
+	}
+	report.FailedSamples = failedSamples
+	return report, nil
+}
+
+func (s *MySQLStore) BatchRetryDetailJobs(ctx context.Context, filter admin.DetailJobFilter) (admin.ActionResult, error) {
+	whereClause, args := detailJobWhereClause(filter, "WHERE")
+	if whereClause == "" {
+		return admin.ActionResult{}, admin.ErrInvalidInput
+	}
+	args = append(args, filter.SampleLimit)
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE detail_job
+SET status = 'pending',
+    next_run_at = NOW(),
+    last_failure_reason = '',
+    updated_at = NOW()
+`+whereClause+` AND status IN ('pending', 'running', 'failed')
+ORDER BY priority DESC, updated_at DESC, id DESC
+LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return admin.ActionResult{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return admin.ActionResult{}, err
+	}
+	return admin.ActionResult{
+		Action:  "batch_retry_detail_jobs",
+		Message: "已批量重新入队详情补偿任务",
+		Data: map[string]any{
+			"matched_count":  changed,
+			"channel_code":   filter.ChannelCode,
+			"failure_reason": filter.FailureReason,
+		},
+	}, nil
+}
+
+func (s *MySQLStore) BatchCancelDetailJobs(ctx context.Context, filter admin.DetailJobFilter) (admin.ActionResult, error) {
+	whereClause, args := detailJobWhereClause(filter, "WHERE")
+	if whereClause == "" {
+		return admin.ActionResult{}, admin.ErrInvalidInput
+	}
+	args = append(args, filter.SampleLimit)
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE detail_job
+SET status = 'cancelled',
+    updated_at = NOW()
+`+whereClause+` AND status IN ('pending', 'running', 'failed')
+ORDER BY priority DESC, updated_at DESC, id DESC
+LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return admin.ActionResult{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return admin.ActionResult{}, err
+	}
+	return admin.ActionResult{
+		Action:  "batch_cancel_detail_jobs",
+		Message: "已批量取消详情补偿任务",
+		Data: map[string]any{
+			"matched_count":  changed,
+			"channel_code":   filter.ChannelCode,
+			"failure_reason": filter.FailureReason,
+		},
+	}, nil
+}
+
+func (s *MySQLStore) GetDetailJob(ctx context.Context, id int64) (admin.DetailJobDetail, error) {
+	var item admin.DetailJobDetail
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT job.id, job.info_id, i.title, i.source_url, i.content,
+       job.channel_code, job.status, job.priority, job.attempt_count, job.max_attempts,
+       job.last_failure_reason, COALESCE(DATE_FORMAT(job.next_run_at, '%Y-%m-%d %H:%i:%s'), ''),
+       i.detail_score, i.detail_fetch_status, i.detail_strategy,
+       COALESCE(DATE_FORMAT(job.created_at, '%Y-%m-%d %H:%i:%s'), ''),
+       COALESCE(DATE_FORMAT(job.updated_at, '%Y-%m-%d %H:%i:%s'), '')
+FROM detail_job AS job
+JOIN info AS i ON i.id = job.info_id
+WHERE job.id = ?`,
+		id,
+	).Scan(
+		&item.ID,
+		&item.InfoID,
+		&item.Title,
+		&item.SourceURL,
+		&item.Content,
+		&item.ChannelCode,
+		&item.Status,
+		&item.Priority,
+		&item.AttemptCount,
+		&item.MaxAttempts,
+		&item.LastFailureReason,
+		&item.NextRunAt,
+		&item.DetailScore,
+		&item.DetailFetchStatus,
+		&item.DetailStrategy,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.DetailJobDetail{}, admin.ErrNotFound
+	}
+	if err != nil {
+		return admin.DetailJobDetail{}, err
+	}
+	return item, nil
+}
+
+func (s *MySQLStore) RetryDetailJob(ctx context.Context, id int64) (admin.ActionResult, error) {
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE detail_job
+SET status = 'pending',
+    next_run_at = NOW(),
+    last_failure_reason = '',
+    updated_at = NOW()
+WHERE id = ? AND status IN ('pending', 'running', 'failed')`,
+		id,
+	)
+	if err != nil {
+		return admin.ActionResult{}, err
+	}
+	if changed, err := result.RowsAffected(); err != nil {
+		return admin.ActionResult{}, err
+	} else if changed == 0 {
+		return admin.ActionResult{}, admin.ErrNotFound
+	}
+	return admin.ActionResult{
+		Action:  "retry_detail_job",
+		Message: "已重新入队详情补偿任务",
+		Data:    map[string]any{"detail_job_id": id},
+	}, nil
+}
+
+func (s *MySQLStore) CancelDetailJob(ctx context.Context, id int64) (admin.ActionResult, error) {
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE detail_job
+SET status = 'cancelled',
+    updated_at = NOW()
+WHERE id = ? AND status IN ('pending', 'running', 'failed')`,
+		id,
+	)
+	if err != nil {
+		return admin.ActionResult{}, err
+	}
+	if changed, err := result.RowsAffected(); err != nil {
+		return admin.ActionResult{}, err
+	} else if changed == 0 {
+		return admin.ActionResult{}, admin.ErrNotFound
+	}
+	return admin.ActionResult{
+		Action:  "cancel_detail_job",
+		Message: "已取消详情补偿任务",
+		Data:    map[string]any{"detail_job_id": id},
+	}, nil
+}
+
+func (s *MySQLStore) countByString(ctx context.Context, query string, args ...any) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[string]int{}
+	for rows.Next() {
+		var key string
+		var count int
+		if err := rows.Scan(&key, &count); err != nil {
+			return nil, err
+		}
+		result[key] = count
+	}
+	return result, rows.Err()
+}
+
+func (s *MySQLStore) listDetailJobFailureReasons(ctx context.Context, filter admin.DetailJobFilter) ([]admin.DetailJobFailureReason, error) {
+	whereClause, args := detailJobWhereClause(filter, "WHERE")
+	if whereClause == "" {
+		whereClause = "WHERE last_failure_reason <> ''"
+	} else {
+		whereClause += " AND last_failure_reason <> ''"
+	}
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT last_failure_reason, COUNT(*)
+FROM detail_job
+`+whereClause+`
+GROUP BY last_failure_reason
+ORDER BY COUNT(*) DESC, last_failure_reason ASC
+LIMIT 10`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []admin.DetailJobFailureReason{}
+	for rows.Next() {
+		var item admin.DetailJobFailureReason
+		if err := rows.Scan(&item.Reason, &item.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQLStore) listDetailJobSamples(ctx context.Context, status string, filter admin.DetailJobFilter) ([]admin.DetailJobSample, error) {
+	whereClause, args := detailJobWhereClause(filter, "WHERE")
+	if whereClause == "" {
+		whereClause = "WHERE job.status = ?"
+	} else {
+		whereClause += " AND job.status = ?"
+	}
+	args = append(args, status, filter.SampleLimit)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT job.id, job.info_id, i.title, job.channel_code, job.status,
+       job.priority, job.attempt_count, job.max_attempts, job.last_failure_reason,
+       COALESCE(DATE_FORMAT(job.next_run_at, '%Y-%m-%d %H:%i:%s'), ''),
+       i.detail_score, i.detail_fetch_status
+FROM detail_job AS job
+JOIN info AS i ON i.id = job.info_id
+`+whereClause+`
+ORDER BY job.priority DESC, job.next_run_at ASC, job.id ASC
+LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []admin.DetailJobSample{}
+	for rows.Next() {
+		var item admin.DetailJobSample
+		if err := rows.Scan(
+			&item.ID,
+			&item.InfoID,
+			&item.Title,
+			&item.ChannelCode,
+			&item.Status,
+			&item.Priority,
+			&item.AttemptCount,
+			&item.MaxAttempts,
+			&item.LastFailureReason,
+			&item.NextRunAt,
+			&item.DetailScore,
+			&item.DetailFetchStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func detailJobWhereClause(filter admin.DetailJobFilter, prefix string) (string, []any) {
+	conditions := []string{}
+	args := []any{}
+	if filter.ChannelCode != "" {
+		conditions = append(conditions, "channel_code = ?")
+		args = append(args, filter.ChannelCode)
+	}
+	if filter.FailureReason != "" {
+		conditions = append(conditions, "last_failure_reason = ?")
+		args = append(args, filter.FailureReason)
+	}
+	if len(conditions) == 0 {
+		return "", args
+	}
+	return prefix + " " + strings.Join(conditions, " AND "), args
+}
+
 func (s *MySQLStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
@@ -458,7 +779,9 @@ func (s *MySQLStore) ListChannels(ctx context.Context) ([]admin.Channel, error) 
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
-       ch.crawl_interval, ch.is_active,
+       ch.crawl_interval, ch.base_interval_minutes, ch.hot_interval_minutes,
+       ch.min_interval_minutes, ch.max_interval_minutes, ch.manual_interval_enabled,
+       ch.effective_interval_minutes, ch.schedule_version, ch.is_active,
        COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
        COALESCE(DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s'), '')
 FROM channel AS ch
@@ -480,6 +803,13 @@ ORDER BY ch.id ASC`,
 			&item.CategoryID,
 			&item.CategoryName,
 			&item.CrawlInterval,
+			&item.BaseIntervalMinutes,
+			&item.HotIntervalMinutes,
+			&item.MinIntervalMinutes,
+			&item.MaxIntervalMinutes,
+			&item.ManualIntervalEnabled,
+			&item.EffectiveIntervalMinutes,
+			&item.ScheduleVersion,
 			&item.IsActive,
 			&item.CreatedAt,
 			&item.UpdatedAt,
@@ -497,12 +827,22 @@ func (s *MySQLStore) CreateChannel(ctx context.Context, payload admin.ChannelPay
 	}
 	result, err := s.db.ExecContext(
 		ctx,
-		`INSERT INTO channel (name, code, base_url, category_id, crawl_interval, is_active) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO channel (
+	name, code, base_url, category_id, crawl_interval,
+	base_interval_minutes, hot_interval_minutes, min_interval_minutes, max_interval_minutes,
+	manual_interval_enabled, effective_interval_minutes, schedule_version, is_active
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
 		payload.Name,
 		payload.Code,
 		payload.BaseURL,
 		payload.CategoryID,
 		payload.CrawlInterval,
+		payload.BaseIntervalMinutes,
+		payload.HotIntervalMinutes,
+		payload.MinIntervalMinutes,
+		payload.MaxIntervalMinutes,
+		payload.ManualIntervalEnabled,
+		payload.EffectiveIntervalMinutes,
 		payload.IsActive,
 	)
 	if err != nil {
@@ -525,13 +865,22 @@ func (s *MySQLStore) UpdateChannel(ctx context.Context, id int64, payload admin.
 	result, err := s.db.ExecContext(
 		ctx,
 		`UPDATE channel
-SET name = ?, code = ?, base_url = ?, category_id = ?, crawl_interval = ?, is_active = ?
+SET name = ?, code = ?, base_url = ?, category_id = ?, crawl_interval = ?,
+    base_interval_minutes = ?, hot_interval_minutes = ?, min_interval_minutes = ?, max_interval_minutes = ?,
+    manual_interval_enabled = ?, effective_interval_minutes = ?, schedule_version = schedule_version + 1,
+    is_active = ?
 WHERE id = ?`,
 		payload.Name,
 		payload.Code,
 		payload.BaseURL,
 		payload.CategoryID,
 		payload.CrawlInterval,
+		payload.BaseIntervalMinutes,
+		payload.HotIntervalMinutes,
+		payload.MinIntervalMinutes,
+		payload.MaxIntervalMinutes,
+		payload.ManualIntervalEnabled,
+		payload.EffectiveIntervalMinutes,
 		payload.IsActive,
 		id,
 	)
@@ -609,7 +958,9 @@ func (s *MySQLStore) getChannelByID(ctx context.Context, id int64) (admin.Channe
 	row := s.db.QueryRowContext(
 		ctx,
 		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
-       ch.crawl_interval, ch.is_active,
+       ch.crawl_interval, ch.base_interval_minutes, ch.hot_interval_minutes,
+       ch.min_interval_minutes, ch.max_interval_minutes, ch.manual_interval_enabled,
+       ch.effective_interval_minutes, ch.schedule_version, ch.is_active,
        COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
        COALESCE(DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s'), '')
 FROM channel AS ch
@@ -626,6 +977,13 @@ WHERE ch.id = ?`,
 		&item.CategoryID,
 		&item.CategoryName,
 		&item.CrawlInterval,
+		&item.BaseIntervalMinutes,
+		&item.HotIntervalMinutes,
+		&item.MinIntervalMinutes,
+		&item.MaxIntervalMinutes,
+		&item.ManualIntervalEnabled,
+		&item.EffectiveIntervalMinutes,
+		&item.ScheduleVersion,
 		&item.IsActive,
 		&item.CreatedAt,
 		&item.UpdatedAt,

@@ -52,6 +52,13 @@ class Channel(Base):
     base_url = Column(String(255), default="", comment="渠道基础URL")
     category_id = Column(Integer, ForeignKey("category.id"), nullable=False, comment="关联分类ID")
     crawl_interval = Column(Integer, default=60, comment="爬取间隔(分钟)")
+    base_interval_minutes = Column(Integer, default=60, comment="基础采集间隔(分钟)，由管理后台配置")
+    hot_interval_minutes = Column(Integer, default=10, comment="热点加速采集间隔(分钟)")
+    min_interval_minutes = Column(Integer, default=3, comment="允许的最小采集间隔(分钟)")
+    max_interval_minutes = Column(Integer, default=240, comment="失败退避后的最大采集间隔(分钟)")
+    manual_interval_enabled = Column(Integer, default=1, comment="是否启用人工配置间隔 1-启用 0-禁用")
+    effective_interval_minutes = Column(Integer, default=60, comment="当前实际生效采集间隔(分钟)")
+    schedule_version = Column(Integer, default=1, comment="调度配置版本，用于调度器热更新")
     is_active = Column(Integer, default=1, comment="是否启用 1-启用 0-禁用")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
@@ -71,6 +78,13 @@ class Channel(Base):
             "category_id": self.category_id,
             "category_name": self.category_rel.name if self.category_rel else "",
             "crawl_interval": self.crawl_interval,
+            "base_interval_minutes": self.base_interval_minutes,
+            "hot_interval_minutes": self.hot_interval_minutes,
+            "min_interval_minutes": self.min_interval_minutes,
+            "max_interval_minutes": self.max_interval_minutes,
+            "manual_interval_enabled": self.manual_interval_enabled,
+            "effective_interval_minutes": self.effective_interval_minutes,
+            "schedule_version": self.schedule_version,
             "is_active": self.is_active,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None,
@@ -184,6 +198,33 @@ class InfoAcquisitionLog(Base):
     )
 
 
+class DetailJob(Base):
+    """详情补偿任务表：保存低分、失败或列表态内容的二次抓取任务。"""
+
+    __tablename__ = "detail_job"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="详情补偿任务ID")
+    info_id = Column(Integer, ForeignKey("info.id"), nullable=False, comment="信息ID")
+    channel_code = Column(String(50), default="", nullable=False, comment="渠道编码")
+    status = Column(String(20), default="pending", nullable=False, comment="任务状态: pending/running/succeeded/failed/cancelled")
+    priority = Column(Integer, default=50, comment="任务优先级，数值越大越优先")
+    attempt_count = Column(Integer, default=0, comment="已尝试次数")
+    max_attempts = Column(Integer, default=3, comment="最大尝试次数")
+    next_run_at = Column(DateTime, default=datetime.now, comment="下次可执行时间")
+    last_failure_reason = Column(String(255), default="", comment="最近失败原因")
+    strategy_hint = Column(String(100), default="", comment="建议使用的详情策略")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    info = relationship("Info", lazy="joined")
+
+    __table_args__ = (
+        UniqueConstraint("info_id", "status", name="uq_detail_job_info_status"),
+        Index("idx_detail_job_status_priority", "status", "priority", "next_run_at"),
+        Index("idx_detail_job_channel_status", "channel_code", "status"),
+    )
+
+
 class Event(Base):
     """事件主表：面向前端输出的事件对象。"""
 
@@ -279,6 +320,7 @@ class CrawlTask(Base):
     task_name = Column(String(100), nullable=False, comment="任务名称")
     schedule_type = Column(String(20), default="interval", nullable=False, comment="调度类型")
     schedule_value = Column(String(100), default="", nullable=False, comment="调度配置值")
+    schedule_version = Column(Integer, default=0, nullable=False, comment="已同步的调度配置版本")
     status = Column(String(20), default="active", nullable=False, comment="任务状态")
     last_run_at = Column(DateTime, comment="最近运行时间")
     next_run_at = Column(DateTime, comment="下次计划运行时间")

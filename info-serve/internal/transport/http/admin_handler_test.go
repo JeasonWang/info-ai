@@ -43,6 +43,30 @@ func (s stubAdminStore) ListLowQualityInfos(ctx context.Context, limit int) ([]a
 	return []admin.LowQualityInfo{{ID: 1, Title: "正文缺失", IssueReason: "正文为空"}}, nil
 }
 
+func (s stubAdminStore) GetDetailJobReport(ctx context.Context, filter admin.DetailJobFilter) (admin.DetailJobReport, error) {
+	return admin.DetailJobReport{Total: 1, StatusCounts: map[string]int{"pending": 1}}, nil
+}
+
+func (s stubAdminStore) GetDetailJob(ctx context.Context, id int64) (admin.DetailJobDetail, error) {
+	return admin.DetailJobDetail{ID: id, Title: "详情补偿任务"}, nil
+}
+
+func (s stubAdminStore) RetryDetailJob(ctx context.Context, id int64) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "retry_detail_job", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s stubAdminStore) CancelDetailJob(ctx context.Context, id int64) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "cancel_detail_job", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s stubAdminStore) BatchRetryDetailJobs(ctx context.Context, filter admin.DetailJobFilter) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "batch_retry_detail_jobs", Data: map[string]any{"matched_count": 0}}, nil
+}
+
+func (s stubAdminStore) BatchCancelDetailJobs(ctx context.Context, filter admin.DetailJobFilter) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "batch_cancel_detail_jobs", Data: map[string]any{"matched_count": 0}}, nil
+}
+
 func (s stubAdminStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
 	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"}}, nil
 }

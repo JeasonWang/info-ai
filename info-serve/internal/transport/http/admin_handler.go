@@ -72,6 +72,29 @@ func (h *AdminHandler) LowQualityInfos(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) DetailJobs(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.GetDetailJobReport(r.Context(), detailJobFilterFromRequest(r))
+	if err != nil {
+		response.InternalServerError(w, "详情补偿队列查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) DetailJob(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(w, "详情补偿任务ID不正确")
+		return
+	}
+	result, err := h.service.GetDetailJob(r.Context(), id)
+	if err != nil {
+		writeAdminActionError(w, err, "详情补偿任务查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) CrawlTasks(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListCrawlTasks(r.Context())
 	if err != nil {
@@ -210,6 +233,52 @@ func (h *AdminHandler) RetryLowQualityDetails(w http.ResponseWriter, r *http.Req
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) RetryDetailJob(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(w, "详情补偿任务ID不正确")
+		return
+	}
+	result, err := h.service.RetryDetailJob(r.Context(), id)
+	if err != nil {
+		writeAdminActionError(w, err, "详情补偿任务重试失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) BatchRetryDetailJobs(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.BatchRetryDetailJobs(r.Context(), detailJobFilterFromRequest(r))
+	if err != nil {
+		writeAdminActionError(w, err, "详情补偿任务批量重试失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) BatchCancelDetailJobs(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.BatchCancelDetailJobs(r.Context(), detailJobFilterFromRequest(r))
+	if err != nil {
+		writeAdminActionError(w, err, "详情补偿任务批量取消失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) CancelDetailJob(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(w, "详情补偿任务ID不正确")
+		return
+	}
+	result, err := h.service.CancelDetailJob(r.Context(), id)
+	if err != nil {
+		writeAdminActionError(w, err, "详情补偿任务取消失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) ArchiveLowQuality(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ArchiveLowQuality(r.Context())
 	if err != nil {
@@ -233,6 +302,15 @@ func queryLimit(r *http.Request) int {
 	return limit
 }
 
+func detailJobFilterFromRequest(r *http.Request) admin.DetailJobFilter {
+	query := r.URL.Query()
+	return admin.DetailJobFilter{
+		SampleLimit:   queryLimit(r),
+		ChannelCode:   query.Get("channel_code"),
+		FailureReason: query.Get("failure_reason"),
+	}
+}
+
 func writeAdminConfigError(w http.ResponseWriter, err error, fallback string) {
 	switch {
 	case errors.Is(err, admin.ErrInvalidInput):
@@ -250,6 +328,8 @@ func writeAdminActionError(w http.ResponseWriter, err error, fallback string) {
 	switch {
 	case errors.Is(err, admin.ErrInvalidInput):
 		response.BadRequest(w, "管理动作参数不合法")
+	case errors.Is(err, admin.ErrNotFound):
+		response.NotFound(w, "管理动作目标不存在")
 	default:
 		response.InternalServerError(w, fallback)
 	}

@@ -9,6 +9,7 @@ const navItems = [
   { to: '/dashboard', label: '总览' },
   { to: '/crawl-runs', label: '采集监控' },
   { to: '/data-quality', label: '数据质量' },
+  { to: '/detail-jobs', label: '详情补偿' },
   { to: '/categories', label: '分类管理' },
   { to: '/channels', label: '渠道管理' },
   { to: '/audit-logs', label: '审计日志' },

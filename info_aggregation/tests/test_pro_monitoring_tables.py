@@ -100,3 +100,92 @@ def test_sync_crawl_tasks_creates_tasks_for_active_channels(session):
     assert task.task_name == "微博采集"
     assert task.schedule_value == "30"
     assert task.status == "active"
+
+
+def test_channel_schedule_config_is_exposed_for_admin(session):
+    category = Category(name="热点事件", code="hot", description="热点")
+    session.add(category)
+    session.flush()
+    channel = Channel(
+        name="微博",
+        code="weibo",
+        base_url="https://weibo.com",
+        category_id=category.id,
+        crawl_interval=30,
+        base_interval_minutes=20,
+        hot_interval_minutes=5,
+        min_interval_minutes=3,
+        max_interval_minutes=120,
+        manual_interval_enabled=1,
+        effective_interval_minutes=5,
+        schedule_version=4,
+        is_active=1,
+    )
+    session.add(channel)
+    session.commit()
+
+    payload = channel.to_dict()
+
+    assert payload["base_interval_minutes"] == 20
+    assert payload["hot_interval_minutes"] == 5
+    assert payload["min_interval_minutes"] == 3
+    assert payload["max_interval_minutes"] == 120
+    assert payload["manual_interval_enabled"] == 1
+    assert payload["effective_interval_minutes"] == 5
+    assert payload["schedule_version"] == 4
+
+
+def test_sync_crawl_tasks_uses_effective_interval(session):
+    category = Category(name="热点事件", code="hot", description="热点")
+    session.add(category)
+    session.flush()
+    session.add(
+        Channel(
+            name="微博",
+            code="weibo",
+            base_url="https://weibo.com",
+            category_id=category.id,
+            crawl_interval=30,
+            effective_interval_minutes=5,
+            is_active=1,
+        )
+    )
+    session.commit()
+
+    _sync_crawl_tasks(session)
+
+    task = session.query(CrawlTask).one()
+    assert task.schedule_value == "5"
+
+
+def test_sync_crawl_tasks_refreshes_next_run_at_when_schedule_version_changes(session):
+    category = Category(name="热点事件", code="hot", description="热点")
+    session.add(category)
+    session.flush()
+    channel = Channel(
+        name="微博",
+        code="weibo",
+        base_url="https://weibo.com",
+        category_id=category.id,
+        crawl_interval=30,
+        effective_interval_minutes=30,
+        schedule_version=1,
+        is_active=1,
+    )
+    session.add(channel)
+    session.commit()
+
+    _sync_crawl_tasks(session)
+    task = session.query(CrawlTask).one()
+    first_next_run_at = task.next_run_at
+
+    channel.effective_interval_minutes = 5
+    channel.schedule_version = 2
+    session.commit()
+    result = _sync_crawl_tasks(session)
+
+    session.refresh(task)
+    assert result["updated_count"] == 1
+    assert task.schedule_value == "5"
+    assert task.schedule_version == 2
+    assert task.next_run_at != first_next_run_at

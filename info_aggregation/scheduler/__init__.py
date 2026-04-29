@@ -29,35 +29,63 @@ from database import get_session, Channel, CrawlRunLog, CrawlTask, Info, InfoAcq
 from services.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
 from services import parse_tech_content, rebuild_events
 from services.data_quality_report import save_data_quality_snapshot
+from services.detail_jobs import enqueue_low_quality_detail_jobs
+from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
 
 logger = logging.getLogger(__name__)
+
+
+def _effective_channel_interval(channel: Channel) -> int:
+    """返回调度器实际使用的分钟间隔，兼容尚未配置 Max 字段的历史渠道。"""
+    effective_interval = channel.effective_interval_minutes
+    legacy_interval = channel.crawl_interval or 60
+    # 新字段上线前的老渠道只有 crawl_interval；如果 Max 字段仍是默认值，
+    # 继续使用老间隔，避免调度同步后被默认 60 分钟覆盖。
+    if (
+        effective_interval == 60
+        and legacy_interval != 60
+        and (channel.base_interval_minutes in (None, 60))
+    ):
+        return legacy_interval
+    return effective_interval or legacy_interval
 
 
 def _sync_crawl_tasks(session) -> dict:
     """把启用渠道同步为 Pro 监控后台可见的采集任务。"""
     created_count = 0
     updated_count = 0
+    now = datetime.now()
     channels = session.query(Channel).filter(Channel.is_active == 1).all()
     for channel in channels:
         task_code = f"crawl_{channel.code}"
         task = session.query(CrawlTask).filter(CrawlTask.task_code == task_code).first()
+        interval = _effective_channel_interval(channel)
+        next_run_at = now + timedelta(minutes=interval)
+        schedule_version = channel.schedule_version or 1
         if not task:
             task = CrawlTask(
                 channel_id=channel.id,
                 task_code=task_code,
                 task_name=f"{channel.name}采集",
                 schedule_type="interval",
-                schedule_value=str(channel.crawl_interval),
+                schedule_value=str(interval),
+                schedule_version=schedule_version,
                 status="active",
+                next_run_at=next_run_at,
             )
             session.add(task)
             created_count += 1
         else:
+            previous_value = task.schedule_value
+            previous_version = task.schedule_version or 0
             task.channel_id = channel.id
             task.task_name = f"{channel.name}采集"
             task.schedule_type = "interval"
-            task.schedule_value = str(channel.crawl_interval)
+            task.schedule_value = str(interval)
+            task.schedule_version = schedule_version
             task.status = "active"
+            if previous_value != str(interval) or previous_version != schedule_version:
+                task.next_run_at = next_run_at
             updated_count += 1
     session.commit()
     return {"created_count": created_count, "updated_count": updated_count}
@@ -441,6 +469,24 @@ def cleanup_expired_infos():
         session.close()
 
 
+def process_detail_jobs(session=None, runner=None, enqueue_limit: int = 100, process_limit: int = 20) -> dict:
+    """入队并处理详情补偿任务，供 scheduler 和测试共用。"""
+
+    owns_session = session is None
+    session = session or get_session()
+    try:
+        enqueue_result = enqueue_low_quality_detail_jobs(session, limit=enqueue_limit)
+        process_result = process_pending_detail_jobs(
+            session,
+            runner=runner or crawler_detail_runner,
+            limit=process_limit,
+        )
+        return {"enqueue": enqueue_result, "process": process_result}
+    finally:
+        if owns_session:
+            session.close()
+
+
 def setup_scheduler() -> BackgroundScheduler:
     """
     初始化并配置定时任务调度器
@@ -512,6 +558,15 @@ def setup_scheduler() -> BackgroundScheduler:
         trigger=IntervalTrigger(hours=24),
         id="cleanup_expired_infos",
         name="清理两周前历史数据",
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+
+    scheduler.add_job(
+        process_detail_jobs,
+        trigger=IntervalTrigger(minutes=10),
+        id="process_detail_jobs",
+        name="详情补偿队列处理",
         max_instances=1,
         misfire_grace_time=300,
     )

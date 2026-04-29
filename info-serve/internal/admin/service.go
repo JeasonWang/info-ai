@@ -19,6 +19,12 @@ type Store interface {
 	ListChannelHealth(ctx context.Context) ([]ChannelHealth, error)
 	ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error)
 	ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error)
+	GetDetailJobReport(ctx context.Context, filter DetailJobFilter) (DetailJobReport, error)
+	GetDetailJob(ctx context.Context, id int64) (DetailJobDetail, error)
+	RetryDetailJob(ctx context.Context, id int64) (ActionResult, error)
+	CancelDetailJob(ctx context.Context, id int64) (ActionResult, error)
+	BatchRetryDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error)
+	BatchCancelDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error)
 	ListCrawlTasks(ctx context.Context) ([]CrawlTask, error)
 	ListCategories(ctx context.Context) ([]Category, error)
 	CreateCategory(ctx context.Context, payload CategoryPayload) (Category, error)
@@ -105,6 +111,61 @@ type LowQualityInfo struct {
 	UpdatedAt           string `json:"updated_at"`
 }
 
+type DetailJobFailureReason struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
+}
+
+type DetailJobSample struct {
+	ID                int64  `json:"id"`
+	InfoID            int64  `json:"info_id"`
+	Title             string `json:"title"`
+	ChannelCode       string `json:"channel_code"`
+	Status            string `json:"status"`
+	Priority          int    `json:"priority"`
+	AttemptCount      int    `json:"attempt_count"`
+	MaxAttempts       int    `json:"max_attempts"`
+	LastFailureReason string `json:"last_failure_reason"`
+	NextRunAt         string `json:"next_run_at"`
+	DetailScore       int    `json:"detail_score"`
+	DetailFetchStatus string `json:"detail_fetch_status"`
+}
+
+type DetailJobReport struct {
+	Total             int                      `json:"total"`
+	StatusCounts      map[string]int           `json:"status_counts"`
+	ChannelCounts     map[string]int           `json:"channel_counts"`
+	TopFailureReasons []DetailJobFailureReason `json:"top_failure_reasons"`
+	PendingSamples    []DetailJobSample        `json:"pending_samples"`
+	FailedSamples     []DetailJobSample        `json:"failed_samples"`
+}
+
+type DetailJobDetail struct {
+	ID                int64  `json:"id"`
+	InfoID            int64  `json:"info_id"`
+	Title             string `json:"title"`
+	SourceURL         string `json:"source_url"`
+	Content           string `json:"content"`
+	ChannelCode       string `json:"channel_code"`
+	Status            string `json:"status"`
+	Priority          int    `json:"priority"`
+	AttemptCount      int    `json:"attempt_count"`
+	MaxAttempts       int    `json:"max_attempts"`
+	LastFailureReason string `json:"last_failure_reason"`
+	NextRunAt         string `json:"next_run_at"`
+	DetailScore       int    `json:"detail_score"`
+	DetailFetchStatus string `json:"detail_fetch_status"`
+	DetailStrategy    string `json:"detail_strategy"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
+}
+
+type DetailJobFilter struct {
+	SampleLimit   int
+	ChannelCode   string
+	FailureReason string
+}
+
 type CrawlTask struct {
 	TaskCode      string `json:"task_code"`
 	TaskName      string `json:"task_name"`
@@ -133,25 +194,38 @@ type CategoryPayload struct {
 }
 
 type Channel struct {
-	ID            int64  `json:"id"`
-	Name          string `json:"name"`
-	Code          string `json:"code"`
-	BaseURL       string `json:"base_url"`
-	CategoryID    int64  `json:"category_id"`
-	CategoryName  string `json:"category_name"`
-	CrawlInterval int    `json:"crawl_interval"`
-	IsActive      int    `json:"is_active"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	ID                       int64  `json:"id"`
+	Name                     string `json:"name"`
+	Code                     string `json:"code"`
+	BaseURL                  string `json:"base_url"`
+	CategoryID               int64  `json:"category_id"`
+	CategoryName             string `json:"category_name"`
+	CrawlInterval            int    `json:"crawl_interval"`
+	BaseIntervalMinutes      int    `json:"base_interval_minutes"`
+	HotIntervalMinutes       int    `json:"hot_interval_minutes"`
+	MinIntervalMinutes       int    `json:"min_interval_minutes"`
+	MaxIntervalMinutes       int    `json:"max_interval_minutes"`
+	ManualIntervalEnabled    int    `json:"manual_interval_enabled"`
+	EffectiveIntervalMinutes int    `json:"effective_interval_minutes"`
+	ScheduleVersion          int    `json:"schedule_version"`
+	IsActive                 int    `json:"is_active"`
+	CreatedAt                string `json:"created_at"`
+	UpdatedAt                string `json:"updated_at"`
 }
 
 type ChannelPayload struct {
-	Name          string `json:"name"`
-	Code          string `json:"code"`
-	BaseURL       string `json:"base_url"`
-	CategoryID    int64  `json:"category_id"`
-	CrawlInterval int    `json:"crawl_interval"`
-	IsActive      int    `json:"is_active"`
+	Name                     string `json:"name"`
+	Code                     string `json:"code"`
+	BaseURL                  string `json:"base_url"`
+	CategoryID               int64  `json:"category_id"`
+	CrawlInterval            int    `json:"crawl_interval"`
+	BaseIntervalMinutes      int    `json:"base_interval_minutes"`
+	HotIntervalMinutes       int    `json:"hot_interval_minutes"`
+	MinIntervalMinutes       int    `json:"min_interval_minutes"`
+	MaxIntervalMinutes       int    `json:"max_interval_minutes"`
+	ManualIntervalEnabled    int    `json:"manual_interval_enabled"`
+	EffectiveIntervalMinutes int    `json:"effective_interval_minutes"`
+	IsActive                 int    `json:"is_active"`
 }
 
 type AuditLog struct {
@@ -212,6 +286,60 @@ func (s *Service) ListLowQualityInfos(ctx context.Context, limit int) ([]LowQual
 		limit = 100
 	}
 	return s.store.ListLowQualityInfos(ctx, limit)
+}
+
+func (s *Service) GetDetailJobReport(ctx context.Context, filter DetailJobFilter) (DetailJobReport, error) {
+	normalized := normalizeDetailJobFilter(filter)
+	return s.store.GetDetailJobReport(ctx, normalized)
+}
+
+func (s *Service) GetDetailJob(ctx context.Context, id int64) (DetailJobDetail, error) {
+	if id < 1 {
+		return DetailJobDetail{}, ErrInvalidInput
+	}
+	return s.store.GetDetailJob(ctx, id)
+}
+
+func (s *Service) BatchRetryDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error) {
+	normalized := normalizeDetailJobFilter(filter)
+	if normalized.ChannelCode == "" && normalized.FailureReason == "" {
+		return ActionResult{}, ErrInvalidInput
+	}
+	return s.store.BatchRetryDetailJobs(ctx, normalized)
+}
+
+func (s *Service) BatchCancelDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error) {
+	normalized := normalizeDetailJobFilter(filter)
+	if normalized.ChannelCode == "" && normalized.FailureReason == "" {
+		return ActionResult{}, ErrInvalidInput
+	}
+	return s.store.BatchCancelDetailJobs(ctx, normalized)
+}
+
+func (s *Service) RetryDetailJob(ctx context.Context, id int64) (ActionResult, error) {
+	if id < 1 {
+		return ActionResult{}, ErrInvalidInput
+	}
+	return s.store.RetryDetailJob(ctx, id)
+}
+
+func (s *Service) CancelDetailJob(ctx context.Context, id int64) (ActionResult, error) {
+	if id < 1 {
+		return ActionResult{}, ErrInvalidInput
+	}
+	return s.store.CancelDetailJob(ctx, id)
+}
+
+func normalizeDetailJobFilter(filter DetailJobFilter) DetailJobFilter {
+	filter.ChannelCode = strings.TrimSpace(filter.ChannelCode)
+	filter.FailureReason = strings.TrimSpace(filter.FailureReason)
+	if filter.SampleLimit < 1 {
+		filter.SampleLimit = 10
+	}
+	if filter.SampleLimit > 50 {
+		filter.SampleLimit = 50
+	}
+	return filter
 }
 
 func (s *Service) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
@@ -325,10 +453,34 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 	payload.Name = strings.TrimSpace(payload.Name)
 	payload.Code = strings.TrimSpace(payload.Code)
 	payload.BaseURL = strings.TrimSpace(payload.BaseURL)
+	if payload.BaseIntervalMinutes == 0 {
+		payload.BaseIntervalMinutes = payload.CrawlInterval
+	}
+	if payload.HotIntervalMinutes == 0 {
+		payload.HotIntervalMinutes = 10
+	}
+	if payload.MinIntervalMinutes == 0 {
+		payload.MinIntervalMinutes = 3
+	}
+	if payload.MaxIntervalMinutes == 0 {
+		payload.MaxIntervalMinutes = 240
+	}
+	if payload.EffectiveIntervalMinutes == 0 {
+		payload.EffectiveIntervalMinutes = payload.CrawlInterval
+	}
 	if payload.Name == "" || payload.Code == "" || payload.CategoryID < 1 || payload.CrawlInterval < 1 {
 		return ChannelPayload{}, ErrInvalidInput
 	}
+	if payload.BaseIntervalMinutes < 1 || payload.HotIntervalMinutes < 1 || payload.MinIntervalMinutes < 1 || payload.MaxIntervalMinutes < 1 || payload.EffectiveIntervalMinutes < 1 {
+		return ChannelPayload{}, ErrInvalidInput
+	}
+	if payload.MinIntervalMinutes > payload.MaxIntervalMinutes || payload.EffectiveIntervalMinutes < payload.MinIntervalMinutes || payload.EffectiveIntervalMinutes > payload.MaxIntervalMinutes {
+		return ChannelPayload{}, ErrInvalidInput
+	}
 	if payload.IsActive != 0 && payload.IsActive != 1 {
+		return ChannelPayload{}, ErrInvalidInput
+	}
+	if payload.ManualIntervalEnabled != 0 && payload.ManualIntervalEnabled != 1 {
 		return ChannelPayload{}, ErrInvalidInput
 	}
 	if len([]rune(payload.Name)) > 50 || len([]rune(payload.Code)) > 50 || len([]rune(payload.BaseURL)) > 255 {

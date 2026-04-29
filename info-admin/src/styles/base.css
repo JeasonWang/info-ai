@@ -104,6 +104,7 @@ p {
 }
 
 .ghost-button,
+.button,
 .login-form button,
 .inline-form button,
 .action-strip button {
@@ -113,6 +114,21 @@ p {
   color: #fff;
   background: var(--ink);
   cursor: pointer;
+}
+
+.button--primary {
+  background: var(--accent);
+}
+
+.button--ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .hero-copy,
@@ -152,6 +168,14 @@ p {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
+}
+
+.metric-grid--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.panel-grid--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .metric-card,
@@ -211,6 +235,51 @@ p {
   color: var(--muted);
 }
 
+.data-list--detail-jobs small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+.detail-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.detail-job-actions .button {
+  min-width: 72px;
+  padding: 8px 12px;
+}
+
+.detail-job-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.detail-job-detail div {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-job-detail a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.detail-job-detail pre {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  line-height: 1.7;
+}
+
 .data-list strong {
   color: var(--ink);
   font-size: 14px;
@@ -246,7 +315,24 @@ p {
 }
 
 .channel-form {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) 140px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.detail-job-filter {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(4, 112px);
+}
+
+.channel-form button {
+  min-height: 48px;
+}
+
+.schedule-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.schedule-copy small {
+  color: var(--muted);
 }
 
 .login-form input,
@@ -303,6 +389,12 @@ p {
   background: var(--accent);
 }
 
+.inline-form .button--ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+}
+
 @media (max-width: 900px) {
   .admin-shell {
     grid-template-columns: 1fr;
@@ -321,7 +413,8 @@ p {
   .metric-grid,
   .panel-grid,
   .inline-form,
-  .channel-form {
+  .channel-form,
+  .detail-job-filter {
     grid-template-columns: 1fr;
   }
 

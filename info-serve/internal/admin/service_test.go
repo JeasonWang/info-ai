@@ -11,6 +11,7 @@ type fakeAdminStore struct {
 	channelHealth    []ChannelHealth
 	qualitySnapshots []QualitySnapshot
 	lowQualityInfos  []LowQualityInfo
+	detailJobReport  DetailJobReport
 	crawlTasks       []CrawlTask
 	categories       []Category
 	channels         []Channel
@@ -73,6 +74,30 @@ func (s fakeAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]
 
 func (s fakeAdminStore) ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error) {
 	return s.lowQualityInfos[:min(limit, len(s.lowQualityInfos))], nil
+}
+
+func (s fakeAdminStore) GetDetailJobReport(ctx context.Context, filter DetailJobFilter) (DetailJobReport, error) {
+	return s.detailJobReport, nil
+}
+
+func (s fakeAdminStore) GetDetailJob(ctx context.Context, id int64) (DetailJobDetail, error) {
+	return DetailJobDetail{ID: id, Title: "详情补偿任务"}, nil
+}
+
+func (s fakeAdminStore) RetryDetailJob(ctx context.Context, id int64) (ActionResult, error) {
+	return ActionResult{Action: "retry_detail_job", Message: "已重新入队详情补偿任务", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s fakeAdminStore) CancelDetailJob(ctx context.Context, id int64) (ActionResult, error) {
+	return ActionResult{Action: "cancel_detail_job", Message: "已取消详情补偿任务", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s fakeAdminStore) BatchRetryDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error) {
+	return ActionResult{Action: "batch_retry_detail_jobs", Message: "已批量重新入队详情补偿任务", Data: map[string]any{"matched_count": 0}}, nil
+}
+
+func (s fakeAdminStore) BatchCancelDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error) {
+	return ActionResult{Action: "batch_cancel_detail_jobs", Message: "已批量取消详情补偿任务", Data: map[string]any{"matched_count": 0}}, nil
 }
 
 func (s fakeAdminStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {

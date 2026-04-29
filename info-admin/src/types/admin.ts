@@ -69,6 +69,43 @@ export interface LowQualityInfo {
   updated_at: string
 }
 
+export interface DetailJobFailureReason {
+  reason: string
+  count: number
+}
+
+export interface DetailJobSample {
+  id: number
+  info_id: number
+  title: string
+  channel_code: string
+  status: string
+  priority: number
+  attempt_count: number
+  max_attempts: number
+  last_failure_reason: string
+  next_run_at: string
+  detail_score: number
+  detail_fetch_status: string
+}
+
+export interface DetailJobReport {
+  total: number
+  status_counts: Record<string, number>
+  channel_counts: Record<string, number>
+  top_failure_reasons: DetailJobFailureReason[]
+  pending_samples: DetailJobSample[]
+  failed_samples: DetailJobSample[]
+}
+
+export interface DetailJobDetail extends DetailJobSample {
+  source_url: string
+  content: string
+  detail_strategy: string
+  created_at: string
+  updated_at: string
+}
+
 export interface CrawlTask {
   task_code: string
   task_name: string
@@ -104,6 +141,13 @@ export interface AdminChannel {
   category_id: number
   category_name: string
   crawl_interval: number
+  base_interval_minutes: number
+  hot_interval_minutes: number
+  min_interval_minutes: number
+  max_interval_minutes: number
+  manual_interval_enabled: number
+  effective_interval_minutes: number
+  schedule_version: number
   is_active: number
   created_at: string
   updated_at: string
@@ -115,6 +159,12 @@ export interface ChannelPayload {
   base_url: string
   category_id: number
   crawl_interval: number
+  base_interval_minutes: number
+  hot_interval_minutes: number
+  min_interval_minutes: number
+  max_interval_minutes: number
+  manual_interval_enabled: number
+  effective_interval_minutes: number
   is_active: number
 }
 

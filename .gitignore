@@ -23,3 +23,5 @@ dist/
 *.db
 .runtime/
 .DS_Store
+
+logs

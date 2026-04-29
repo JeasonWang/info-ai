@@ -2,11 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   archiveDuplicateTitles,
   archiveLowQualityInfos,
+  batchRetryDetailJobs,
+  batchCancelDetailJobs,
+  cancelDetailJob,
+  createChannel,
   getAdminOverview,
   getAuditLogs,
   getChannelHealth,
+  getDetailJob,
+  getDetailJobReport,
   getLowQualityInfos,
   rebuildEvents,
+  retryDetailJob,
   refreshQuality,
   retryLowQualityDetails,
   triggerCrawlTask,
@@ -51,6 +58,12 @@ describe('admin API versioned paths', () => {
       expect.any(Object),
     )
 
+    await getDetailJobReport({ limit: 7, channelCode: '36kr', failureReason: 'empty_content' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/detail-jobs?limit=7&channel_code=36kr&failure_reason=empty_content',
+      expect.any(Object),
+    )
+
     await triggerCrawlTask('weibo')
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/crawl-tasks/weibo/trigger',
@@ -72,6 +85,36 @@ describe('admin API versioned paths', () => {
     await retryLowQualityDetails(15)
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/retry-low-quality-details?limit=15',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await batchRetryDetailJobs({ channelCode: '36kr', failureReason: 'empty_content', limit: 20 })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/detail-jobs/retry?limit=20&channel_code=36kr&failure_reason=empty_content',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await batchCancelDetailJobs({ channelCode: '36kr', failureReason: 'empty_content', limit: 20 })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/detail-jobs/cancel?limit=20&channel_code=36kr&failure_reason=empty_content',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await getDetailJob(11)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/detail-jobs/11',
+      expect.any(Object),
+    )
+
+    await retryDetailJob(11)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/detail-jobs/11/retry',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await cancelDetailJob(11)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/detail-jobs/11/cancel',
       expect.objectContaining({ method: 'POST' }),
     )
 
@@ -102,5 +145,37 @@ describe('admin API versioned paths', () => {
         method: 'POST',
       }),
     )
+  })
+
+  it('sends Max schedule fields when creating a channel', async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ code: 0, message: 'success', data: { id: 1 } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createChannel({
+      name: '微博',
+      code: 'weibo',
+      base_url: 'https://weibo.com',
+      category_id: 1,
+      crawl_interval: 30,
+      base_interval_minutes: 30,
+      hot_interval_minutes: 5,
+      min_interval_minutes: 3,
+      max_interval_minutes: 120,
+      manual_interval_enabled: 1,
+      effective_interval_minutes: 5,
+      is_active: 1,
+    })
+
+    const [, init] = fetchMock.mock.calls.at(0) as unknown as [RequestInfo, RequestInit]
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      base_interval_minutes: 30,
+      hot_interval_minutes: 5,
+      min_interval_minutes: 3,
+      max_interval_minutes: 120,
+      manual_interval_enabled: 1,
+      effective_interval_minutes: 5,
+    })
   })
 })

@@ -91,6 +91,13 @@ def init_channels(session, category_map: dict) -> dict:
                 base_url=ch_def["base_url"],
                 category_id=category_map[ch_def["category"]],
                 crawl_interval=ch_def["interval"],
+                base_interval_minutes=ch_def["interval"],
+                hot_interval_minutes=max(3, min(10, ch_def["interval"])),
+                min_interval_minutes=3 if ch_def["interval"] <= 30 else 10,
+                max_interval_minutes=max(120, ch_def["interval"] * 4),
+                manual_interval_enabled=1,
+                effective_interval_minutes=ch_def["interval"],
+                schedule_version=1,
                 is_active=1,
             )
             session.add(ch)

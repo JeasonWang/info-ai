@@ -20,6 +20,7 @@ from database import (
     EventSummarySnapshot,
     EventTimelineEntry,
     Info,
+    DetailJob,
 )
 from services import (
 	archive_duplicate_title_infos,
@@ -30,6 +31,7 @@ from services import (
 )
 from services.data_quality import text_similarity
 from services.data_quality_report import save_data_quality_snapshot
+from services.detail_job_report import build_detail_job_report
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +125,26 @@ class ChannelPayload(BaseModel):
     base_url: str = Field(default="", max_length=255)
     category_id: int
     crawl_interval: int = Field(default=60, ge=1)
+    base_interval_minutes: int = Field(default=60, ge=1)
+    hot_interval_minutes: int = Field(default=10, ge=1)
+    min_interval_minutes: int = Field(default=3, ge=1)
+    max_interval_minutes: int = Field(default=240, ge=1)
+    manual_interval_enabled: int = Field(default=1, ge=0, le=1)
+    effective_interval_minutes: int = Field(default=60, ge=1)
     is_active: int = Field(default=1, ge=0, le=1)
+
+
+def _apply_channel_schedule_config(channel: Channel, payload: ChannelPayload):
+    """同步管理后台提交的采集间隔配置，并推进调度版本供 worker 热更新。"""
+    previous_version = channel.schedule_version or 0
+    channel.crawl_interval = payload.crawl_interval
+    channel.base_interval_minutes = payload.base_interval_minutes
+    channel.hot_interval_minutes = payload.hot_interval_minutes
+    channel.min_interval_minutes = payload.min_interval_minutes
+    channel.max_interval_minutes = payload.max_interval_minutes
+    channel.manual_interval_enabled = payload.manual_interval_enabled
+    channel.effective_interval_minutes = payload.effective_interval_minutes
+    channel.schedule_version = previous_version + 1
 
 app = FastAPI(
     title="信息聚合系统 API",
@@ -309,9 +330,9 @@ def admin_create_channel(payload: ChannelPayload):
             code=payload.code.strip(),
             base_url=payload.base_url.strip(),
             category_id=payload.category_id,
-            crawl_interval=payload.crawl_interval,
             is_active=payload.is_active,
         )
+        _apply_channel_schedule_config(channel, payload)
         session.add(channel)
         session.commit()
         session.refresh(channel)
@@ -342,7 +363,7 @@ def admin_update_channel(channel_id: int, payload: ChannelPayload):
         channel.code = payload.code.strip()
         channel.base_url = payload.base_url.strip()
         channel.category_id = payload.category_id
-        channel.crawl_interval = payload.crawl_interval
+        _apply_channel_schedule_config(channel, payload)
         channel.is_active = payload.is_active
         session.commit()
         session.refresh(channel)
@@ -736,6 +757,29 @@ def admin_data_quality_report():
             "code": 0,
             "message": "success",
             "data": build_data_quality_report(session),
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/detail-jobs")
+def admin_detail_jobs(
+    sample_limit: int = Query(10, ge=1, le=50, description="每类任务样本数量"),
+    channel_code: str = Query("", max_length=80, description="按渠道编码过滤"),
+    failure_reason: str = Query("", max_length=200, description="按失败原因过滤"),
+):
+    """返回详情补偿队列概览，辅助定位积压渠道和失败原因。"""
+    session = get_session()
+    try:
+        return {
+            "code": 0,
+            "message": "success",
+            "data": build_detail_job_report(
+                session,
+                sample_limit=sample_limit,
+                channel_code=channel_code.strip(),
+                failure_reason=failure_reason.strip(),
+            ),
         }
     finally:
         session.close()

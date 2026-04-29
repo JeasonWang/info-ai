@@ -50,6 +50,38 @@ func (s stubAdminStore) ListLowQualityInfos(ctx context.Context, limit int) ([]a
 	return []admin.LowQualityInfo{{ID: 1, Title: "正文缺失", IssueReason: "正文为空"}}, nil
 }
 
+func (s stubAdminStore) GetDetailJobReport(ctx context.Context, filter admin.DetailJobFilter) (admin.DetailJobReport, error) {
+	return admin.DetailJobReport{
+		Total:         2,
+		StatusCounts:  map[string]int{"pending": 1, "failed": 1},
+		ChannelCounts: map[string]int{"36kr": 2},
+		TopFailureReasons: []admin.DetailJobFailureReason{
+			{Reason: "empty_content", Count: 1},
+		},
+		PendingSamples: []admin.DetailJobSample{{ID: 1, InfoID: 10, Title: "OpenAI 发布新模型", ChannelCode: "36kr", Status: "pending"}},
+	}, nil
+}
+
+func (s stubAdminStore) GetDetailJob(ctx context.Context, id int64) (admin.DetailJobDetail, error) {
+	return admin.DetailJobDetail{ID: id, InfoID: 10, Title: "OpenAI 发布新模型", SourceURL: "https://example.com/a", Content: "完整正文", ChannelCode: "36kr", Status: "failed"}, nil
+}
+
+func (s stubAdminStore) RetryDetailJob(ctx context.Context, id int64) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "retry_detail_job", Message: "已重新入队详情补偿任务", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s stubAdminStore) CancelDetailJob(ctx context.Context, id int64) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "cancel_detail_job", Message: "已取消详情补偿任务", Data: map[string]any{"detail_job_id": id}}, nil
+}
+
+func (s stubAdminStore) BatchRetryDetailJobs(ctx context.Context, filter admin.DetailJobFilter) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "batch_retry_detail_jobs", Message: "已批量重新入队详情补偿任务", Data: map[string]any{"matched_count": 2}}, nil
+}
+
+func (s stubAdminStore) BatchCancelDetailJobs(ctx context.Context, filter admin.DetailJobFilter) (admin.ActionResult, error) {
+	return admin.ActionResult{Action: "batch_cancel_detail_jobs", Message: "已批量取消详情补偿任务", Data: map[string]any{"matched_count": 2}}, nil
+}
+
 func (s stubAdminStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
 	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"}}, nil
 }
@@ -67,15 +99,31 @@ func (s stubAdminStore) UpdateCategory(ctx context.Context, id int64, payload ad
 }
 
 func (s stubAdminStore) ListChannels(ctx context.Context) ([]admin.Channel, error) {
-	return []admin.Channel{{ID: 1, Name: "微博", Code: "weibo", CategoryID: 1, CategoryName: "全网", CrawlInterval: 30, IsActive: 1}}, nil
+	return []admin.Channel{{
+		ID: 1, Name: "微博", Code: "weibo", CategoryID: 1, CategoryName: "全网", CrawlInterval: 30,
+		BaseIntervalMinutes: 20, HotIntervalMinutes: 5, MinIntervalMinutes: 3, MaxIntervalMinutes: 120,
+		ManualIntervalEnabled: 1, EffectiveIntervalMinutes: 5, ScheduleVersion: 4, IsActive: 1,
+	}}, nil
 }
 
 func (s stubAdminStore) CreateChannel(ctx context.Context, payload admin.ChannelPayload) (admin.Channel, error) {
-	return admin.Channel{ID: 2, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
+	return admin.Channel{
+		ID: 2, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval,
+		BaseIntervalMinutes: payload.BaseIntervalMinutes, HotIntervalMinutes: payload.HotIntervalMinutes,
+		MinIntervalMinutes: payload.MinIntervalMinutes, MaxIntervalMinutes: payload.MaxIntervalMinutes,
+		ManualIntervalEnabled: payload.ManualIntervalEnabled, EffectiveIntervalMinutes: payload.EffectiveIntervalMinutes,
+		ScheduleVersion: 1, IsActive: payload.IsActive,
+	}, nil
 }
 
 func (s stubAdminStore) UpdateChannel(ctx context.Context, id int64, payload admin.ChannelPayload) (admin.Channel, error) {
-	return admin.Channel{ID: id, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
+	return admin.Channel{
+		ID: id, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval,
+		BaseIntervalMinutes: payload.BaseIntervalMinutes, HotIntervalMinutes: payload.HotIntervalMinutes,
+		MinIntervalMinutes: payload.MinIntervalMinutes, MaxIntervalMinutes: payload.MaxIntervalMinutes,
+		ManualIntervalEnabled: payload.ManualIntervalEnabled, EffectiveIntervalMinutes: payload.EffectiveIntervalMinutes,
+		ScheduleVersion: 5, IsActive: payload.IsActive,
+	}, nil
 }
 
 func (s stubAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]admin.AuditLog, error) {
@@ -195,6 +243,75 @@ func TestAdminMonitoringRoutesReturnListsForAdmin(t *testing.T) {
 	}
 }
 
+func TestAdminDetailJobsRouteReturnsReport(t *testing.T) {
+	store := auth.NewMemoryStore()
+	service := auth.NewService(store)
+	_, err := store.CreateUser(context.Background(), auth.CreateUserParams{
+		Email:        "admin@example.com",
+		PasswordHash: mustHashPassword(t, "Admin123456"),
+		Role:         "admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	r := transporthttp.NewRouter(transporthttp.Services{Auth: service, Admin: admin.NewService(stubAdminStore{})})
+	token := loginOnly(t, r, "admin@example.com", "Admin123456")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/detail-jobs?limit=5&channel_code=36kr&failure_reason=empty_content", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+	var body struct {
+		Data admin.DetailJobReport `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body.Data.Total != 2 || body.Data.StatusCounts["pending"] != 1 {
+		t.Fatalf("detail job report = %+v", body.Data)
+	}
+	if len(body.Data.PendingSamples) != 1 || body.Data.PendingSamples[0].Title == "" {
+		t.Fatalf("missing pending samples: %+v", body.Data.PendingSamples)
+	}
+}
+
+func TestAdminDetailJobRouteReturnsDetail(t *testing.T) {
+	store := auth.NewMemoryStore()
+	service := auth.NewService(store)
+	_, err := store.CreateUser(context.Background(), auth.CreateUserParams{
+		Email:        "admin@example.com",
+		PasswordHash: mustHashPassword(t, "Admin123456"),
+		Role:         "admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	r := transporthttp.NewRouter(transporthttp.Services{Auth: service, Admin: admin.NewService(stubAdminStore{})})
+	token := loginOnly(t, r, "admin@example.com", "Admin123456")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/detail-jobs/11", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+	var body struct {
+		Data admin.DetailJobDetail `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if body.Data.SourceURL == "" || body.Data.Content == "" {
+		t.Fatalf("missing detail content: %+v", body.Data)
+	}
+}
+
 func TestAdminConfigurationRoutesManageCategoriesAndChannels(t *testing.T) {
 	store := auth.NewMemoryStore()
 	service := auth.NewService(store)
@@ -220,8 +337,8 @@ func TestAdminConfigurationRoutesManageCategoriesAndChannels(t *testing.T) {
 		{method: http.MethodPost, path: "/api/admin/categories", body: `{"name":"体育","code":"sports","description":"体育热点"}`, key: "code", status: http.StatusCreated},
 		{method: http.MethodPut, path: "/api/admin/categories/1", body: `{"name":"科技","code":"tech","description":"科技热点"}`, key: "code", status: http.StatusOK},
 		{method: http.MethodGet, path: "/api/admin/channels", key: "code", status: http.StatusOK},
-		{method: http.MethodPost, path: "/api/admin/channels", body: `{"name":"新浪体育","code":"sina_sports","base_url":"https://sports.sina.com.cn/","category_id":1,"crawl_interval":30,"is_active":1}`, key: "code", status: http.StatusCreated},
-		{method: http.MethodPut, path: "/api/admin/channels/1", body: `{"name":"微博","code":"weibo","base_url":"https://weibo.com/","category_id":1,"crawl_interval":45,"is_active":1}`, key: "code", status: http.StatusOK},
+		{method: http.MethodPost, path: "/api/admin/channels", body: `{"name":"新浪体育","code":"sina_sports","base_url":"https://sports.sina.com.cn/","category_id":1,"crawl_interval":30,"base_interval_minutes":30,"hot_interval_minutes":5,"min_interval_minutes":3,"max_interval_minutes":120,"manual_interval_enabled":1,"effective_interval_minutes":5,"is_active":1}`, key: "code", status: http.StatusCreated},
+		{method: http.MethodPut, path: "/api/admin/channels/1", body: `{"name":"微博","code":"weibo","base_url":"https://weibo.com/","category_id":1,"crawl_interval":45,"base_interval_minutes":45,"hot_interval_minutes":5,"min_interval_minutes":3,"max_interval_minutes":180,"manual_interval_enabled":1,"effective_interval_minutes":5,"is_active":1}`, key: "code", status: http.StatusOK},
 	}
 
 	for _, item := range cases {
@@ -241,6 +358,10 @@ func TestAdminConfigurationRoutesManageCategoriesAndChannels(t *testing.T) {
 		}
 		if body.Data == nil {
 			t.Fatalf("%s %s returned empty data", item.method, item.path)
+		}
+		raw, _ := json.Marshal(body.Data)
+		if strings.Contains(item.path, "/channels") && !strings.Contains(string(raw), "effective_interval_minutes") {
+			t.Fatalf("%s %s missing schedule fields: %s", item.method, item.path, string(raw))
 		}
 	}
 }
@@ -295,6 +416,10 @@ func TestAdminActionRoutesReturnResultForAdmin(t *testing.T) {
 		{path: "/api/v1/admin/rebuild-events", action: "rebuild_events"},
 		{path: "/api/v1/admin/refresh-quality", action: "refresh_quality"},
 		{path: "/api/v1/admin/retry-low-quality-details?limit=5", action: "retry_low_quality_details"},
+		{path: "/api/v1/admin/detail-jobs/retry?channel_code=36kr&failure_reason=empty_content&limit=20", action: "batch_retry_detail_jobs"},
+		{path: "/api/v1/admin/detail-jobs/cancel?channel_code=36kr&failure_reason=empty_content&limit=20", action: "batch_cancel_detail_jobs"},
+		{path: "/api/v1/admin/detail-jobs/11/retry", action: "retry_detail_job"},
+		{path: "/api/v1/admin/detail-jobs/11/cancel", action: "cancel_detail_job"},
 		{path: "/api/v1/admin/archive-low-quality", action: "archive_low_quality"},
 		{path: "/api/v1/admin/archive-duplicate-titles", action: "archive_duplicate_titles"},
 	}
