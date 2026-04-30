@@ -83,6 +83,62 @@ def test_build_data_quality_report_counts_duplicate_and_missing_fields(session):
     assert report["samples"]["missing_semantics"][0]["source_id"] == "quality-001"
 
 
+def test_build_data_quality_report_separates_seed_from_real_detail_quality(session):
+    category, channel = _seed_category_and_channel(session)
+    session.add_all(
+        [
+            Info(
+                title="今日头条真实热榜",
+                content="今日头条真实热榜。hot",
+                category_id=category.id,
+                channel_id=channel.id,
+                source_id="real-toutiao-weak",
+                source_url="https://www.toutiao.com/trending/123/",
+                event_time=datetime(2026, 4, 29, 9, 0, 0),
+                detail_fetch_status="list_only",
+                detail_strategy="list_fallback",
+                detail_score=10,
+                detail_content_length=12,
+            ),
+            Info(
+                title="模拟完整详情",
+                content="这是一条模拟详情，用于初始化演示，不应该参与真实采集完整率。",
+                category_id=category.id,
+                channel_id=channel.id,
+                source_id="seed-complete",
+                source_url="https://example.com/seed",
+                event_time=datetime(2026, 4, 29, 10, 0, 0),
+                detail_fetch_status="complete",
+                detail_strategy="seed",
+                detail_score=100,
+                detail_content_length=80,
+            ),
+            Info(
+                title="真实完整详情",
+                content="真实完整详情包含足够长的正文、背景和影响分析，能够支撑用户阅读和事件聚合。",
+                category_id=category.id,
+                channel_id=channel.id,
+                source_id="real-complete",
+                source_url="https://example.com/real-complete",
+                event_time=datetime(2026, 4, 29, 11, 0, 0),
+                detail_fetch_status="complete",
+                detail_strategy="html_article",
+                detail_score=90,
+                detail_content_length=70,
+            ),
+        ]
+    )
+    session.commit()
+
+    report = build_data_quality_report(session)
+
+    assert report["info"]["total"] == 3
+    assert report["info"]["seed_detail_count"] == 1
+    assert report["info"]["real_detail_total"] == 2
+    assert report["info"]["real_complete_detail_count"] == 1
+    assert report["info"]["real_complete_detail_ratio"] == 50.0
+
+
 def test_admin_data_quality_report_api_returns_metrics(session):
     _seed_category_and_channel(session)
     session.commit()

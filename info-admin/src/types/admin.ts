@@ -54,6 +54,10 @@ export interface QualitySnapshot {
   empty_content_count: number
   low_detail_score_count: number
   missing_entity_count: number
+  seed_detail_count: number
+  real_detail_total: number
+  real_complete_detail_count: number
+  real_complete_detail_ratio: number
   snapshot_at: string
 }
 

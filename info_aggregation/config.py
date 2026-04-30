@@ -5,15 +5,17 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_ENV = os.getenv("APP_ENV", "local")
 DATA_DIR = os.getenv("DATA_DIR", BASE_DIR)
 
 # ==================== 数据库配置 ====================
-DB_TYPE = os.getenv("DB_TYPE", "sqlite")
-DB_HOST = os.getenv("DB_HOST", "localhost")
+DEFAULT_DB_TYPE = "sqlite" if APP_ENV == "test" else "mysql"
+DB_TYPE = os.getenv("DB_TYPE", DEFAULT_DB_TYPE)
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "info_aggregation")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "root1234")
+DB_NAME = os.getenv("DB_NAME", "info-max")
 
 if DB_TYPE == "sqlite":
     SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'info_aggregation.db')}"
@@ -57,6 +59,14 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # ==================== API配置 ====================
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8080,http://127.0.0.1:8080",
+    ).split(",")
+    if origin.strip()
+]
 
 # ==================== 信息分类枚举 ====================
 CATEGORY_HOT = "热点事件"

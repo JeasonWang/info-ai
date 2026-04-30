@@ -90,13 +90,17 @@ type ChannelHealth struct {
 }
 
 type QualitySnapshot struct {
-	CategoryCode        string `json:"category_code"`
-	TotalCount          int    `json:"total_count"`
-	DuplicateTitleCount int    `json:"duplicate_title_count"`
-	EmptyContentCount   int    `json:"empty_content_count"`
-	LowDetailScoreCount int    `json:"low_detail_score_count"`
-	MissingEntityCount  int    `json:"missing_entity_count"`
-	SnapshotAt          string `json:"snapshot_at"`
+	CategoryCode            string  `json:"category_code"`
+	TotalCount              int     `json:"total_count"`
+	DuplicateTitleCount     int     `json:"duplicate_title_count"`
+	EmptyContentCount       int     `json:"empty_content_count"`
+	LowDetailScoreCount     int     `json:"low_detail_score_count"`
+	MissingEntityCount      int     `json:"missing_entity_count"`
+	SeedDetailCount         int     `json:"seed_detail_count"`
+	RealDetailTotal         int     `json:"real_detail_total"`
+	RealCompleteDetailCount int     `json:"real_complete_detail_count"`
+	RealCompleteDetailRatio float64 `json:"real_complete_detail_ratio"`
+	SnapshotAt              string  `json:"snapshot_at"`
 }
 
 type LowQualityInfo struct {

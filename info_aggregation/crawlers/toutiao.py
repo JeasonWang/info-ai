@@ -5,10 +5,14 @@
 import hashlib
 import re
 from datetime import datetime
+from typing import Callable
 from urllib.parse import quote
 
 from .base import BaseCrawler
 from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+
+
+RenderedFetcher = Callable[[str], str]
 
 
 class ToutiaoCrawler(BaseCrawler):
@@ -22,8 +26,9 @@ class ToutiaoCrawler(BaseCrawler):
     DETAIL_API = "https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc"
     ARTICLE_API = "https://www.toutiao.com/article/{article_id}/"
 
-    def __init__(self):
+    def __init__(self, rendered_fetcher: RenderedFetcher | None = None):
         super().__init__("toutiao", "今日头条")
+        self.rendered_fetcher = rendered_fetcher
 
     def _merge_distinct_parts(self, parts: list[str], prefix: str = "") -> str:
         """按顺序合并正文片段，并去掉重复内容。"""
@@ -59,6 +64,25 @@ class ToutiaoCrawler(BaseCrawler):
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         return cleaned
 
+    def _extract_image_url(self, image_value) -> str:
+        if isinstance(image_value, dict):
+            return str(image_value.get("url") or image_value.get("uri") or "").strip()
+        return str(image_value or "").strip()
+
+    def _has_meaningful_detail_fields(self, title: str, parts: list[str]) -> bool:
+        normalized_title = re.sub(r"\s+", "", title or "")
+        for part in parts:
+            normalized_part = re.sub(r"\s+", "", str(part or ""))
+            if not normalized_part:
+                continue
+            if normalized_title and normalized_part in {normalized_title, f"标签：{normalized_title}"}:
+                continue
+            if normalized_part.lower() in {"hot", "标签：hot"}:
+                continue
+            if len(normalized_part) >= 18:
+                return True
+        return False
+
     def crawl(self) -> list:
         results = []
         try:
@@ -74,6 +98,8 @@ class ToutiaoCrawler(BaseCrawler):
                 source_id = hashlib.md5(f"toutiao_{cluster_id}".encode()).hexdigest()[:16]
                 hot_desc = item.get("HotDesc", "")
                 label = item.get("Label", "")
+                query_word = item.get("QueryWord", "")
+                hot_board_url = item.get("Url") or f"https://www.toutiao.com/trending/{cluster_id}/"
                 content_parts = [title]
                 if hot_desc and hot_desc != title:
                     content_parts.append(hot_desc)
@@ -84,7 +110,7 @@ class ToutiaoCrawler(BaseCrawler):
                     "source_id": source_id,
                     "title": title[:40],
                     "content": content[:500],
-                    "source_url": f"https://www.toutiao.com/trending/{cluster_id}/",
+                    "source_url": hot_board_url,
                     "event_time": datetime.now(),
                     "core_entity": title[:20],
                     "location": "",
@@ -93,6 +119,10 @@ class ToutiaoCrawler(BaseCrawler):
                     "_cluster_id": cluster_id,
                     "_hot_desc": hot_desc,
                     "_label": label,
+                    "_query_word": query_word,
+                    "_hot_board_url": hot_board_url,
+                    "_image_url": self._extract_image_url(item.get("Image")),
+                    "_interest_category": item.get("InterestCategory") or [],
                 })
         except Exception as e:
             self.logger.error(f"头条爬取异常: {e}")
@@ -112,6 +142,10 @@ class ToutiaoCrawler(BaseCrawler):
         search_content = self._fetch_search_content(item)
         if search_content:
             candidates.append(search_content)
+
+        rendered_content = self._fetch_rendered_content(item)
+        if rendered_content:
+            candidates.append(rendered_content)
 
         web_fallback = self._fetch_web_fallback(item)
         if web_fallback:
@@ -169,14 +203,14 @@ class ToutiaoCrawler(BaseCrawler):
                 content_parts.append(f"标签：{label}")
 
             combined = self._merge_distinct_parts(content_parts)
-            if combined:
+            if combined and self._has_meaningful_detail_fields(item.get("title", ""), content_parts):
                 return DetailStrategyResult(strategy="hot_board_detail", content=limit_detail_content(combined))
         except Exception:
             return None
         return None
 
     def _fetch_search_content(self, item: dict):
-        word = str(item.get("title", "")).strip()
+        word = str(item.get("_query_word") or item.get("title", "")).strip()
         if not word:
             return None
 
@@ -204,6 +238,92 @@ class ToutiaoCrawler(BaseCrawler):
         except Exception:
             return None
         return None
+
+    def _fetch_rendered_content(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+
+        try:
+            rendered_text = self._render_page_text(source_url)
+            cleaned = self._clean_rendered_text(rendered_text)
+            if cleaned:
+                title = str(item.get("title", "")).strip()
+                if title and title not in cleaned:
+                    cleaned = self._merge_distinct_parts([cleaned], prefix=title)
+                return DetailStrategyResult(strategy="rendered_page", content=limit_detail_content(cleaned))
+        except Exception:
+            return None
+        return None
+
+    def _render_page_text(self, source_url: str) -> str:
+        if self.rendered_fetcher:
+            return self.rendered_fetcher(source_url)
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception:
+            return ""
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                context = browser.new_context(
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    locale="zh-CN",
+                    viewport={"width": 1365, "height": 900},
+                )
+                page = context.new_page()
+                # 头条文章页会持续发起埋点/推荐请求，等待 networkidle 容易超时；
+                # DOM 就绪后短暂停顿更适合详情正文抽取。
+                page.goto(source_url, wait_until="domcontentloaded", timeout=18000)
+                page.wait_for_timeout(2500)
+                return page.locator("body").inner_text(timeout=5000)
+            finally:
+                browser.close()
+
+    def _clean_rendered_text(self, text: str) -> str:
+        raw_lines = [re.sub(r"\s+", " ", raw_line).strip() for raw_line in str(text or "").splitlines()]
+        compact_lines = [line for line in raw_lines if line]
+        if "事件详情" in compact_lines:
+            compact_lines = compact_lines[compact_lines.index("事件详情") + 1:]
+
+        lines = []
+        interaction_markers = {"分享", "评论", "赞", "查看更多"}
+        exact_noise = {
+            "您需要允许该网站执行 JavaScript",
+            "登录",
+            "注册",
+            "打开今日头条",
+            "今日头条",
+            "广告",
+            "关注",
+            "相关内容",
+        } | interaction_markers
+        stop_patterns = ("网友讨论", "评论区", "相关推荐", "热门评论", "举报", "热门：", "TA的热门作品")
+        for line in compact_lines:
+            if any(pattern in line for pattern in stop_patterns):
+                break
+            if line in interaction_markers and lines:
+                break
+            if line in exact_noise:
+                continue
+            if "热门事件阅读量" in line:
+                continue
+            if re.fullmatch(r"\d{1,2}:\d{2}", line):
+                continue
+            if re.search(r"(评论)?(分钟前|小时前|前天|昨天|刚刚)", line) and len(line) <= 35:
+                continue
+            if re.fullmatch(r"[+#]?\d+|[+#]\d+|[0-9]+\s*图", line):
+                continue
+            # 渲染页会包含作者、互动、频道导航等短文本；详情正文必须具备基本信息密度。
+            if len(line) < 28:
+                continue
+            lines.append(line)
+        return self._merge_distinct_parts(lines)
 
     def _fetch_web_fallback(self, item: dict):
         source_url = item.get("source_url", "")

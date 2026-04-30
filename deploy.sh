@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 信息达人 Pro - 一键部署脚本
+# 信息达人 Max - 一键部署脚本
 # 用法：
 #   ./deploy.sh prod local-build   # 在当前机器构建镜像并启动
 #   ./deploy.sh prod image-tar     # 加载 CI 上传的 images/info-ai-images.tar.gz 后启动
@@ -12,7 +12,7 @@ COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.yml}
 IMAGE_TAR=${IMAGE_TAR:-images/info-ai-images.tar.gz}
 
 echo "========================================"
-echo "信息达人 Pro 部署脚本"
+echo "信息达人 Max 部署脚本"
 echo "环境: ${ENV_NAME}"
 echo "模式: ${DEPLOY_MODE}"
 echo "========================================"
@@ -36,34 +36,45 @@ create_env_file() {
     fi
 
     local session_secret
-    if command -v openssl >/dev/null 2>&1; then
-        session_secret=$(openssl rand -hex 32)
-    else
-        session_secret="please-change-this-secret-before-production"
+    local mysql_password
+    local admin_password
+    if ! command -v openssl >/dev/null 2>&1; then
+        echo "错误: 生产环境首次部署需要 openssl 生成随机密钥，请先安装 openssl 或手动创建 .env。" >&2
+        exit 1
     fi
+    session_secret=$(openssl rand -hex 32)
+    mysql_password=$(openssl rand -base64 24 | tr -d '\n')
+    admin_password=$(openssl rand -base64 18 | tr -d '\n')
 
     cat > .env <<EOF
 # 数据库配置
-MYSQL_ROOT_PASSWORD=root1234
+MYSQL_ROOT_PASSWORD=${mysql_password}
 MYSQL_DATABASE=info-max
 DB_TYPE=mysql
 DB_USER=root
-DB_PASSWORD=root1234
+DB_PASSWORD=${mysql_password}
 DB_NAME=info-max
 LOG_LEVEL=INFO
 
 # info-serve 配置
-INFO_SERVE_MYSQL_DSN=root:root1234@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
+INFO_SERVE_MYSQL_DSN=root:${mysql_password}@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
 INFO_SERVE_SESSION_SECRET=${session_secret}
 INFO_ADMIN_EMAIL=admin@info-daren.local
-INFO_ADMIN_PASSWORD=Admin123456
+INFO_ADMIN_PASSWORD=${admin_password}
+
+# 渠道凭据配置。知乎高质量采集需要有效登录态；不配置时可运行，但知乎详情会降级。
+ZHIHU_COOKIE=
+ZHIHU_ZSE_93=
+ZHIHU_ZSE_96=
 
 # 浏览器访问 info-serve 的公开地址。
 # 本机部署可用 http://127.0.0.1:8080，服务器部署请改成真实域名或公网 IP。
 VITE_INFO_SERVE_BASE_URL=http://127.0.0.1:8080
 EOF
 
-    echo "已创建 .env 文件。首次部署会继续启动服务，生产环境请尽快检查数据库密码、会话密钥和前端 API 地址。"
+    echo "已创建 .env 文件并生成随机数据库密码、会话密钥和管理员初始密码。请妥善保存 .env。"
+    echo "管理员账号: admin@info-daren.local"
+    echo "管理员初始密码: ${admin_password}"
 }
 
 check_runtime() {

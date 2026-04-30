@@ -1,3 +1,5 @@
+# 历史单服务部署文件，仅用于单独调试采集服务。
+# Max 版本正式上线请使用仓库根目录 docker-compose.yml，它包含 MySQL、采集服务、业务 API、用户端和管理端。
 services:
   info-aggregation:
     image: info-aggregation:latest
@@ -10,12 +12,16 @@ services:
       LOG_DIR: /app/data/logs
       API_HOST: 0.0.0.0
       API_PORT: 8000
-      DB_TYPE: ${DB_TYPE:-sqlite}
+      DB_TYPE: ${DB_TYPE:-mysql}
       DB_HOST: ${DB_HOST:-}
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-}
       DB_PASSWORD: ${DB_PASSWORD:-}
-      DB_NAME: ${DB_NAME:-info_aggregation}
+      DB_NAME: ${DB_NAME:-info-max}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENABLE_SEED_DATA: ${ENABLE_SEED_DATA:-false}
+      ZHIHU_COOKIE: ${ZHIHU_COOKIE:-}
+      ZHIHU_ZSE_93: ${ZHIHU_ZSE_93:-}
+      ZHIHU_ZSE_96: ${ZHIHU_ZSE_96:-}
     volumes:
       - ./data:/app/data

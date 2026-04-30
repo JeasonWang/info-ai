@@ -17,6 +17,8 @@ def setup_logging():
 
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, LOG_LEVEL))
+    if root_logger.handlers:
+        root_logger.handlers.clear()
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)

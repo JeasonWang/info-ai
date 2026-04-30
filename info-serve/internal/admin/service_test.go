@@ -181,7 +181,7 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 			{ChannelCode: "weibo", ChannelName: "微博", HealthScore: 92, HealthLevel: "healthy"},
 		},
 		qualitySnapshots: []QualitySnapshot{
-			{CategoryCode: "all", TotalCount: 611},
+			{CategoryCode: "all", TotalCount: 611, SeedDetailCount: 2, RealDetailTotal: 20, RealCompleteDetailCount: 8, RealCompleteDetailRatio: 40.0},
 		},
 		lowQualityInfos: []LowQualityInfo{
 			{ID: 1, Title: "正文缺失", IssueReason: "正文为空"},
@@ -216,6 +216,9 @@ func TestServiceReturnsMonitoringLists(t *testing.T) {
 	}
 	if snapshots[0].TotalCount != 611 {
 		t.Fatalf("snapshots = %+v", snapshots)
+	}
+	if snapshots[0].SeedDetailCount != 2 || snapshots[0].RealCompleteDetailRatio != 40.0 {
+		t.Fatalf("snapshots missing real detail metrics: %+v", snapshots)
 	}
 
 	lowQualityInfos, err := service.ListLowQualityInfos(context.Background(), 5)

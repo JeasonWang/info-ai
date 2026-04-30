@@ -3,4 +3,4 @@
 --      管理后台修改采集间隔后，调度器可刷新 schedule_value 和 next_run_at。
 
 ALTER TABLE `crawl_task`
-  ADD COLUMN `schedule_version` INT NOT NULL DEFAULT 0 COMMENT '已同步的调度配置版本' AFTER `schedule_value`;
+  ADD COLUMN IF NOT EXISTS `schedule_version` INT NOT NULL DEFAULT 0 COMMENT '已同步的调度配置版本' AFTER `schedule_value`;

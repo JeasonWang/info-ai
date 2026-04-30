@@ -31,6 +31,7 @@ from services import parse_tech_content, rebuild_events
 from services.data_quality_report import save_data_quality_snapshot
 from services.detail_jobs import enqueue_low_quality_detail_jobs
 from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
+from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +204,34 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
                 logger.info(f"渠道 {channel_code}: 跳过近似重复内容 {item['title'][:30]}")
                 continue
 
+            detail_status = "pending"
+            detail_error = ""
+            detail_strategy = ""
+            detail_score = 0
+            detail_content_length = 0
+            detail_fetched_at = None
+            content = item["content"]
+            embedded_content = item.get("_search_content")
+            if embedded_content:
+                embedded_pipeline = run_detail_pipeline(
+                    title=item["title"],
+                    list_content=item["content"],
+                    strategy_results=[
+                        DetailStrategyResult(strategy="search_embedded", content=embedded_content)
+                    ],
+                )
+                if embedded_pipeline.status == "complete":
+                    content = embedded_pipeline.content
+                    detail_status = embedded_pipeline.status
+                    detail_error = embedded_pipeline.failure_reason
+                    detail_strategy = embedded_pipeline.strategy
+                    detail_score = embedded_pipeline.score
+                    detail_content_length = embedded_pipeline.content_length
+                    detail_fetched_at = datetime.now()
+
             info = Info(
                 title=item["title"],
-                content=item["content"],
+                content=content,
                 category_id=channel.category_id,
                 channel_id=channel.id,
                 source_id=item["source_id"],
@@ -215,7 +241,12 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
                 location=item.get("location", ""),
                 indicator_name=item.get("indicator_name", ""),
                 indicator_value=item.get("indicator_value", ""),
-                detail_fetch_status="pending",
+                detail_fetch_status=detail_status,
+                detail_fetch_error=detail_error,
+                detail_strategy=detail_strategy,
+                detail_score=detail_score,
+                detail_content_length=detail_content_length,
+                detail_fetched_at=detail_fetched_at,
             )
             session.add(info)
             session.flush()
@@ -260,6 +291,17 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
                 continue
 
             original_content = info.content or ""
+            if (
+                info.detail_fetch_status == "complete"
+                and (info.detail_score or 0) >= 80
+                and (info.detail_content_length or len(original_content)) >= 40
+            ):
+                detail_success_count += 1
+                logger.info(
+                    f"详情已完整，跳过重复爬取 [ID={info_id}] "
+                    f"策略={info.detail_strategy}: 内容{info.detail_content_length or len(original_content)}字"
+                )
+                continue
 
             detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
                 info.source_url, info.to_dict()

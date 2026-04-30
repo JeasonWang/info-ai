@@ -18,7 +18,6 @@ dist/
 
 # Local env and runtime files
 .env
-.env.*
 *.log
 *.db
 .runtime/

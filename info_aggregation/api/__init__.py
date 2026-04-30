@@ -6,11 +6,12 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 
+from config import CORS_ALLOWED_ORIGINS
 from database import (
     get_session,
     Category,
@@ -34,6 +35,69 @@ from services.data_quality_report import save_data_quality_snapshot
 from services.detail_job_report import build_detail_job_report
 
 logger = logging.getLogger(__name__)
+
+
+def _run_manual_crawl(channel_code: str):
+    """后台执行手动采集，避免管理后台 HTTP 请求被慢渠道阻塞。"""
+    from crawlers.registry import crawler_registry
+    from cleaners import clean_info_list
+    from scheduler import (
+        _fetch_details_for_items,
+        _record_crawl_run,
+        _save_crawled_data,
+        _sync_crawl_tasks,
+    )
+
+    started_at = datetime.now()
+    raw_count = 0
+    cleaned_count = 0
+    saved_count = 0
+    detail_result = {"detail_success_count": 0, "detail_failed_count": 0}
+    status = "success"
+    error_message = ""
+
+    try:
+        crawler = crawler_registry.get(channel_code)
+        if not crawler:
+            status = "failed"
+            error_message = f"渠道 {channel_code} 未注册"
+            return
+
+        raw_items = crawler.safe_crawl()
+        raw_count = len(raw_items)
+        cleaned_items = clean_info_list(raw_items)
+        cleaned_count = len(cleaned_items)
+        saved_ids = _save_crawled_data(channel_code, cleaned_items)
+        saved_count = len(saved_ids)
+        detail_result = _fetch_details_for_items(channel_code, saved_ids)
+        if detail_result["detail_failed_count"] > 0:
+            status = "partial"
+    except Exception as exc:
+        status = "failed"
+        error_message = str(exc)
+        logger.error(f"渠道 {channel_code} 手动采集失败: {exc}", exc_info=True)
+    finally:
+        session = get_session()
+        try:
+            _sync_crawl_tasks(session)
+            _record_crawl_run(
+                session,
+                channel_code=channel_code,
+                trigger_type="manual",
+                status=status,
+                raw_count=raw_count,
+                cleaned_count=cleaned_count,
+                saved_count=saved_count,
+                detail_success_count=detail_result["detail_success_count"],
+                detail_failed_count=detail_result["detail_failed_count"],
+                error_message=error_message,
+                started_at=started_at,
+                finished_at=datetime.now(),
+            )
+            rebuild_events(session)
+            save_data_quality_snapshot(session)
+        finally:
+            session.close()
 
 
 def _split_csv(raw_value: str) -> list[str]:
@@ -154,7 +218,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -826,7 +890,10 @@ def admin_archive_duplicate_titles():
 
 
 @app.post("/api/crawl/trigger")
-def trigger_crawl(channel_code: str = Query(..., description="渠道编码")):
+def trigger_crawl(
+    background_tasks: BackgroundTasks,
+    channel_code: str = Query(..., description="渠道编码"),
+):
     """
     手动触发指定渠道的爬取任务
     参数:
@@ -834,27 +901,18 @@ def trigger_crawl(channel_code: str = Query(..., description="渠道编码")):
     返回: 爬取结果
     """
     from crawlers.registry import crawler_registry
-    from cleaners import clean_info_list
-
     crawler = crawler_registry.get(channel_code)
     if not crawler:
         raise HTTPException(status_code=404, detail=f"渠道 {channel_code} 未注册")
 
-    raw_items = crawler.safe_crawl()
-    cleaned_items = clean_info_list(raw_items)
-
-    from scheduler import _save_crawled_data, _fetch_details_for_items
-
-    saved_ids = _save_crawled_data(channel_code, cleaned_items)
-    _fetch_details_for_items(channel_code, saved_ids)
+    background_tasks.add_task(_run_manual_crawl, channel_code)
 
     return {
         "code": 0,
-        "message": "success",
+        "message": "采集任务已提交，后台执行中",
         "data": {
             "channel": channel_code,
-            "raw_count": len(raw_items),
-            "cleaned_count": len(cleaned_items),
-            "detail_fetched": len(saved_ids),
+            "status": "accepted",
+            "trigger_type": "manual",
         },
     }

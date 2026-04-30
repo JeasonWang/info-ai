@@ -56,7 +56,12 @@ onMounted(loadData)
       <ul v-if="snapshots.length" class="data-list">
         <li v-for="item in snapshots" :key="`${item.category_code}-${item.snapshot_at}`">
           <strong>{{ item.category_code }} · {{ item.total_count }} 条</strong>
-          <span>重复 {{ item.duplicate_title_count }} / 缺正文 {{ item.empty_content_count }} / 缺实体 {{ item.missing_entity_count }}</span>
+          <span>
+            真实完整率 {{ item.real_complete_detail_ratio }}% ·
+            真实完整 {{ item.real_complete_detail_count }}/{{ item.real_detail_total }} ·
+            seed {{ item.seed_detail_count }}
+          </span>
+          <small>重复 {{ item.duplicate_title_count }} / 缺正文 {{ item.empty_content_count }} / 缺实体 {{ item.missing_entity_count }}</small>
         </li>
       </ul>
       <EmptyState v-else title="暂无质量快照" description="质量任务写入后会展示质量变化。" />

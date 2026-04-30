@@ -267,6 +267,10 @@ func (s *MySQLStore) ListQualitySnapshots(ctx context.Context, limit int) ([]adm
 		ctx,
 		`SELECT category_code, total_count, duplicate_title_count, empty_content_count,
        low_detail_score_count, missing_entity_count,
+       COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(snapshot_payload, '$.info.seed_detail_count')) AS UNSIGNED), 0),
+       COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(snapshot_payload, '$.info.real_detail_total')) AS UNSIGNED), 0),
+       COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(snapshot_payload, '$.info.real_complete_detail_count')) AS UNSIGNED), 0),
+       COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(snapshot_payload, '$.info.real_complete_detail_ratio')) AS DECIMAL(6,2)), 0),
        COALESCE(DATE_FORMAT(snapshot_at, '%Y-%m-%d %H:%i:%s'), '')
 FROM data_quality_snapshot
 ORDER BY snapshot_at DESC
@@ -287,6 +291,10 @@ LIMIT ?`,
 			&item.EmptyContentCount,
 			&item.LowDetailScoreCount,
 			&item.MissingEntityCount,
+			&item.SeedDetailCount,
+			&item.RealDetailTotal,
+			&item.RealCompleteDetailCount,
+			&item.RealCompleteDetailRatio,
 			&item.SnapshotAt,
 		); err != nil {
 			return nil, err

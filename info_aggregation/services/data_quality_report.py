@@ -45,6 +45,22 @@ def _is_incomplete_detail(info: Info) -> bool:
     return (info.detail_content_length or len(info.content or "")) < 30
 
 
+def _is_seed_detail(info: Info) -> bool:
+    """识别演示初始化数据，避免模拟完整详情污染真实采集质量口径。"""
+    return (info.detail_strategy or "").strip().lower() == "seed"
+
+
+def _is_real_complete_detail(info: Info) -> bool:
+    """判断非 seed 数据是否已经具备可阅读的完整详情。"""
+    if _is_seed_detail(info):
+        return False
+    return (
+        (info.detail_fetch_status or "").strip() == "complete"
+        and (info.detail_score or 0) >= 70
+        and (info.detail_content_length or len(info.content or "")) >= 40
+    )
+
+
 def _count_duplicate_titles(infos: list[Info]) -> int:
     """统计归一化标题重复的内容条数，不包含每组第一条。"""
     counter = Counter(normalize_text(info.title) for info in infos if normalize_text(info.title))
@@ -119,6 +135,9 @@ def build_data_quality_report(session) -> dict:
     low_quality_count = sum(1 for info in infos if is_low_quality_list_item(info.title, info.content))
     title_content_duplicate_count = sum(1 for info in infos if is_title_content_duplicate(info.title, info.content))
     incomplete_detail_count = sum(1 for info in infos if _is_incomplete_detail(info))
+    seed_detail_count = sum(1 for info in infos if _is_seed_detail(info))
+    real_detail_infos = [info for info in infos if not _is_seed_detail(info)]
+    real_complete_detail_count = sum(1 for info in real_detail_infos if _is_real_complete_detail(info))
     semantic_infos = [info for info in infos if _needs_semantic_fields(info)]
     missing_semantic_count = sum(1 for info in semantic_infos if _is_missing_semantic(info))
     duplicate_title_count = _count_duplicate_titles(infos)
@@ -143,6 +162,10 @@ def build_data_quality_report(session) -> dict:
             "title_content_duplicate_count": title_content_duplicate_count,
             "incomplete_detail_count": incomplete_detail_count,
             "incomplete_detail_ratio": _percent(incomplete_detail_count, len(infos)),
+            "seed_detail_count": seed_detail_count,
+            "real_detail_total": len(real_detail_infos),
+            "real_complete_detail_count": real_complete_detail_count,
+            "real_complete_detail_ratio": _percent(real_complete_detail_count, len(real_detail_infos)),
             "semantic_scope_total": len(semantic_infos),
             "missing_semantic_count": missing_semantic_count,
             "missing_semantic_ratio": _percent(missing_semantic_count, len(semantic_infos)),

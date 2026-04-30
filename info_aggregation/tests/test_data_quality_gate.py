@@ -6,7 +6,7 @@ from scheduler import _save_crawled_data
 from scheduler import _fetch_details_for_items
 from crawlers.registry import crawler_registry
 from services.detail_pipeline import DetailPipelineResult
-from sql.init_data import init_mock_data
+from sql.init_data import init_all_data, init_mock_data
 from services.data_maintenance import refresh_info_semantics
 from crawlers.sports_utils import extract_article_text
 
@@ -211,6 +211,16 @@ def test_seed_data_populates_tech_semantic_fields(session):
     ai_agent = session.query(Info).filter(Info.source_id == "mock_zh_001").first()
     assert ai_agent.tech_topic_type
     assert ai_agent.tech_keywords
+
+
+def test_init_all_data_skips_mock_data_unless_enabled(session, monkeypatch):
+    monkeypatch.delenv("ENABLE_SEED_DATA", raising=False)
+
+    init_all_data()
+
+    assert session.query(Category).count() > 0
+    assert session.query(Channel).count() > 0
+    assert session.query(Info).count() == 0
 
 
 def test_refresh_info_semantics_removes_stale_general_tech_and_populates_real_keywords(session):
