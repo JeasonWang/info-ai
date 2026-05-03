@@ -26,7 +26,7 @@ func (s *MySQLStore) ListEvents(ctx context.Context, params events.ListEventsPar
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT DISTINCT e.id, e.title, e.one_line_summary, c.code, c.name,
-		       e.heat_score, e.freshness_score, e.composite_score,
+		       e.heat_score, e.freshness_score, e.composite_score, e.last_updated_at,
 		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
 		       e.source_count
 FROM event AS e
@@ -50,6 +50,7 @@ JOIN category AS c ON c.id = e.primary_category_id `+whereSQL+` `+orderSQL+` LIM
 			&item.HeatScore,
 			&item.FreshnessScore,
 			&item.CompositeScore,
+			&item.LastUpdatedAt,
 			&item.LastUpdatedAt,
 			&item.SourceCount,
 		); err != nil {

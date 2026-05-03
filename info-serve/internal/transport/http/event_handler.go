@@ -1,6 +1,7 @@
 package transporthttp
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ func (h *EventHandler) List(w http.ResponseWriter, r *http.Request) {
 		PageSize:     pageSize,
 	})
 	if err != nil {
+		log.Printf("[ERROR] ListEvents failed: %v", err)
 		response.InternalServerError(w, "事件列表查询失败")
 		return
 	}

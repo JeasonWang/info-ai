@@ -2,7 +2,7 @@
 import { onLoad, onPullDownRefresh, onReachBottom, onPageScroll } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import EventList from '@/components/EventList.vue'
-import EventCategoryTabs from '@/components/EventCategoryTabs.vue'
+import FilterPanel from '@/components/FilterPanel.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import {
@@ -204,18 +204,22 @@ function onShareTimeline() {
       </view>
     </view>
 
-    <!-- 筛选与分类 -->
+    <!-- 搜索框 -->
     <FilterBar
       :keyword="keyword"
-      :sort-mode="sortMode"
       @search="onSearch"
-      @sort-change="onSortChange"
     />
-    <EventCategoryTabs
-      :categories="categories"
-      :active-code="activeCategoryCode"
-      @change="onCategoryChange"
-    />
+
+    <!-- 筛选面板（分类+排序） -->
+    <view style="margin-top: 16rpx; margin-bottom: 16rpx;">
+      <FilterPanel
+        :categories="categories"
+        :active-code="activeCategoryCode"
+        :sort-mode="sortMode"
+        @category-change="onCategoryChange"
+        @sort-change="onSortChange"
+      />
+    </view>
 
     <SkeletonBlock v-if="loading && events.length === 0" />
 
