@@ -5,6 +5,7 @@
 import re
 import logging
 from datetime import datetime
+from urllib.parse import urlsplit, urlunsplit
 
 from services.data_quality import content_fingerprint, is_low_quality_list_item
 
@@ -56,6 +57,11 @@ def clean_source_url(url: str) -> str:
     url = url.strip()
     if not url.startswith(("http://", "https://")):
         return ""
+    if len(url) > 500:
+        parsed = urlsplit(url)
+        url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    if len(url) > 500:
+        url = url[:500]
     return url
 
 
@@ -75,7 +81,8 @@ def clean_info_item(item: dict) -> dict:
         return None
 
     content = clean_content(item.get("content", ""))
-    if is_low_quality_list_item(title, content):
+    allow_title_only = bool(item.get("_allow_title_only"))
+    if is_low_quality_list_item(title, content) and not allow_title_only:
         return None
 
     source_url = clean_source_url(item.get("source_url", ""))

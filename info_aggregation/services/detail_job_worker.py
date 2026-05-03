@@ -27,10 +27,11 @@ def crawler_detail_runner(info: Info, html_fetcher=None) -> DetailPipelineResult
             matched_rules=["crawler_not_registered"],
         )
 
-    detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
-        info.source_url,
-        info.to_dict(),
-    )
+    with crawler_registry.get_lock(channel_code):
+        detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
+            info.source_url,
+            info.to_dict(),
+        )
     pipeline.content = detail_content or pipeline.content
     pipeline.status = status
     pipeline.failure_reason = error_msg or pipeline.failure_reason

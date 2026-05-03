@@ -63,7 +63,8 @@ def _run_manual_crawl(channel_code: str):
             error_message = f"渠道 {channel_code} 未注册"
             return
 
-        raw_items = crawler.safe_crawl()
+        with crawler_registry.get_lock(channel_code):
+            raw_items = crawler.safe_crawl()
         raw_count = len(raw_items)
         cleaned_items = clean_info_list(raw_items)
         cleaned_count = len(cleaned_items)

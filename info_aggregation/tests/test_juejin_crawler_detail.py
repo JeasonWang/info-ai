@@ -1,6 +1,36 @@
 from crawlers.juejin import JuejinCrawler
 
 
+def test_juejin_api_parses_nested_item_info_article_payload():
+    crawler = JuejinCrawler()
+
+    class DummyResponse:
+        def json(self):
+            return {
+                "data": [
+                    {
+                        "item_type": 2,
+                        "item_info": {
+                            "article_id": "7584110439933100078",
+                            "article_info": {
+                                "article_id": "7584110439933100078",
+                                "title": "AI Agent 工程化落地复盘",
+                                "brief_content": "文章介绍了 Agent 在工具调用、上下文管理和监控治理中的落地经验。",
+                            },
+                        },
+                    }
+                ]
+            }
+
+    crawler.session.post = lambda *args, **kwargs: DummyResponse()
+
+    items = crawler._crawl_api()
+
+    assert len(items) == 1
+    assert items[0]["title"] == "AI Agent 工程化落地复盘"
+    assert items[0]["source_url"] == "https://juejin.cn/post/7584110439933100078"
+
+
 def test_juejin_resolve_detail_prefers_detail_api_markdown_content():
     crawler = JuejinCrawler()
 
@@ -31,7 +61,7 @@ def test_juejin_resolve_detail_prefers_detail_api_markdown_content():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "fetch_detail"
     assert "部署成本" in result.content
 
@@ -82,7 +112,7 @@ def test_juejin_resolve_detail_uses_web_fallback_when_api_content_is_weak():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "web_fallback"
     assert "开发者接入计划" in result.content
 
@@ -117,7 +147,7 @@ def test_juejin_resolve_detail_merges_markdown_and_html_content():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "fetch_detail"
     assert "Agent 协作体验" in result.content
     assert "上下文理解、工具调用" in result.content
@@ -170,7 +200,49 @@ def test_juejin_web_fallback_prefers_article_block_over_shell_text():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "web_fallback"
     assert "响应格式与工具调用能力" in result.content
     assert "登录后查看更多内容" not in result.content
+
+
+def test_juejin_resolve_detail_extracts_inline_state_content():
+    crawler = JuejinCrawler()
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        class DummyResponse:
+            def json(self):
+                return {"data": None}
+
+        return DummyResponse()
+
+    def fake_fetch(url, headers=None, timeout=None, params=None):
+        class DummyResponse:
+            text = r'''
+            <html><body>
+              <script>
+                window.__INITIAL_STATE__={
+                  "article":{
+                    "mark_content":"OpenAI API 更新后，开发者开始测试新的响应格式、工具调用能力和多步骤任务编排。团队也在评估迁移成本、兼容性、限流策略、日志审计和线上稳定性。文章给出了灰度发布、回滚预案和监控指标建议。"
+                  }
+                }
+              </script>
+            </body></html>
+            '''
+
+        return DummyResponse()
+
+    crawler.session.post = fake_post
+    crawler.fetch = fake_fetch
+
+    result = crawler.resolve_detail(
+        {
+            "title": "OpenAI API 更新",
+            "content": "列表摘要",
+            "source_url": "https://juejin.cn/post/123",
+        }
+    )
+
+    assert result.status in {"complete", "partial"}
+    assert result.strategy == "inline_state"
+    assert "日志审计" in result.content

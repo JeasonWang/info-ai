@@ -3,9 +3,12 @@
 爬取36氪AI/大模型相关热门文章，并深入爬取详情页获取完整内容
 """
 import hashlib
+import html as html_lib
 import json
 import re
+import time
 from datetime import datetime
+from xml.etree import ElementTree
 
 from .base import BaseCrawler
 from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
@@ -22,6 +25,7 @@ class Kr36Crawler(BaseCrawler):
     DETAIL_API = "https://gateway.36kr.com/api/mis/article/detail"
     HOT_URL = "https://36kr.com/hot-list/catalog"
     AI_URL = "https://36kr.com/information/AI"
+    GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q=site:36kr.com%2036%E6%B0%AA%20AI%20OR%20%E7%A7%91%E6%8A%80&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
 
     def __init__(self):
         super().__init__("36kr", "36氪")
@@ -32,6 +36,16 @@ class Kr36Crawler(BaseCrawler):
         cleaned = re.sub(r'<[^>]+>', '', cleaned)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
         return cleaned
+
+    def _is_challenge_page(self, html: str) -> bool:
+        markers = (
+            "sec_sdk_build",
+            "captchaOptions",
+            "验证后继续访问",
+            "滑块验证",
+            "异常访问",
+        )
+        return any(marker in (html or "") for marker in markers)
 
     def _merge_distinct_parts(self, parts: list[str], prefix: str = "") -> str:
         """按顺序合并 36 氪正文片段，并尽量去掉包含式重复。"""
@@ -62,6 +76,10 @@ class Kr36Crawler(BaseCrawler):
 
     def _extract_web_fallback_content(self, html: str, title: str) -> str:
         """优先抽取正文块，减少壳页面和推荐区噪声进入兜底正文。"""
+        initial_state_content = self._extract_initial_state_article_content(html)
+        if initial_state_content:
+            return initial_state_content
+
         block_patterns = [
             r"<article[^>]*>(.*?)</article>",
             r'<div[^>]*class="[^"]*(?:article-content|content|article|detail|body)[^"]*"[^>]*>(.*?)</div>',
@@ -87,6 +105,33 @@ class Kr36Crawler(BaseCrawler):
             return fallback_text
         return fallback_text
 
+    def _extract_initial_state_article_content(self, html: str) -> str:
+        marker = "window.initialState="
+        start = html.find(marker)
+        while start >= 0:
+            json_start = start + len(marker)
+            script_end = html.find("</script>", json_start)
+            if script_end < 0:
+                script_end = len(html)
+            raw_json = html[json_start:script_end].strip().rstrip(";")
+            try:
+                state = json.loads(raw_json)
+            except json.JSONDecodeError:
+                start = html.find(marker, json_start)
+                continue
+            data = (
+                state.get("articleDetail", {})
+                .get("articleDetailData", {})
+                .get("data", {})
+            )
+            if not isinstance(data, dict):
+                return ""
+            title = self._clean_content_text(data.get("widgetTitle", ""))
+            summary = self._clean_content_text(data.get("summary", ""))
+            body = self._clean_content_text(data.get("widgetContent", ""))
+            return self._merge_distinct_parts([title, summary, body])
+        return ""
+
     def crawl(self) -> list:
         results = []
         try:
@@ -102,13 +147,29 @@ class Kr36Crawler(BaseCrawler):
                 return results
         except Exception as e:
             self.logger.error(f"36氪爬取异常: {e}")
+
+        try:
+            results = self._crawl_google_news_index()
+            if results:
+                return results
+        except Exception as e:
+            self.logger.warning(f"36氪新闻索引兜底失败: {e}")
         return results
 
     def _crawl_api(self) -> list:
         headers = self._build_headers()
         headers["Referer"] = "https://36kr.com/"
         headers["Content-Type"] = "application/json"
-        payload = json.dumps({"partner_id": "wap", "pageSize": 20})
+        payload = json.dumps({
+            "partner_id": "wap",
+            "timestamp": int(time.time() * 1000),
+            "param": {
+                "pageSize": 20,
+                "pageEvent": 0,
+                "siteId": 1,
+                "platformId": 2,
+            },
+        })
         response = self.session.post(
             self.HOT_API,
             data=payload,
@@ -121,22 +182,50 @@ class Kr36Crawler(BaseCrawler):
             items = data.get("data", {}).get("items", [])
         results = []
         for item in items[:20]:
-            title = item.get("title", "").strip()
+            material = item.get("templateMaterial", {}) or {}
+            title = (
+                item.get("title")
+                or material.get("widgetTitle")
+                or material.get("title")
+                or ""
+            ).strip()
             if not title:
                 continue
-            article_id = item.get("entityId", item.get("id", ""))
+            article_id = item.get("entityId") or item.get("id") or item.get("itemId") or material.get("itemId")
             source_id = hashlib.md5(f"36kr_{article_id}".encode()).hexdigest()[:16]
-            summary = item.get("summary", item.get("description", title))[:500]
+            summary = (
+                item.get("summary")
+                or item.get("description")
+                or material.get("summary")
+                or material.get("subTitle")
+                or title
+            )
+            stat_parts = []
+            for key, label in (
+                ("authorName", "作者"),
+                ("statRead", "阅读"),
+                ("statPraise", "点赞"),
+                ("statCollect", "收藏"),
+                ("statComment", "评论"),
+            ):
+                value = material.get(key)
+                if value not in (None, "", 0, "0"):
+                    stat_parts.append(f"{label}{value}")
+            content_parts = [summary]
+            if stat_parts:
+                content_parts.append("热度：" + "，".join(stat_parts))
             results.append({
                 "source_id": source_id,
                 "title": title[:40],
-                "content": summary,
-                "source_url": f"https://36kr.com/p/{article_id}",
+                "content": "。".join(part for part in content_parts if part)[:500],
+                "source_url": f"https://www.36kr.com/p/{article_id}",
                 "event_time": datetime.now(),
                 "core_entity": title[:20],
                 "location": "",
                 "indicator_name": "",
                 "indicator_value": "",
+                "_allow_title_only": True,
+                "_kr36_source": "hot_api",
             })
         return results
 
@@ -156,6 +245,8 @@ class Kr36Crawler(BaseCrawler):
 
     def _parse_article_list(self, html: str) -> list:
         results = []
+        if self._is_challenge_page(html):
+            return results
         try:
             match = re.search(r'window\.initialState\s*=\s*({.*?});\s*</script>', html, re.DOTALL)
             if match:
@@ -177,12 +268,13 @@ class Kr36Crawler(BaseCrawler):
                         "source_id": source_id,
                         "title": title[:40],
                         "content": summary,
-                        "source_url": f"https://36kr.com/p/{article_id}",
+                        "source_url": f"https://www.36kr.com/p/{article_id}",
                         "event_time": datetime.now(),
                         "core_entity": title[:20],
                         "location": "",
                         "indicator_name": "",
                         "indicator_value": "",
+                        "_allow_title_only": True,
                     })
         except Exception as e:
             self.logger.warning(f"36氪页面解析失败: {e}")
@@ -200,14 +292,57 @@ class Kr36Crawler(BaseCrawler):
                     "source_id": source_id,
                     "title": title[:40],
                     "content": title[:500],
-                    "source_url": f"https://36kr.com/p/{article_id}",
+                    "source_url": f"https://www.36kr.com/p/{article_id}",
                     "event_time": datetime.now(),
                     "core_entity": title[:20],
                     "location": "",
                     "indicator_name": "",
                     "indicator_value": "",
+                    "_allow_title_only": True,
                 })
         return results
+
+    def _crawl_google_news_index(self) -> list:
+        """主入口被安全挑战拦截时，用新闻索引恢复真实 36 氪线索。"""
+        headers = self._build_headers()
+        headers["Referer"] = "https://news.google.com/"
+        response = self.fetch(self.GOOGLE_NEWS_RSS, headers=headers, timeout=12)
+        root = ElementTree.fromstring(response.text)
+        results = []
+        seen = set()
+        for item in root.findall(".//item")[:30]:
+            raw_title = self._xml_text(item, "title")
+            link = self._xml_text(item, "link")
+            source = self._xml_text(item, "source")
+            description = self._clean_content_text(html_lib.unescape(self._xml_text(item, "description")))
+            if source and "36" not in source and "氪" not in source.lower():
+                continue
+            title = re.sub(r"\s+-\s+36氪\s*$", "", raw_title).strip()
+            if not title or not link or title in seen:
+                continue
+            seen.add(title)
+            source_id = hashlib.md5(f"36kr_google_news_{title}".encode()).hexdigest()[:16]
+            summary = description or title
+            results.append({
+                "source_id": source_id,
+                "title": title[:40],
+                "content": summary[:500],
+                "source_url": link,
+                "event_time": datetime.now(),
+                "core_entity": title[:20],
+                "location": "",
+                "indicator_name": "",
+                "indicator_value": "",
+                "_allow_title_only": True,
+                "_kr36_source": "google_news_index",
+            })
+            if len(results) >= 20:
+                break
+        return results
+
+    def _xml_text(self, item, tag: str) -> str:
+        node = item.find(tag)
+        return (node.text or "").strip() if node is not None else ""
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
         return self.resolve_detail(item).content
@@ -227,6 +362,7 @@ class Kr36Crawler(BaseCrawler):
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
 
     def _fetch_api_detail(self, item: dict):
@@ -246,6 +382,9 @@ class Kr36Crawler(BaseCrawler):
                 headers=headers,
                 timeout=15,
             )
+            response_headers = getattr(response, "headers", {}) or {}
+            if response_headers and "json" not in response_headers.get("content-type", "").lower():
+                return None
             data = response.json()
             article_data = data.get("data", {}).get("articleDetail", {})
             if not article_data:
@@ -311,6 +450,8 @@ class Kr36Crawler(BaseCrawler):
             headers["Content-Type"] = "application/json"
             response = self.fetch(source_url, headers=headers)
             html = response.text
+            if self._is_challenge_page(html):
+                return None
 
             text = self._extract_web_fallback_content(html, item.get("title", ""))
             if text and len(text) >= 20:

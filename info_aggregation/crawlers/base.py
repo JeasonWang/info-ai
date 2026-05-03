@@ -181,6 +181,7 @@ class BaseCrawler(ABC):
             strategy_results=[
                 DetailStrategyResult(strategy="fetch_detail", content=detail),
             ],
+            channel_code=self.channel_code,
         )
 
     def _extract_text_from_html(self, html: str) -> str:

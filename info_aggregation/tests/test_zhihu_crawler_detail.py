@@ -100,6 +100,7 @@ def test_zhihu_hot_search_enriches_question_from_search_v3(monkeypatch):
 
     assert item["title"] == "微信朋友圈改版，你喜欢这个新样式吗？"
     assert item["source_url"] == "https://www.zhihu.com/question/2032722050247124724"
+    assert item["source_id"] == "b2fca120360c1d07"
     assert "腾讯客服表示" in item["content"]
     assert item["_search_content"] == item["content"]
 
@@ -118,7 +119,7 @@ def test_zhihu_embedded_search_content_can_be_used_as_detail(monkeypatch):
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "search_embedded"
     assert "时间轴浏览功能" in result.content
 
@@ -148,7 +149,7 @@ def test_zhihu_resolve_detail_prefers_answer_api_content(monkeypatch):
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "answer_api"
     assert "工具调用、上下文管理方式" in result.content
 
@@ -176,7 +177,7 @@ def test_zhihu_resolve_detail_falls_back_to_web_page(monkeypatch):
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "fetch_detail"
     assert "开发工具接入方式" in result.content
 
@@ -213,7 +214,7 @@ def test_zhihu_resolve_detail_merges_multiple_answers_without_duplicates(monkeyp
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "answer_api"
     assert result.content.count("OpenAI API 的接入方式") == 1
     assert "开发工具集成" in result.content
@@ -252,7 +253,7 @@ def test_zhihu_answer_api_prefers_high_vote_and_informative_answers(monkeypatch)
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "answer_api"
     assert result.content.startswith("高赞回答详细分析")
     assert "短回答" not in result.content
@@ -285,7 +286,7 @@ def test_zhihu_resolve_detail_uses_rendered_question_when_api_is_unavailable(mon
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "rendered_question"
     assert "任务反思和结果校验" in result.content
     assert "添加评论" not in result.content

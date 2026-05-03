@@ -10,7 +10,7 @@ import (
 
 func (s *MySQLStore) ListEvents(ctx context.Context, params events.ListEventsParams) (events.EventPage, error) {
 	whereSQL, args := buildEventWhere(params)
-	countSQL := `SELECT COUNT(*) FROM event AS e JOIN category AS c ON c.id = e.primary_category_id ` + whereSQL
+	countSQL := `SELECT COUNT(DISTINCT e.id) FROM event AS e JOIN category AS c ON c.id = e.primary_category_id ` + whereSQL
 
 	var total int
 	if err := s.db.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
@@ -25,7 +25,7 @@ func (s *MySQLStore) ListEvents(ctx context.Context, params events.ListEventsPar
 	listArgs := append(args, params.PageSize, offset)
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT e.id, e.title, e.one_line_summary, c.code, c.name,
+		`SELECT DISTINCT e.id, e.title, e.one_line_summary, c.code, c.name,
 		       e.heat_score, e.freshness_score, e.composite_score,
 		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
 		       e.source_count
@@ -140,6 +140,19 @@ func buildEventWhere(params events.ListEventsParams) (string, []any) {
 	if params.CategoryCode != "" && params.CategoryCode != "all" {
 		clauses = append(clauses, "c.code = ?")
 		args = append(args, params.CategoryCode)
+	}
+	if strings.TrimSpace(params.ChannelCode) != "" && strings.TrimSpace(params.ChannelCode) != "all" {
+		clauses = append(
+			clauses,
+			`EXISTS (
+				SELECT 1
+				FROM event_item_link AS filter_link
+				JOIN info AS filter_info ON filter_info.id = filter_link.item_id
+				JOIN channel AS filter_channel ON filter_channel.id = filter_info.channel_id
+				WHERE filter_link.event_id = e.id AND filter_channel.code = ?
+			)`,
+		)
+		args = append(args, strings.TrimSpace(params.ChannelCode))
 	}
 	if strings.TrimSpace(params.Keyword) != "" {
 		keyword := "%" + strings.TrimSpace(params.Keyword) + "%"

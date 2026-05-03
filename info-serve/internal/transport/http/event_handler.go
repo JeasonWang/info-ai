@@ -28,6 +28,7 @@ func (h *EventHandler) List(w http.ResponseWriter, r *http.Request) {
 	pageSize, _ := strconv.Atoi(query.Get("page_size"))
 	result, err := h.service.ListEvents(r.Context(), events.ListEventsParams{
 		CategoryCode: query.Get("category_code"),
+		ChannelCode:  query.Get("channel_code"),
 		Keyword:      query.Get("keyword"),
 		Sort:         query.Get("sort"),
 		Page:         page,

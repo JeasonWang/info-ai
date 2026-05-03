@@ -1,0 +1,53 @@
+{
+  "pages": [
+    {
+      "path": "pages/home/home",
+      "style": {
+        "navigationBarTitleText": "InfoMVP",
+        "enablePullDownRefresh": true,
+        "backgroundColor": "#f7f8fa"
+      }
+    },
+    {
+      "path": "pages/info-detail/info-detail",
+      "style": {
+        "navigationBarTitleText": "详情",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    {
+      "path": "pages/event-detail/event-detail",
+      "style": {
+        "navigationBarTitleText": "事件详情",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "backgroundColor": "#f7f8fa"
+      }
+    },
+    {
+      "path": "pages/favorites/favorites",
+      "style": {
+        "navigationBarTitleText": "我的收藏",
+        "backgroundColor": "#f7f8fa"
+      }
+    },
+    {
+      "path": "pages/history/history",
+      "style": {
+        "navigationBarTitleText": "阅读历史",
+        "backgroundColor": "#f7f8fa"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "InfoMVP",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f7f8fa"
+  }
+}

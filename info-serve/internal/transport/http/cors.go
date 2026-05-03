@@ -9,6 +9,8 @@ var allowedBrowserOrigins = map[string]bool{
 	"http://127.0.0.1:5173": true,
 	"http://localhost:5174": true,
 	"http://127.0.0.1:5174": true,
+	"http://localhost:5175": true,
+	"http://127.0.0.1:5175": true,
 	"http://localhost:8081": true,
 	"http://127.0.0.1:8081": true,
 }

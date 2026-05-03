@@ -99,7 +99,8 @@ class ToutiaoCrawler(BaseCrawler):
                 hot_desc = item.get("HotDesc", "")
                 label = item.get("Label", "")
                 query_word = item.get("QueryWord", "")
-                hot_board_url = item.get("Url") or f"https://www.toutiao.com/trending/{cluster_id}/"
+                raw_hot_board_url = item.get("Url") or ""
+                hot_board_url = f"https://www.toutiao.com/trending/{cluster_id}/" if cluster_id else raw_hot_board_url
                 content_parts = [title]
                 if hot_desc and hot_desc != title:
                     content_parts.append(hot_desc)
@@ -120,7 +121,7 @@ class ToutiaoCrawler(BaseCrawler):
                     "_hot_desc": hot_desc,
                     "_label": label,
                     "_query_word": query_word,
-                    "_hot_board_url": hot_board_url,
+                    "_hot_board_url": raw_hot_board_url or hot_board_url,
                     "_image_url": self._extract_image_url(item.get("Image")),
                     "_interest_category": item.get("InterestCategory") or [],
                 })
@@ -138,24 +139,41 @@ class ToutiaoCrawler(BaseCrawler):
         hot_board_detail = self._fetch_hot_board_detail(item)
         if hot_board_detail:
             candidates.append(hot_board_detail)
+            result = self._run_detail_pipeline(item, candidates)
+            if self._is_good_enough_without_render(result):
+                return result
 
         search_content = self._fetch_search_content(item)
         if search_content:
             candidates.append(search_content)
+            result = self._run_detail_pipeline(item, candidates)
+            if self._is_good_enough_without_render(result):
+                return result
+
+        web_fallback = self._fetch_web_fallback(item)
+        if web_fallback:
+            candidates.append(web_fallback)
+            result = self._run_detail_pipeline(item, candidates)
+            if self._is_good_enough_without_render(result):
+                return result
 
         rendered_content = self._fetch_rendered_content(item)
         if rendered_content:
             candidates.append(rendered_content)
 
-        web_fallback = self._fetch_web_fallback(item)
-        if web_fallback:
-            candidates.append(web_fallback)
+        return self._run_detail_pipeline(item, candidates)
 
+    def _run_detail_pipeline(self, item: dict, candidates: list[DetailStrategyResult]):
         return run_detail_pipeline(
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
+
+    def _is_good_enough_without_render(self, result) -> bool:
+        """轻量详情已具备可分析上下文时，避免为热榜短内容继续启动浏览器。"""
+        return result.status == "complete" or (result.status == "partial" and result.score >= 60)
 
     def _build_detail_headers(self) -> dict:
         headers = self._build_headers()

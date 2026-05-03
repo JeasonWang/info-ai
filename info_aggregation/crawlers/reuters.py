@@ -3,11 +3,15 @@
 爬取路透社国际新闻，并深入爬取详情页获取完整内容
 """
 import hashlib
+import html as html_lib
+import json
 import re
 from datetime import datetime
+from xml.etree import ElementTree
 
 from .base import BaseCrawler
-from services.detail_pipeline import limit_detail_content
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.html_article_extractor import HtmlArticleExtractor
 
 
 class ReutersCrawler(BaseCrawler):
@@ -20,6 +24,16 @@ class ReutersCrawler(BaseCrawler):
     NEWS_API = "https://www.reuters.com/pf/api/v3/content/fetch/articles-by-section-alias-or-id-v1"
     RSS_URL = "https://www.reutersagency.com/feed/"
     WORLD_URL = "https://www.reuters.com/world/"
+    ARTICLE_API = "https://www.reuters.com/pf/api/v3/content/fetch/article-by-id-or-url-v1"
+    NEWS_SITEMAP = "https://www.reuters.com/arc/outboundfeeds/news-sitemap/?outputType=xml"
+    GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q=site:reuters.com%20Reuters%20world&hl=en-US&gl=US&ceid=US:en"
+    SITEMAP_CATEGORY_PREFIXES = (
+        "https://www.reuters.com/world/",
+        "https://www.reuters.com/business/",
+        "https://www.reuters.com/markets/",
+        "https://www.reuters.com/technology/",
+        "https://www.reuters.com/legal/",
+    )
 
     def __init__(self):
         super().__init__("reuters", "路透社")
@@ -46,6 +60,65 @@ class ReutersCrawler(BaseCrawler):
                 return results
         except Exception as e:
             self.logger.error(f"路透社爬取异常: {e}")
+
+        try:
+            results = self._crawl_news_sitemap()
+            if results:
+                return results
+        except Exception as e:
+            self.logger.warning(f"路透社新闻 sitemap 兜底失败: {e}")
+
+        try:
+            results = self._crawl_google_news_index()
+            if results:
+                return results
+        except Exception as e:
+            self.logger.warning(f"路透社新闻索引兜底失败: {e}")
+        return results
+
+    def _crawl_news_sitemap(self) -> list:
+        """Reuters 官方网页入口 401 时，使用公开新闻 sitemap 恢复官方 URL 与发布时间。"""
+        headers = self._build_headers()
+        headers["Accept"] = "application/xml,text/xml,*/*"
+        headers["Referer"] = "https://www.reuters.com/"
+        response = self.fetch(self.NEWS_SITEMAP, headers=headers, timeout=12)
+        root = ElementTree.fromstring(response.text.strip())
+        ns = {
+            "sm": "http://www.sitemaps.org/schemas/sitemap/0.9",
+            "news": "http://www.google.com/schemas/sitemap-news/0.9",
+        }
+        results = []
+        seen = set()
+        for url_node in root.findall("sm:url", ns):
+            source_url = url_node.findtext("sm:loc", default="", namespaces=ns).strip()
+            if not source_url.startswith(self.SITEMAP_CATEGORY_PREFIXES):
+                continue
+            title = url_node.findtext("news:news/news:title", default="", namespaces=ns).strip()
+            published_at = url_node.findtext("news:news/news:publication_date", default="", namespaces=ns).strip()
+            if not title or source_url in seen:
+                continue
+            seen.add(source_url)
+            source_id = hashlib.md5(f"reuters_sitemap_{source_url}".encode()).hexdigest()[:16]
+            metadata = self._merge_distinct_parts([
+                title,
+                f"Reuters Published at {published_at} according to its official news sitemap." if published_at else "Reuters published this item according to its official news sitemap.",
+                f"Official Reuters URL: {source_url}",
+            ])
+            results.append({
+                "source_id": source_id,
+                "title": title[:40],
+                "content": metadata[:500],
+                "source_url": source_url,
+                "event_time": datetime.now(),
+                "core_entity": title[:20],
+                "location": "",
+                "indicator_name": "published_at" if published_at else "",
+                "indicator_value": published_at[:100],
+                "_allow_title_only": True,
+                "_reuters_source": "news_sitemap",
+            })
+            if len(results) >= 20:
+                break
         return results
 
     def _crawl_api(self) -> list:
@@ -141,55 +214,184 @@ class ReutersCrawler(BaseCrawler):
             })
         return results
 
+    def _crawl_google_news_index(self) -> list:
+        """Reuters 官方入口不可访问时，使用新闻索引恢复真实 Reuters 线索，不伪造正文。"""
+
+        headers = self._build_headers()
+        headers["Referer"] = "https://news.google.com/"
+        response = self.fetch(self.GOOGLE_NEWS_RSS, headers=headers, timeout=12)
+        root = ElementTree.fromstring(response.text)
+        results = []
+        seen = set()
+        for item in root.findall(".//item")[:30]:
+            raw_title = self._xml_text(item, "title")
+            link = self._xml_text(item, "link")
+            description = self._clean_detail_text(html_lib.unescape(self._xml_text(item, "description")))
+            source = self._xml_text(item, "source")
+            if source and "Reuters" not in source:
+                continue
+            title = re.sub(r"\s+-\s+Reuters\s*$", "", raw_title).strip()
+            if not title or not link or title in seen:
+                continue
+            seen.add(title)
+            source_id = hashlib.md5(f"reuters_google_news_{title}".encode()).hexdigest()[:16]
+            summary = description or f"Reuters indexed news item: {title}"
+            results.append({
+                "source_id": source_id,
+                "title": title[:40],
+                "content": summary[:500],
+                "source_url": link,
+                "event_time": datetime.now(),
+                "core_entity": title[:20],
+                "location": "",
+                "indicator_name": "",
+                "indicator_value": "",
+                "_allow_title_only": True,
+                "_reuters_source": "google_news_index",
+            })
+            if len(results) >= 20:
+                break
+        return results
+
+    def _xml_text(self, item, tag: str) -> str:
+        node = item.find(tag)
+        return (node.text or "").strip() if node is not None else ""
+
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        return self.resolve_detail(item).content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+        if item.get("_reuters_source") == "google_news_index" or "news.google.com" in item.get("source_url", ""):
+            summary = self._clean_detail_text(item.get("content", ""))
+            if len(summary) >= 50:
+                candidates.append(DetailStrategyResult(strategy="news_index_summary", content=limit_detail_content(summary)))
+                return run_detail_pipeline(
+                    title=item.get("title", ""),
+                    list_content=item.get("content", ""),
+                    strategy_results=candidates,
+                    channel_code=self.channel_code,
+                )
+        if item.get("_reuters_source") == "news_sitemap":
+            metadata = self._clean_detail_text(item.get("content", ""))
+            if len(metadata) >= 50:
+                candidates.append(DetailStrategyResult(strategy="news_sitemap_metadata", content=limit_detail_content(metadata)))
+                return run_detail_pipeline(
+                    title=item.get("title", ""),
+                    list_content=item.get("content", ""),
+                    strategy_results=candidates,
+                    channel_code=self.channel_code,
+                )
+
+        api_detail = self._fetch_article_api_detail(item)
+        if api_detail:
+            candidates.append(api_detail)
+
+        json_ld_detail = self._fetch_json_ld_detail(item)
+        if json_ld_detail:
+            candidates.append(json_ld_detail)
+
+        html_detail = self._fetch_html_article_detail(item)
+        if html_detail:
+            candidates.append(html_detail)
+
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+            channel_code=self.channel_code,
+        )
+
+    def _fetch_article_api_detail(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
         try:
             headers = self._build_headers()
             headers["Referer"] = "https://www.reuters.com/"
-
-            try:
-                import json
-                payload = json.dumps({"url": source_url})
-                post_headers = headers.copy()
-                post_headers["Content-Type"] = "application/json"
-                response = self.session.post(
-                    self.ARTICLE_API if hasattr(self, 'ARTICLE_API') else "https://www.reuters.com/pf/api/v3/content/fetch/article-by-id-or-url-v1",
-                    data=payload,
-                    headers=post_headers,
-                    timeout=15,
-                )
-                data = response.json()
-                article = data.get("result", {})
-                content_parts = article.get("content_items", [])
-                if content_parts:
-                    texts = []
-                    for part in content_parts:
-                        if part.get("type") == "paragraph":
-                            text = part.get("content", "")
-                            text = re.sub(r'<[^>]+>', '', text).strip()
-                            if text:
-                                texts.append(text)
-                    full_text = " ".join(texts)
-                    if len(full_text) >= 50:
-                        return limit_detail_content(full_text)
-                rn_text = article.get("rn_text", "")
-                if rn_text:
-                    rn_text = re.sub(r'<[^>]+>', '', rn_text)
-                    rn_text = re.sub(r'\s+', ' ', rn_text).strip()
-                    if len(rn_text) >= 50:
-                        return limit_detail_content(rn_text)
-            except Exception:
-                pass
-
-            try:
-                response = self.fetch(source_url, headers=headers)
-                html = response.text
-                text = self._extract_text_from_html(html)
-                if len(text) >= 50:
-                    return limit_detail_content(text)
-            except Exception:
-                pass
-
-            return ""
+            post_headers = headers.copy()
+            post_headers["Content-Type"] = "application/json"
+            response = self.session.post(
+                self.ARTICLE_API,
+                data=json.dumps({"url": source_url}),
+                headers=post_headers,
+                timeout=15,
+            )
+            article = response.json().get("result", {})
+            texts = []
+            for part in article.get("content_items", []) or []:
+                if part.get("type") != "paragraph":
+                    continue
+                text = self._clean_detail_text(part.get("content", ""))
+                if text:
+                    texts.append(text)
+            rn_text = self._clean_detail_text(article.get("rn_text", ""))
+            if rn_text:
+                texts.append(rn_text)
+            combined = self._merge_distinct_parts(texts)
+            if len(combined) >= 50:
+                return DetailStrategyResult(strategy="reuters_article_api", content=limit_detail_content(combined))
         except Exception as e:
             self.logger.warning(f"路透社详情爬取失败: {e}")
-            return ""
+        return None
+
+    def _fetch_json_ld_detail(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+        try:
+            headers = self._build_headers()
+            headers["Referer"] = "https://www.reuters.com/"
+            html = self.fetch(source_url, headers=headers).text
+            for raw_json in re.findall(
+                r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+                html,
+                re.DOTALL | re.IGNORECASE,
+            ):
+                try:
+                    data = json.loads(raw_json.strip())
+                except json.JSONDecodeError:
+                    continue
+                nodes = data if isinstance(data, list) else [data]
+                for node in nodes:
+                    if not isinstance(node, dict):
+                        continue
+                    body = self._clean_detail_text(node.get("articleBody", ""))
+                    if len(body) >= 50:
+                        return DetailStrategyResult(strategy="reuters_json_ld", content=limit_detail_content(body))
+        except Exception as e:
+            self.logger.warning(f"路透社JSON-LD详情解析失败: {e}")
+        return None
+
+    def _fetch_html_article_detail(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
+        try:
+            headers = self._build_headers()
+            headers["Referer"] = "https://www.reuters.com/"
+            html = self.fetch(source_url, headers=headers).text
+            text = HtmlArticleExtractor().extract(html)
+            if len(text) >= 50:
+                return DetailStrategyResult(strategy="html_article", content=limit_detail_content(text))
+        except Exception as e:
+            self.logger.warning(f"路透社HTML正文兜底失败: {e}")
+        return None
+
+    def _clean_detail_text(self, value: str) -> str:
+        text = re.sub(r"<[^>]+>", " ", value or "")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    def _merge_distinct_parts(self, parts: list[str]) -> str:
+        merged = []
+        seen = set()
+        for part in parts:
+            text = self._clean_detail_text(part)
+            if not text or text in seen:
+                continue
+            if any(text in existing or existing in text for existing in merged):
+                continue
+            merged.append(text)
+            seen.add(text)
+        return " ".join(merged)

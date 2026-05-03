@@ -23,5 +23,7 @@ services:
       ZHIHU_COOKIE: ${ZHIHU_COOKIE:-}
       ZHIHU_ZSE_93: ${ZHIHU_ZSE_93:-}
       ZHIHU_ZSE_96: ${ZHIHU_ZSE_96:-}
+      WEIBO_COOKIE: ${WEIBO_COOKIE:-}
+      XHS_COOKIE: ${XHS_COOKIE:-}
     volumes:
       - ./data:/app/data

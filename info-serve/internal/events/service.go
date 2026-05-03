@@ -18,6 +18,7 @@ type Service struct {
 
 type ListEventsParams struct {
 	CategoryCode string
+	ChannelCode  string
 	Keyword      string
 	Sort         string
 	Page         int
@@ -128,6 +129,7 @@ func (s *Service) ListEvents(ctx context.Context, params ListEventsParams) (Even
 	if params.CategoryCode == "" {
 		params.CategoryCode = "all"
 	}
+	params.ChannelCode = strings.TrimSpace(params.ChannelCode)
 	params.Sort = strings.TrimSpace(params.Sort)
 	if params.Sort != "latest" {
 		params.Sort = "composite"

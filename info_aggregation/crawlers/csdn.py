@@ -3,6 +3,7 @@
 爬取CSDN热门技术文章，并深入爬取详情页获取完整内容
 """
 import hashlib
+import html as html_lib
 import re
 from datetime import datetime
 
@@ -99,6 +100,7 @@ class CSDNCrawler(BaseCrawler):
                 "location": "",
                 "indicator_name": "",
                 "indicator_value": "",
+                "_allow_title_only": True,
             })
         return results
 
@@ -117,10 +119,20 @@ class CSDNCrawler(BaseCrawler):
                 r'<a[^>]*href="(https://blog\.csdn\.net/[^"]+article/details/(\d+))"[^>]*title="([^"]*)"',
                 html, re.DOTALL
             )
+        if not article_pattern:
+            article_pattern = []
+            generic_links = re.findall(
+                r'<a[^>]*href="(https://blog\.csdn\.net/[^"\']+article/details/(\d+))"[^>]*>(.*?)</a>',
+                html,
+                re.DOTALL | re.IGNORECASE,
+            )
+            for url, article_id, raw_title in generic_links:
+                title = self._clean_content_text(html_lib.unescape(raw_title))
+                article_pattern.append((url, article_id, title))
         seen = set()
         for url, article_id, title in article_pattern:
             title = title.strip()
-            if not title or article_id in seen:
+            if not title or article_id in seen or self._is_non_article_title(title):
                 continue
             seen.add(article_id)
             source_id = hashlib.md5(f"csdn_{article_id}".encode()).hexdigest()[:16]
@@ -138,6 +150,10 @@ class CSDNCrawler(BaseCrawler):
             if len(results) >= 20:
                 break
         return results
+
+    def _is_non_article_title(self, title: str) -> bool:
+        noise_titles = {"账号管理规范", "版权申诉", "版权与免责声明", "Chrome商店下载"}
+        return title in noise_titles or len(title) < 6
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
         return self.resolve_detail(item).content
@@ -157,6 +173,7 @@ class CSDNCrawler(BaseCrawler):
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
 
     def _fetch_article_detail_content(self, item: dict):

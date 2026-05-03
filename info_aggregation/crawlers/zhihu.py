@@ -107,6 +107,10 @@ class ZhihuCrawler(BaseCrawler):
     def _get_zhihu_cookie(self) -> str:
         return self._get_env_value("ZHIHU_COOKIE")
 
+    def _build_source_id(self, source_url: str, fallback_title: str) -> str:
+        source_key = source_url or f"hot_search_{fallback_title}"
+        return hashlib.md5(f"zhihu_{source_key}".encode()).hexdigest()[:16]
+
     def _strip_env_quotes(self, value: str) -> str:
         if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
             return value[1:-1]
@@ -169,15 +173,15 @@ class ZhihuCrawler(BaseCrawler):
             if not title or title in seen:
                 continue
             seen.add(title)
-            enriched = self._enrich_hot_search_item(title)
-            source_id = hashlib.md5(f"zhihu_hot_search_{title}".encode()).hexdigest()[:16]
             detail_text = str(word.get("detail_text") or word.get("desc") or "").strip()
             hot_show = str(word.get("hot_show") or word.get("hot") or "").strip()
+            enriched = self._enrich_hot_search_item(title)
+            source_url = enriched.get("source_url") or f"https://www.zhihu.com/search?type=content&q={quote(title)}"
             item = {
-                "source_id": source_id,
+                "source_id": self._build_source_id(source_url, title),
                 "title": enriched.get("title", title)[:80],
                 "content": detail_text or title,
-                "source_url": enriched.get("source_url") or f"https://www.zhihu.com/search?type=content&q={quote(title)}",
+                "source_url": source_url,
                 "event_time": datetime.now(),
                 "core_entity": title[:20],
                 "location": "",
@@ -342,6 +346,14 @@ class ZhihuCrawler(BaseCrawler):
         embedded_detail = self._fetch_embedded_search_detail(item)
         if embedded_detail:
             candidates.append(embedded_detail)
+            embedded_result = run_detail_pipeline(
+                title=item.get("title", ""),
+                list_content=item.get("content", ""),
+                strategy_results=candidates,
+                channel_code=self.channel_code,
+            )
+            if self._is_good_enough_without_render(embedded_result):
+                return embedded_result
 
         answer_api_detail = self._fetch_answer_api_detail(item)
         if answer_api_detail:
@@ -351,13 +363,22 @@ class ZhihuCrawler(BaseCrawler):
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
-        if early_result.status == "complete":
+        if self._is_good_enough_without_render(early_result):
             return early_result
 
         web_detail = self._fetch_web_detail(item)
         if web_detail:
             candidates.append(web_detail)
+            web_result = run_detail_pipeline(
+                title=item.get("title", ""),
+                list_content=item.get("content", ""),
+                strategy_results=candidates,
+                channel_code=self.channel_code,
+            )
+            if self._is_good_enough_without_render(web_result):
+                return web_result
 
         rendered_detail = self._fetch_rendered_detail(item)
         if rendered_detail:
@@ -371,7 +392,11 @@ class ZhihuCrawler(BaseCrawler):
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
+
+    def _is_good_enough_without_render(self, result) -> bool:
+        return result.status in {"complete", "partial"}
 
     def _fetch_embedded_search_detail(self, item: dict):
         content = self._normalize_html_text(str(item.get("_search_content") or ""))

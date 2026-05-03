@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy import or_
 
 from config import (
     SCHEDULER_HOT_INTERVAL,
@@ -36,6 +37,42 @@ from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 logger = logging.getLogger(__name__)
 
 
+def _apply_info_semantics(info: Info, content: str):
+    """用最终正文补齐轻量语义字段，保证列表嵌入详情和二次详情路径一致。"""
+    semantic_result = parse_tech_content(info.title, content or info.content or "")
+    info.tech_topic_type = semantic_result.topic_type
+    info.tech_entities = ",".join(semantic_result.entities)
+    info.tech_keywords = ",".join(semantic_result.keywords)
+
+
+def _record_info_acquisition_log(
+    session,
+    info: Info,
+    channel_code: str,
+    strategy: str,
+    status: str,
+    score: int,
+    content_length: int,
+    failure_reason: str,
+    matched_rules: list[str],
+    content: str,
+):
+    """记录详情采集结果，供质量诊断和后续 replay 使用。"""
+    session.add(
+        InfoAcquisitionLog(
+            info_id=info.id,
+            channel_code=channel_code,
+            strategy=strategy,
+            status=status,
+            score=score,
+            content_length=content_length,
+            failure_reason=failure_reason,
+            matched_rules=",".join(matched_rules),
+            raw_excerpt=(content or info.content or "")[:200],
+        )
+    )
+
+
 def _effective_channel_interval(channel: Channel) -> int:
     """返回调度器实际使用的分钟间隔，兼容尚未配置 Max 字段的历史渠道。"""
     effective_interval = channel.effective_interval_minutes
@@ -61,7 +98,6 @@ def _sync_crawl_tasks(session) -> dict:
         task_code = f"crawl_{channel.code}"
         task = session.query(CrawlTask).filter(CrawlTask.task_code == task_code).first()
         interval = _effective_channel_interval(channel)
-        next_run_at = now + timedelta(minutes=interval)
         schedule_version = channel.schedule_version or 1
         if not task:
             task = CrawlTask(
@@ -72,7 +108,7 @@ def _sync_crawl_tasks(session) -> dict:
                 schedule_value=str(interval),
                 schedule_version=schedule_version,
                 status="active",
-                next_run_at=next_run_at,
+                next_run_at=now,
             )
             session.add(task)
             created_count += 1
@@ -86,10 +122,28 @@ def _sync_crawl_tasks(session) -> dict:
             task.schedule_version = schedule_version
             task.status = "active"
             if previous_value != str(interval) or previous_version != schedule_version:
-                task.next_run_at = next_run_at
+                task.next_run_at = now + timedelta(minutes=interval)
             updated_count += 1
     session.commit()
     return {"created_count": created_count, "updated_count": updated_count}
+
+
+def _get_due_channel_codes(session, category_id: int, now: datetime | None = None) -> list[str]:
+    """返回当前分类下已经到期的渠道编码。"""
+    now = now or datetime.now()
+    due_tasks = (
+        session.query(CrawlTask)
+        .join(Channel, CrawlTask.channel_id == Channel.id)
+        .filter(
+            Channel.category_id == category_id,
+            Channel.is_active == 1,
+            CrawlTask.status == "active",
+            or_(CrawlTask.next_run_at.is_(None), CrawlTask.next_run_at <= now),
+        )
+        .order_by(CrawlTask.next_run_at.asc(), CrawlTask.id.asc())
+        .all()
+    )
+    return [task.channel.code for task in due_tasks if task.channel]
 
 
 def _record_crawl_run(
@@ -110,6 +164,12 @@ def _record_crawl_run(
     task = session.query(CrawlTask).filter(CrawlTask.task_code == f"crawl_{channel_code}").first()
     if task:
         task.last_run_at = finished_at
+        try:
+            interval_minutes = int(task.schedule_value or "0")
+        except ValueError:
+            interval_minutes = 0
+        if interval_minutes > 0:
+            task.next_run_at = finished_at + timedelta(minutes=interval_minutes)
     session.add(
         CrawlRunLog(
             task_id=task.id if task else None,
@@ -211,6 +271,7 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
             detail_content_length = 0
             detail_fetched_at = None
             content = item["content"]
+            embedded_pipeline = None
             embedded_content = item.get("_search_content")
             if embedded_content:
                 embedded_pipeline = run_detail_pipeline(
@@ -219,6 +280,7 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
                     strategy_results=[
                         DetailStrategyResult(strategy="search_embedded", content=embedded_content)
                     ],
+                    channel_code=channel_code,
                 )
                 if embedded_pipeline.status == "complete":
                     content = embedded_pipeline.content
@@ -228,6 +290,8 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
                     detail_score = embedded_pipeline.score
                     detail_content_length = embedded_pipeline.content_length
                     detail_fetched_at = datetime.now()
+                else:
+                    embedded_pipeline = None
 
             info = Info(
                 title=item["title"],
@@ -250,6 +314,20 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
             )
             session.add(info)
             session.flush()
+            if embedded_pipeline:
+                _apply_info_semantics(info, content)
+                _record_info_acquisition_log(
+                    session,
+                    info=info,
+                    channel_code=channel_code,
+                    strategy=embedded_pipeline.strategy,
+                    status=embedded_pipeline.status,
+                    score=embedded_pipeline.score,
+                    content_length=embedded_pipeline.content_length,
+                    failure_reason=embedded_pipeline.failure_reason,
+                    matched_rules=embedded_pipeline.matched_rules,
+                    content=content,
+                )
             saved_ids.append(info.id)
             recent_existing.insert(0, info)
             saved_count += 1
@@ -301,11 +379,32 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
                     f"详情已完整，跳过重复爬取 [ID={info_id}] "
                     f"策略={info.detail_strategy}: 内容{info.detail_content_length or len(original_content)}字"
                 )
+                if not (info.tech_topic_type or info.tech_entities or info.tech_keywords):
+                    _apply_info_semantics(info, original_content)
+                if (
+                    session.query(InfoAcquisitionLog)
+                    .filter(InfoAcquisitionLog.info_id == info.id)
+                    .count()
+                    == 0
+                ):
+                    _record_info_acquisition_log(
+                        session,
+                        info=info,
+                        channel_code=channel_code,
+                        strategy=info.detail_strategy or "complete_skip",
+                        status=info.detail_fetch_status,
+                        score=info.detail_score or 0,
+                        content_length=info.detail_content_length or len(original_content),
+                        failure_reason=info.detail_fetch_error or "",
+                        matched_rules=["already_complete"],
+                        content=original_content,
+                    )
                 continue
 
-            detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
-                info.source_url, info.to_dict()
-            )
+            with crawler_registry.get_lock(channel_code):
+                detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
+                    info.source_url, info.to_dict()
+                )
             if detail_content and is_title_content_duplicate(info.title, detail_content):
                 detail_content = ""
                 status = "list_only"
@@ -335,23 +434,18 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
             info.detail_score = pipeline.score
             info.detail_content_length = pipeline.content_length
             info.detail_fetched_at = datetime.now()
-            # 使用最终落库正文做轻量科技结构化，便于 Plus 阶段的详情诊断和阅读增强。
-            semantic_result = parse_tech_content(info.title, detail_content or original_content)
-            info.tech_topic_type = semantic_result.topic_type
-            info.tech_entities = ",".join(semantic_result.entities)
-            info.tech_keywords = ",".join(semantic_result.keywords)
-            session.add(
-                InfoAcquisitionLog(
-                    info_id=info.id,
-                    channel_code=channel_code,
-                    strategy=pipeline.strategy,
-                    status=status,
-                    score=pipeline.score,
-                    content_length=pipeline.content_length,
-                    failure_reason=error_msg,
-                    matched_rules=",".join(pipeline.matched_rules),
-                    raw_excerpt=(detail_content or original_content)[:200],
-                )
+            _apply_info_semantics(info, detail_content or original_content)
+            _record_info_acquisition_log(
+                session,
+                info=info,
+                channel_code=channel_code,
+                strategy=pipeline.strategy,
+                status=status,
+                score=pipeline.score,
+                content_length=pipeline.content_length,
+                failure_reason=error_msg,
+                matched_rules=pipeline.matched_rules,
+                content=detail_content or original_content,
             )
 
             if status in {"partial", "complete"} and detail_content:
@@ -397,16 +491,18 @@ def crawl_by_category(category_name: str):
 
     session = get_session()
     try:
+        _sync_crawl_tasks(session)
         channels = session.query(Channel).filter(
             Channel.category_id == target_category_id,
             Channel.is_active == 1,
         ).all()
-        active_codes = [ch.code for ch in channels]
+        active_codes = {ch.code for ch in channels}
+        due_codes = set(_get_due_channel_codes(session, target_category_id))
     finally:
         session.close()
 
     for code, crawler in all_crawlers.items():
-        if code not in active_codes:
+        if code not in active_codes or code not in due_codes:
             continue
         started_at = datetime.now()
         raw_count = 0
@@ -416,7 +512,8 @@ def crawl_by_category(category_name: str):
         status = "success"
         error_message = ""
         try:
-            raw_items = crawler.safe_crawl()
+            with crawler_registry.get_lock(code):
+                raw_items = crawler.safe_crawl()
             raw_count = len(raw_items)
             cleaned_items = clean_info_list(raw_items)
             cleaned_count = len(cleaned_items)
