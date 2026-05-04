@@ -4,12 +4,14 @@ const STORAGE_KEY = 'home_filter_memory'
 
 export interface HomeFilterMemory {
   categoryCode: string
+  channelCode: string
   sortMode: 'composite' | 'latest'
   keyword: string
 }
 
 const DEFAULT: HomeFilterMemory = {
   categoryCode: 'all',
+  channelCode: 'all',
   sortMode: 'composite',
   keyword: '',
 }

@@ -6,6 +6,7 @@ import FilterPanel from '@/components/FilterPanel.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import {
+  getChannels,
   getEventCategories,
   getEvents,
   getHomeFilterPreference,
@@ -20,7 +21,9 @@ const pageSize = 10
 const { memory, save } = useFilterMemory()
 const userStore = useUserStore()
 const categories = ref<EventCategory[]>([])
+const channels = ref<{ code: string; name: string }[]>([])
 const activeCategoryCode = ref(memory.value.categoryCode)
+const activeChannelCode = ref(memory.value.channelCode)
 const keyword = ref(memory.value.keyword)
 const appliedKeyword = ref(memory.value.keyword)
 const sortMode = ref<'composite' | 'latest'>(memory.value.sortMode)
@@ -36,6 +39,7 @@ const {
 } = useListLoad<EventListItem>(async (page, size) => {
   const result = await getEvents({
     category_code: activeCategoryCode.value,
+    channel_code: activeChannelCode.value,
     keyword: appliedKeyword.value,
     sort: sortMode.value,
     page,
@@ -53,6 +57,16 @@ async function loadCategories() {
   }
 }
 
+async function loadChannels() {
+  try {
+    const list = await getChannels()
+    channels.value = [{ name: '全部渠道', code: 'all' }, ...list]
+    ensureActiveChannelExists()
+  } catch {
+    // 渠道加载失败不影响主列表
+  }
+}
+
 function ensureActiveCategoryExists() {
   const exists = categories.value.some((item) => item.code === activeCategoryCode.value)
   if (!exists) {
@@ -60,9 +74,17 @@ function ensureActiveCategoryExists() {
   }
 }
 
+function ensureActiveChannelExists() {
+  const exists = channels.value.some((item) => item.code === activeChannelCode.value)
+  if (!exists) {
+    activeChannelCode.value = 'all'
+  }
+}
+
 async function rememberCurrentFilter() {
   const preference = {
     categoryCode: activeCategoryCode.value,
+    channelCode: activeChannelCode.value,
     sortMode: sortMode.value,
     keyword: appliedKeyword.value,
   }
@@ -87,6 +109,7 @@ async function restoreServerFilterPreference() {
     ensureActiveCategoryExists()
     save({
       categoryCode: activeCategoryCode.value,
+      channelCode: activeChannelCode.value,
       sortMode: sortMode.value,
       keyword: appliedKeyword.value,
     })
@@ -98,6 +121,14 @@ async function restoreServerFilterPreference() {
 function onCategoryChange(code: string) {
   if (code === activeCategoryCode.value) return
   activeCategoryCode.value = code
+  rememberCurrentFilter()
+  refresh()
+  scrollToTop()
+}
+
+function onChannelChange(code: string) {
+  if (code === activeChannelCode.value) return
+  activeChannelCode.value = code
   rememberCurrentFilter()
   refresh()
   scrollToTop()
@@ -145,6 +176,7 @@ function goHistory() {
 
 onLoad(() => {
   loadCategories()
+  loadChannels()
   restoreServerFilterPreference().then(() => refresh())
 })
 
@@ -164,14 +196,14 @@ onPageScroll((e) => {
 // #ifdef MP-WEIXIN
 function onShareAppMessage() {
   return {
-    title: 'InfoMVP - 热点事件聚合',
+    title: '热点事件聚合',
     path: '/pages/home/home',
   }
 }
 
 function onShareTimeline() {
   return {
-    title: 'InfoMVP - 热点事件聚合',
+    title: '热点事件聚合',
     query: '',
   }
 }
@@ -214,9 +246,12 @@ function onShareTimeline() {
     <view style="margin-top: 16rpx; margin-bottom: 16rpx;">
       <FilterPanel
         :categories="categories"
+        :channels="channels"
         :active-code="activeCategoryCode"
+        :active-channel-code="activeChannelCode"
         :sort-mode="sortMode"
         @category-change="onCategoryChange"
+        @channel-change="onChannelChange"
         @sort-change="onSortChange"
       />
     </view>
@@ -242,7 +277,7 @@ function onShareTimeline() {
       class="back-to-top"
       @click="scrollToTop"
     >
-      <text class="back-to-top-icon">&#xe617;</text>
+      <text class="back-to-top-icon">&#xe6bd;</text>
     </view>
   </view>
 </template>

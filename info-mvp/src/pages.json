@@ -3,7 +3,7 @@
     {
       "path": "pages/home/home",
       "style": {
-        "navigationBarTitleText": "InfoMVP",
+        "navigationStyle": "custom",
         "enablePullDownRefresh": true,
         "backgroundColor": "#f7f8fa"
       }
@@ -46,7 +46,7 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "InfoMVP",
+    "navigationBarTitleText": "热点事件",
     "navigationBarBackgroundColor": "#ffffff",
     "backgroundColor": "#f7f8fa"
   }

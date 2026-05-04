@@ -39,13 +39,6 @@ npm run dev:mp-weixin
 
 编译完成后，用**微信开发者工具**打开 `dist/build/mp-weixin` 目录。
 
-### 一键启动（整合脚本）
-
-```bash
-# 从项目根目录
-./scripts/start-mvp-local.sh
-```
-
 ## 构建
 
 ### H5 生产构建
@@ -61,42 +54,6 @@ npm run build:h5
 npm run build:mp-weixin
 # 产物在 dist/build/mp-weixin/
 # 用微信开发者工具上传
-```
-
-## Docker 部署
-
-### 构建镜像
-
-```bash
-cd info-mvp
-docker build -t info-ai-info-mvp:pro .
-```
-
-### 独立部署（复用现有后端）
-
-```bash
-# 从项目根目录
-docker compose -f docker-compose.mvp.yml up -d --build info-mvp
-```
-
-### 替换 info-max 部署
-
-修改根目录 `docker-compose.yml`，将 `info-max` 服务替换为 `info-mvp`：
-
-```yaml
-  info-mvp:
-    image: info-ai-info-mvp:pro
-    build:
-      context: ./info-mvp
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8080}/api
-    container_name: info-mvp
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - info-serve
 ```
 
 ## 项目结构

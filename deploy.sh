@@ -62,10 +62,15 @@ INFO_SERVE_SESSION_SECRET=${session_secret}
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=${admin_password}
 
-# 渠道凭据配置。知乎高质量采集需要有效登录态；不配置时可运行，但知乎详情会降级。
+# 渠道凭据配置。
+# 知乎渠道凭据。知乎高质量采集需要有效登录态；不配置时可运行，但知乎详情会降级。
 ZHIHU_COOKIE=
 ZHIHU_ZSE_93=
 ZHIHU_ZSE_96=
+# 微博渠道凭据。用于提升话题搜索、移动搜索和网页搜索详情抓取成功率。
+WEIBO_COOKIE=
+# 小红书渠道凭据。用于提升动态详情页和渲染兜底成功率。
+XHS_COOKIE=
 
 # 浏览器访问 info-serve 的公开地址。
 # 本机部署可用 http://127.0.0.1:8080，服务器部署请改成真实域名或公网 IP。
@@ -136,8 +141,8 @@ check_services() {
     sleep 8
 
     local failed=0
-    local containers=("info-mysql" "info-aggregation" "info-serve" "info-max" "info-admin")
-    local compose_services=("mysql" "info-aggregation" "info-serve" "info-max" "info-admin")
+    local containers=("info-mysql" "info-aggregation" "info-serve" "info-max" "info-mvp" "info-admin")
+    local compose_services=("mysql" "info-aggregation" "info-serve" "info-max" "info-mvp" "info-admin")
     for index in "${!containers[@]}"; do
         local svc="${containers[$index]}"
         local compose_svc="${compose_services[$index]}"
@@ -167,6 +172,7 @@ echo "========================================"
 echo "部署完成"
 echo "用户端:   http://localhost"
 echo "管理后台: http://localhost:8081"
+echo "h5后台: http://localhost:8082"
 echo "采集 API: http://localhost:18000"
 echo "业务 API: http://localhost:8080"
 echo "========================================"

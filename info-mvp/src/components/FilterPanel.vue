@@ -2,14 +2,22 @@
 import { ref } from 'vue'
 import type { EventCategory } from '@/types'
 
+interface FilterChannel {
+  code: string
+  name: string
+}
+
 const props = defineProps<{
   categories: EventCategory[]
+  channels: FilterChannel[]
   activeCode: string
+  activeChannelCode: string
   sortMode: 'composite' | 'latest'
 }>()
 
 const emit = defineEmits<{
   (e: 'category-change', code: string): void
+  (e: 'channel-change', code: string): void
   (e: 'sort-change', mode: 'composite' | 'latest'): void
 }>()
 
@@ -17,6 +25,11 @@ const expanded = ref(false)
 
 function onCategoryClick(code: string) {
   emit('category-change', code)
+  expanded.value = false
+}
+
+function onChannelClick(code: string) {
+  emit('channel-change', code)
   expanded.value = false
 }
 
@@ -34,6 +47,11 @@ function getActiveCategoryName(): string {
   return props.categories.find((c) => c.code === props.activeCode)?.name ?? '全网'
 }
 
+function getActiveChannelName(): string {
+  if (props.activeChannelCode === 'all') return '全部渠道'
+  return props.channels.find((c) => c.code === props.activeChannelCode)?.name ?? '全部渠道'
+}
+
 function getActiveSortLabel(): string {
   return props.sortMode === 'composite' ? '综合排序' : '最新发布'
 }
@@ -45,6 +63,8 @@ function getActiveSortLabel(): string {
     <view v-if="!expanded" class="collapsed-bar">
       <view class="active-label">
         <text>{{ getActiveCategoryName() }}</text>
+        <text class="divider">·</text>
+        <text>{{ getActiveChannelName() }}</text>
         <text class="divider">·</text>
         <text>{{ getActiveSortLabel() }}</text>
       </view>
@@ -67,13 +87,6 @@ function getActiveSortLabel(): string {
         <text class="section-title">分类</text>
         <view class="option-grid">
           <view
-            class="option-pill"
-            :class="{ active: activeCode === 'all' }"
-            @click="onCategoryClick('all')"
-          >
-            <text>全网</text>
-          </view>
-          <view
             v-for="cat in categories"
             :key="cat.code"
             class="option-pill"
@@ -81,6 +94,21 @@ function getActiveSortLabel(): string {
             @click="onCategoryClick(cat.code)"
           >
             <text>{{ cat.name }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section">
+        <text class="section-title">渠道</text>
+        <view class="option-grid">
+          <view
+            v-for="ch in channels"
+            :key="ch.code"
+            class="option-pill"
+            :class="{ active: activeChannelCode === ch.code }"
+            @click="onChannelClick(ch.code)"
+          >
+            <text>{{ ch.name }}</text>
           </view>
         </view>
       </view>
@@ -126,8 +154,8 @@ function getActiveSortLabel(): string {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  font-size: 28rpx;
-  color: var(--text-primary);
+  font-size: 24rpx;
+  color: #595959;
   font-weight: 500;
 }
 

@@ -252,8 +252,7 @@ info-detail 和 event-detail 需要展示 HTML 内容。
 - [x] H5 构建产物（300KB，Nginx Docker 镜像 50MB）
 - [x] 微信小程序构建产物（308KB，60 个文件）
 - [x] 包体积远低于 2MB 限制
-- [x] `Dockerfile` + `nginx.conf` + `docker-compose.mvp.yml`
-- [x] 本地开发脚本 `scripts/start-mvp-local.sh`
+- [x] `Dockerfile` + `nginx.conf` + `docker-compose.yml`
 - [x] `README.md` 部署文档
 
 **总计工期：约 9 个工作日（2 周）**

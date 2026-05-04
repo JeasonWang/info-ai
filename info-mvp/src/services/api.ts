@@ -79,6 +79,7 @@ export function getInfos(params: ListInfoParams) {
 export function getEvents(params: ListEventParams) {
   const q = new URLSearchParams()
   q.set('category_code', params.category_code ?? 'all')
+  if (params.channel_code && params.channel_code !== 'all') q.set('channel_code', params.channel_code)
   if (params.keyword) q.set('keyword', params.keyword)
   if (params.sort) q.set('sort', params.sort)
   if (params.page) q.set('page', String(params.page))

@@ -86,6 +86,20 @@ services:
     depends_on:
       - info-serve
 
+  info-mvp:
+    image: info-ai-info-mvp:pro
+    build:
+      context: ./info-mvp
+      dockerfile: Dockerfile
+      args:
+        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8080}
+    container_name: info-mvp
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    depends_on:
+      - info-serve
+
   info-admin:
     image: info-ai-info-admin:pro
     build:
