@@ -197,6 +197,7 @@ export interface ListInfoParams {
 
 export interface ListEventParams {
   category_code?: string
+  channel_code?: string
   keyword?: string
   sort?: 'composite' | 'latest'
   page?: number

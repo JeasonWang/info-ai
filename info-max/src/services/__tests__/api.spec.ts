@@ -176,7 +176,7 @@ describe('api service routing', () => {
     await addFavoriteEvent('token', 101)
     await removeFavoriteEvent('token', 101)
     await getHomeFilterPreference('token')
-    await saveHomeFilterPreference('token', { categoryCode: 'sports', sortMode: 'latest', keyword: 'NBA' })
+    await saveHomeFilterPreference('token', { categoryCode: 'sports', channelCode: 'all', sortMode: 'latest', keyword: 'NBA' })
     await getReadHistory('token')
     await recordReadHistory('token', { eventId: 101 })
     await logoutUser('token')
@@ -217,7 +217,7 @@ describe('api service routing', () => {
       'http://localhost:8080/api/v1/me/preferences/home-filter',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ category_code: 'sports', sort: 'latest', keyword: 'NBA' }),
+        body: JSON.stringify({ category_code: 'sports', channel_code: 'all', sort: 'latest', keyword: 'NBA' }),
       }),
     )
     expect(fetchMock).toHaveBeenCalledWith(

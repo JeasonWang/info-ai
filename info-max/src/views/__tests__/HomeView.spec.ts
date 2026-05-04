@@ -239,7 +239,7 @@ describe('HomeView', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('全网 · 综合分优先')
+    expect(wrapper.text()).toContain('全网 · 全部渠道 · 综合分优先')
     expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
 
     await wrapper.get('[data-testid="home-filter-toggle"]').trigger('click')
@@ -251,7 +251,7 @@ describe('HomeView', () => {
       expect.stringContaining('/api/v1/events?category_code=all&sort=latest&page=1&page_size=10'),
       expect.any(Object),
     )
-    expect(wrapper.text()).toContain('全网 · 最新更新优先')
+    expect(wrapper.text()).toContain('全网 · 全部渠道 · 最新更新优先')
     expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
   })
 
@@ -328,7 +328,7 @@ describe('HomeView', () => {
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('体育 · 1 条')
-    expect(wrapper.text()).toContain('体育 · 最新更新优先')
+    expect(wrapper.text()).toContain('体育 · 全部渠道 · 最新更新优先')
     expect(wrapper.get<HTMLInputElement>('input[type="search"]').element.value).toBe('NBA')
   })
 
@@ -437,7 +437,7 @@ describe('HomeView', () => {
       }),
     )
     expect(wrapper.text()).toContain('服务端恢复的体育热点')
-    expect(wrapper.text()).toContain('体育 · 最新更新优先')
+    expect(wrapper.text()).toContain('体育 · 全部渠道 · 最新更新优先')
     expect(window.localStorage.getItem('info-daren:home-filter-memory')).toContain('"categoryCode":"sports"')
   })
 

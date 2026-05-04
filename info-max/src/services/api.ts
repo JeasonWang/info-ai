@@ -126,6 +126,7 @@ export async function getInfos(params: ListInfoParams) {
 export async function getEvents(params: ListEventParams) {
   const query = buildQuery({
     category_code: params.category_code ?? 'all',
+    channel_code: params.channel_code && params.channel_code !== 'all' ? params.channel_code : undefined,
     keyword: params.keyword,
     sort: params.sort,
     page: params.page,
@@ -217,6 +218,7 @@ export async function removeFavoriteEvent(token: string, eventId: number) {
 
 interface HomeFilterPreferenceResponse {
   category_code: string
+  channel_code?: string
   sort: 'composite' | 'latest'
   keyword: string
 }
@@ -224,6 +226,7 @@ interface HomeFilterPreferenceResponse {
 function normalizeHomeFilterPreference(data: HomeFilterPreferenceResponse): HomeFilterMemory {
   return {
     categoryCode: data.category_code || 'all',
+    channelCode: data.channel_code || 'all',
     sortMode: data.sort === 'latest' ? 'latest' : 'composite',
     keyword: data.keyword || '',
   }
@@ -242,6 +245,7 @@ export async function saveHomeFilterPreference(token: string, preference: HomeFi
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({
       category_code: preference.categoryCode,
+      channel_code: preference.channelCode,
       sort: preference.sortMode,
       keyword: preference.keyword,
     }),

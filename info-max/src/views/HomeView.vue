@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EventCategoryTabs from '@/components/EventCategoryTabs.vue'
 import EventList from '@/components/EventList.vue'
-import { getEventCategories, getEvents, getHomeFilterPreference, saveHomeFilterPreference } from '@/services/api'
+import { getChannels, getEventCategories, getEvents, getHomeFilterPreference, saveHomeFilterPreference } from '@/services/api'
 import { loadHomeFilterMemory, saveHomeFilterMemory } from '@/services/homeFilterMemory'
 import { getUserToken } from '@/services/userSession'
-import type { EventCategory, EventPage } from '@/types'
+import type { Channel, EventCategory, EventPage } from '@/types'
 
 const pageSize = 10
 const filterMemory = loadHomeFilterMemory()
@@ -14,7 +14,9 @@ const loadingMore = ref(false)
 const error = ref('')
 const loadMoreError = ref('')
 const categories = ref<EventCategory[]>([])
+const channels = ref<{ code: string; name: string }[]>([])
 const activeCategoryCode = ref(filterMemory.categoryCode)
+const activeChannelCode = ref(filterMemory.channelCode)
 const keyword = ref(filterMemory.keyword)
 const appliedKeyword = ref(filterMemory.keyword)
 const sortMode = ref<'composite' | 'latest'>(filterMemory.sortMode)
@@ -32,12 +34,25 @@ const eventPage = ref<EventPage>({
 const activeCategoryName = computed(
   () => categories.value.find((item) => item.code === activeCategoryCode.value)?.name ?? '全网',
 )
+const activeChannelName = computed(
+  () => channels.value.find((item) => item.code === activeChannelCode.value)?.name ?? '全部渠道',
+)
 const sortModeLabel = computed(() => (sortMode.value === 'latest' ? '最新更新优先' : '综合分优先'))
 const hasMore = computed(() => eventPage.value.items.length < eventPage.value.total)
 
 async function loadCategories() {
   categories.value = await getEventCategories()
   ensureActiveCategoryExists()
+}
+
+async function loadChannels() {
+  try {
+    const list = await getChannels()
+    channels.value = [{ name: '全部渠道', code: 'all' }, ...list]
+    ensureActiveChannelExists()
+  } catch {
+    channels.value = [{ name: '全部渠道', code: 'all' }]
+  }
 }
 
 function ensureActiveCategoryExists() {
@@ -47,9 +62,17 @@ function ensureActiveCategoryExists() {
   }
 }
 
+function ensureActiveChannelExists() {
+  const channelExists = channels.value.some((item) => item.code === activeChannelCode.value)
+  if (!channelExists) {
+    activeChannelCode.value = 'all'
+  }
+}
+
 async function rememberCurrentFilter() {
   const preference = {
     categoryCode: activeCategoryCode.value,
+    channelCode: activeChannelCode.value,
     sortMode: sortMode.value,
     keyword: appliedKeyword.value,
   }
@@ -76,12 +99,15 @@ async function restoreServerFilterPreference() {
   try {
     const preference = await getHomeFilterPreference(token)
     activeCategoryCode.value = preference.categoryCode
+    activeChannelCode.value = preference.channelCode
     sortMode.value = preference.sortMode
     keyword.value = preference.keyword
     appliedKeyword.value = preference.keyword
     ensureActiveCategoryExists()
+    ensureActiveChannelExists()
     saveHomeFilterMemory({
       categoryCode: activeCategoryCode.value,
+      channelCode: activeChannelCode.value,
       sortMode: sortMode.value,
       keyword: appliedKeyword.value,
     })
@@ -103,6 +129,7 @@ async function loadEvents(page = 1, mode: 'replace' | 'append' = 'replace') {
   try {
     const nextPage = await getEvents({
       category_code: activeCategoryCode.value,
+      channel_code: activeChannelCode.value,
       keyword: appliedKeyword.value,
       sort: sortMode.value,
       page,
@@ -144,6 +171,15 @@ async function selectCategory(code: string) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+async function selectChannel(code: string) {
+  if (code === activeChannelCode.value) return
+  activeChannelCode.value = code
+  await rememberCurrentFilter()
+  await loadEvents(1)
+  filterExpanded.value = false
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 async function submitSearch() {
   appliedKeyword.value = keyword.value.trim()
   await rememberCurrentFilter()
@@ -166,6 +202,7 @@ function toggleFilterPanel() {
 async function loadHome() {
   try {
     await loadCategories()
+    await loadChannels()
     await restoreServerFilterPreference()
     await rememberCurrentFilter()
     await loadEvents()
@@ -239,8 +276,8 @@ onBeforeUnmount(() => {
           :aria-expanded="filterExpanded"
           @click="toggleFilterPanel"
         >
-          <span>当前：{{ activeCategoryName }} · {{ sortModeLabel }}</span>
-          <strong>{{ filterExpanded ? '收起' : '调整' }}</strong>
+          <span>当前：{{ activeCategoryName }} · {{ activeChannelName }} · {{ sortModeLabel }}</span>
+          <strong>{{ filterExpanded ? '收起' : '筛选' }}</strong>
         </button>
 
         <div v-if="filterExpanded" class="home-filter-panel" data-testid="home-filter-panel">
@@ -248,6 +285,12 @@ onBeforeUnmount(() => {
             :categories="categories"
             :active-code="activeCategoryCode"
             @select="selectCategory"
+          />
+          <EventCategoryTabs
+            v-if="channels.length > 0"
+            :categories="channels.map(ch => ({ code: ch.code, name: ch.name, display_order: 0 }))"
+            :active-code="activeChannelCode"
+            @select="selectChannel"
           />
           <div class="home-sort-switch" aria-label="热点排序方式">
             <button
