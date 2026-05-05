@@ -276,7 +276,7 @@ onBeforeUnmount(() => {
           :aria-expanded="filterExpanded"
           @click="toggleFilterPanel"
         >
-          <span>当前：{{ activeCategoryName }} · {{ activeChannelName }} · {{ sortModeLabel }}</span>
+          <span>{{ activeCategoryName }} · {{ activeChannelName }} · {{ sortModeLabel }}</span>
           <strong>{{ filterExpanded ? '收起' : '筛选' }}</strong>
         </button>
 

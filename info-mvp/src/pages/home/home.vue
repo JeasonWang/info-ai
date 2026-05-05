@@ -31,6 +31,7 @@ const showBackToTop = ref(false)
 
 const {
   list: events,
+  total: eventTotal,
   loading,
   hasMore,
   error,
@@ -216,7 +217,7 @@ function onShareTimeline() {
     <view class="nav-bar">
       <view class="brand">
         <text class="brand-name">热点事件</text>
-        <text class="brand-tag">实时聚合</text>
+        <text class="brand-tag">实时聚合 · {{ eventTotal }}条</text>
       </view>
       <view class="user-actions">
         <template v-if="userStore.isLoggedIn">
@@ -277,7 +278,7 @@ function onShareTimeline() {
       class="back-to-top"
       @click="scrollToTop"
     >
-      <text class="back-to-top-icon">&#xe6bd;</text>
+      <text class="back-to-top-icon">↑</text>
     </view>
   </view>
 </template>

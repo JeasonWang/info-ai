@@ -10,6 +10,7 @@ export function useListLoad<T>(
 ) {
   const pageSize = options.pageSize || 10
   const list = ref<T[]>([])
+  const total = ref(0)
   const page = ref(1)
   const loading = ref(false)
   const hasMore = ref(true)
@@ -22,6 +23,7 @@ export function useListLoad<T>(
 
     try {
       const result = await fetcher(page.value, pageSize)
+      total.value = result.total
       if (page.value === 1) {
         list.value = result.items
       } else {
@@ -42,11 +44,13 @@ export function useListLoad<T>(
     page.value = 1
     hasMore.value = true
     list.value = []
+    total.value = 0
     await loadMore()
   }
 
   return {
     list,
+    total,
     page,
     loading,
     hasMore,
