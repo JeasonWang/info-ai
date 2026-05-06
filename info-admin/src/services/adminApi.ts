@@ -6,6 +6,7 @@ import type {
   AdminOverview,
   AdminActionResult,
   ChannelHealth,
+  ChannelQualityReport,
   AuditLog,
   CategoryPayload,
   ChannelPayload,
@@ -27,6 +28,10 @@ export function getCrawlRuns(limit = 20) {
 
 export function getChannelHealth() {
   return apiRequest<ChannelHealth[]>(apiV1('/admin/channel-health'))
+}
+
+export function getChannelQualityReport(sampleLimit = 5) {
+  return apiRequest<ChannelQualityReport>(apiV1(`/admin/channel-quality-report?sample_limit=${sampleLimit}`))
 }
 
 export function getQualitySnapshots(limit = 20) {

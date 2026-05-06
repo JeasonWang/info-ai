@@ -101,6 +101,8 @@ def test_reuters_google_news_index_restores_reuters_leads():
     assert len(items) == 1
     assert items[0]["title"] == "Global markets rise as officials meet"
     assert items[0]["_reuters_source"] == "google_news_index"
+    assert items[0]["source_url"] == "https://www.reuters.com/world/example/"
+    assert items[0]["_reuters_lineage"] == "official_url_from_index"
     assert "Reuters reported" in items[0]["content"]
 
 
@@ -118,6 +120,42 @@ def test_reuters_google_news_index_summary_is_treated_as_partial_detail():
 
     assert result.status in {"partial", "complete"}
     assert result.strategy == "news_index_summary"
+
+
+def test_reuters_google_news_with_official_url_tries_full_detail_before_summary():
+    crawler = ReutersCrawler()
+
+    class ApiResponse:
+        def json(self):
+            return {
+                "result": {
+                    "content_items": [
+                        {"type": "paragraph", "content": "Global markets rose on Tuesday, according to officials familiar with the talks."},
+                        {"type": "paragraph", "content": "Investors said the meeting could affect government bond yields, currency markets and company financing plans."},
+                        {"type": "paragraph", "content": "Analysts said companies will watch policy signals, trade conditions and energy prices before changing investment plans."},
+                        {"type": "paragraph", "content": "The discussions added pressure on officials as markets compared growth forecasts, inflation data and central bank comments."},
+                        {"type": "paragraph", "content": "Reuters reported that market participants expect more volatility if governments do not clarify the next policy steps."},
+                        {"type": "paragraph", "content": "Executives said the outcome would shape supply chains, capital spending and risk controls across several industries."},
+                        {"type": "paragraph", "content": "Economists added that demand, employment and company margins could shift if policy guidance changes over the coming quarter."},
+                    ]
+                }
+            }
+
+    crawler.session.post = lambda *args, **kwargs: ApiResponse()
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("web fallback should not run"))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "Global markets rise as officials meet",
+            "content": "Reuters reported market participants were watching policy signals.",
+            "source_url": "https://www.reuters.com/world/example/",
+            "_reuters_source": "google_news_index",
+        }
+    )
+
+    assert result.status == "complete"
+    assert result.strategy == "reuters_article_api"
+    assert "company financing plans" in result.content
 
 
 def test_reuters_news_sitemap_restores_official_urls():

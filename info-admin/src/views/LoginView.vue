@@ -31,7 +31,7 @@ async function handleSubmit() {
 <template>
   <main class="login-shell">
     <section class="login-card">
-      <p class="eyebrow">INFO DAREN PRO</p>
+      <p class="eyebrow">INFO DAREN MAX</p>
       <h1>管理后台登录</h1>
       <p class="login-copy">管理配置、采集监控和数据质量治理需要管理员身份。</p>
 

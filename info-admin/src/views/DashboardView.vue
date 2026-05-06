@@ -39,7 +39,7 @@ onMounted(async () => {
       <div>
         <p class="eyebrow">MONITORING</p>
         <h3>先看清数据，再干预采集</h3>
-        <p class="hero-copy">Pro 后台聚焦采集健康、质量治理和配置安全，用户端只保留清爽阅读体验。</p>
+        <p class="hero-copy">Max 后台聚焦采集健康、质量治理和配置安全，用户端只保留清爽阅读体验。</p>
       </div>
       <span class="status-pill">info-serve</span>
     </section>
@@ -47,7 +47,7 @@ onMounted(async () => {
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
     <section class="metric-grid">
-      <MetricCard label="采集渠道" :value="overview?.channel_count ?? '--'" hint="来自 Pro MySQL 数据库" />
+      <MetricCard label="采集渠道" :value="overview?.channel_count ?? '--'" hint="来自 Max MySQL 数据库" />
       <MetricCard label="热点事件" :value="overview?.event_count ?? '--'" hint="当前可展示事件" />
       <MetricCard label="原始内容" :value="overview?.info_count ?? '--'" hint="进入 Pro 数据底座" />
       <MetricCard label="新鲜度风险" :value="staleChannels.length || '--'" hint="6 小时未入库内容的渠道" />

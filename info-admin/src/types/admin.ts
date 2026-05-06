@@ -39,6 +39,90 @@ export interface ChannelHealth {
   top_failure_reasons: string[]
 }
 
+export interface ChannelQualityFailureReason {
+  reason: string
+  count: number
+}
+
+export interface ChannelQualityStrategy {
+  strategy: string
+  count: number
+}
+
+export interface ChannelQualityCredentialStatus {
+  name: string
+  configured: boolean
+  source: string
+  required: boolean
+  length: number
+  preview: string
+  health: string
+}
+
+export interface ChannelQualityCredentialHealth {
+  channel_code?: string
+  health: string
+  missing_required?: string[]
+  credentials?: ChannelQualityCredentialStatus[]
+}
+
+export interface ChannelQualityWeakSample {
+  id: number
+  title: string
+  source_url: string
+  detail_fetch_status: string
+  detail_strategy: string
+  detail_score: number
+  detail_content_length: number
+  detail_fetch_error: string
+}
+
+export interface ChannelQualityWeakChannel {
+  channel_code: string
+  channel_name: string
+  usable_ratio: number
+  needs_attention_ratio: number
+}
+
+export interface ChannelQualitySummary {
+  real_count: number
+  complete_count: number
+  high_value_partial_count: number
+  usable_count: number
+  needs_attention_count: number
+  complete_ratio: number
+  usable_ratio: number
+  needs_attention_ratio: number
+  weak_channels: ChannelQualityWeakChannel[]
+}
+
+export interface ChannelQualityItem {
+  channel_id: number
+  channel_code: string
+  channel_name: string
+  total_count: number
+  real_count: number
+  seed_count: number
+  complete_count: number
+  complete_ratio: number
+  high_value_partial_count: number
+  usable_count: number
+  usable_ratio: number
+  needs_attention_count: number
+  needs_attention_ratio: number
+  avg_detail_score: number
+  avg_detail_content_length: number
+  top_failure_reasons: ChannelQualityFailureReason[]
+  top_detail_strategies: ChannelQualityStrategy[]
+  credential_health: ChannelQualityCredentialHealth
+  weak_samples: ChannelQualityWeakSample[]
+}
+
+export interface ChannelQualityReport {
+  summary: ChannelQualitySummary
+  channels: ChannelQualityItem[]
+}
+
 export interface AdminOverview {
   channel_count: number
   event_count: number

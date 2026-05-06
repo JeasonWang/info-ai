@@ -26,6 +26,8 @@ from database import (
 from services import (
 	archive_duplicate_title_infos,
 	archive_low_quality_infos,
+	build_channel_quality_report,
+	build_credential_report,
 	build_data_quality_report,
 	rebuild_events,
 	refresh_info_semantics,
@@ -822,6 +824,37 @@ def admin_data_quality_report():
             "code": 0,
             "message": "success",
             "data": build_data_quality_report(session),
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/channel-quality-report")
+def admin_channel_quality_report(
+    sample_limit: int = Query(5, ge=1, le=20, description="每个渠道返回的低质量样本数量"),
+):
+    """按渠道返回真实详情完整度、可用率、失败原因和凭证健康状态。"""
+    session = get_session()
+    try:
+        return {
+            "code": 0,
+            "message": "success",
+            "data": build_channel_quality_report(session, sample_limit=sample_limit),
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/crawl-credential-report")
+def admin_crawl_credential_report():
+    """返回采集凭证脱敏健康状态，帮助判断弱渠道是否因为 Cookie 缺失或过期。"""
+    session = get_session()
+    try:
+        channel_codes = [channel.code for channel in session.query(Channel).order_by(Channel.id.asc()).all()]
+        return {
+            "code": 0,
+            "message": "success",
+            "data": build_credential_report(channel_codes),
         }
     finally:
         session.close()

@@ -3,14 +3,13 @@
 爬取小红书热门笔记，使用桌面版探索页+详情页获取完整内容
 """
 import hashlib
-import os
 import re
 import json
 from http.cookies import SimpleCookie
 from datetime import datetime
-from pathlib import Path
 
 from .base import BaseCrawler
+from services.credential_provider import get_credential
 from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
@@ -27,37 +26,8 @@ class XiaohongshuCrawler(BaseCrawler):
     def __init__(self):
         super().__init__("xiaohongshu", "小红书")
 
-    def _get_env_value(self, name: str) -> str:
-        value = os.getenv(name, "").strip()
-        if value:
-            return self._strip_env_quotes(value)
-
-        for env_file in (
-            Path.cwd() / ".env",
-            Path.cwd().parent / ".env",
-            Path(__file__).resolve().parents[2] / ".env",
-        ):
-            if not env_file.exists():
-                continue
-            try:
-                for line in env_file.read_text(encoding="utf-8").splitlines():
-                    stripped = line.strip()
-                    if not stripped or stripped.startswith("#") or "=" not in stripped:
-                        continue
-                    key, raw_value = stripped.split("=", 1)
-                    if key.strip() == name:
-                        return self._strip_env_quotes(raw_value.strip())
-            except OSError:
-                continue
-        return ""
-
-    def _strip_env_quotes(self, value: str) -> str:
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            return value[1:-1]
-        return value
-
     def _get_xhs_cookie(self) -> str:
-        return self._get_env_value("XHS_COOKIE")
+        return get_credential("XHS_COOKIE")
 
     def _build_headers(self) -> dict:
         """构建桌面版请求头"""
@@ -169,7 +139,9 @@ class XiaohongshuCrawler(BaseCrawler):
             or ""
         )
         desc = str(desc).strip()
-        content = "。".join(part for part in [title, desc] if part)
+        content = self._combine_note_card_content(title=title, desc=desc, note_card=note_card)
+        if self._is_low_information_note(title, content, note_card):
+            return None
         
         source_id = hashlib.md5(f"xhs_{note_id}".encode()).hexdigest()[:16]
         
@@ -190,6 +162,49 @@ class XiaohongshuCrawler(BaseCrawler):
             "_search_content": content if len(content) >= 30 else "",
             "_allow_title_only": True,
         }
+
+    def _combine_note_card_content(self, title: str, desc: str, note_card: dict) -> str:
+        parts = [part for part in [title, desc] if part]
+        tag_names = self._extract_tag_names(note_card)
+        if tag_names:
+            parts.append("标签：" + "、".join(tag_names[:8]))
+        interaction_text = self._extract_interaction_text(note_card.get("interactInfo", {}) or note_card.get("interact", {}) or {})
+        if interaction_text:
+            parts.append(interaction_text)
+        return "。".join(parts)
+
+    def _is_low_information_note(self, title: str, content: str, note_card: dict) -> bool:
+        """过滤纯口号、纯图片或正文过短且无互动信号的笔记，减少低价值入口进入详情链。"""
+        plain_text = re.sub(r"\s+", "", content or "")
+        if len(plain_text) >= 18:
+            return False
+        interaction_text = self._extract_interaction_text(note_card.get("interactInfo", {}) or note_card.get("interact", {}) or {})
+        tags = self._extract_tag_names(note_card)
+        return not interaction_text and len(tags) == 0 and len((title or "").strip()) < 14
+
+    def _extract_tag_names(self, note: dict) -> list[str]:
+        tag_names = []
+        for tag in note.get("tagList", []) or note.get("tags", []) or []:
+            if isinstance(tag, dict):
+                name = str(tag.get("name") or tag.get("tagName") or "").strip()
+            else:
+                name = str(tag or "").strip()
+            if name:
+                tag_names.append(name)
+        return tag_names
+
+    def _extract_interaction_text(self, interact_info: dict) -> str:
+        interaction_parts = []
+        for key, label in (
+            ("likedCount", "点赞"),
+            ("collectedCount", "收藏"),
+            ("commentCount", "评论"),
+            ("shareCount", "分享"),
+        ):
+            value = interact_info.get(key)
+            if value not in (None, "", "0", 0):
+                interaction_parts.append(f"{label}{value}")
+        return "互动：" + "，".join(interaction_parts) if interaction_parts else ""
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
         return self.resolve_detail(item).content
@@ -444,27 +459,13 @@ class XiaohongshuCrawler(BaseCrawler):
             content_parts.append(title)
         if desc and desc != title:
             content_parts.append(desc)
-        tag_names = []
-        for tag in note.get("tagList", []) or []:
-            if isinstance(tag, dict):
-                name = str(tag.get("name") or tag.get("tagName") or "").strip()
-                if name:
-                    tag_names.append(name)
+        tag_names = self._extract_tag_names(note)
         if tag_names:
             content_parts.append("标签：" + "、".join(tag_names[:12]))
 
         interact_info = note.get("interactInfo", {}) or {}
-        interaction_parts = []
-        for key, label in (
-            ("likedCount", "点赞"),
-            ("collectedCount", "收藏"),
-            ("commentCount", "评论"),
-            ("shareCount", "分享"),
-        ):
-            value = interact_info.get(key)
-            if value not in (None, "", "0", 0):
-                interaction_parts.append(f"{label}{value}")
-        if interaction_parts:
-            content_parts.append("互动：" + "，".join(interaction_parts))
+        interaction_text = self._extract_interaction_text(interact_info)
+        if interaction_text:
+            content_parts.append(interaction_text)
         
         return "。".join(content_parts) if content_parts else ""

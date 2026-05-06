@@ -1,22 +1,48 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import DataPanel from '@/components/DataPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import PageTabs from '@/components/PageTabs.vue'
+import PaginationControl from '@/components/PaginationControl.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { getChannelHealth, getCrawlRuns, getCrawlTasks, rebuildEvents, triggerCrawlTask } from '@/services/adminApi'
 import type { ChannelHealth, CrawlRunSummary, CrawlTask } from '@/types/admin'
 
+const route = useRoute()
 const runs = ref<CrawlRunSummary[]>([])
 const tasks = ref<CrawlTask[]>([])
 const healthItems = ref<ChannelHealth[]>([])
 const actionMessage = ref('')
 const isRunning = ref(false)
+const healthPage = ref(1)
+const runsPage = ref(1)
+const tasksPage = ref(1)
+const actionPage = ref(1)
+const pageSize = 8
+
+const section = computed(() => String(route.meta.section || 'health'))
+const tabs = [
+  { to: '/crawl-runs/health', label: '渠道健康', description: '完整率、成功率、风险' },
+  { to: '/crawl-runs/runs', label: '运行日志', description: '最近采集结果' },
+  { to: '/crawl-runs/tasks', label: '任务配置', description: '调度间隔与状态' },
+  { to: '/crawl-runs/actions', label: '手动采集', description: '补采和重建事件' },
+]
+const pagedHealthItems = computed(() => pageSlice(healthItems.value, healthPage.value))
+const pagedRuns = computed(() => pageSlice(runs.value, runsPage.value))
+const pagedTasks = computed(() => pageSlice(tasks.value, tasksPage.value))
+const pagedActionTasks = computed(() => pageSlice(tasks.value, actionPage.value))
 
 async function loadData() {
-  const [runItems, taskItems, channelHealthItems] = await Promise.all([getCrawlRuns(20), getCrawlTasks(), getChannelHealth()])
+  const [runItems, taskItems, channelHealthItems] = await Promise.all([getCrawlRuns(50), getCrawlTasks(), getChannelHealth()])
   runs.value = runItems
   tasks.value = taskItems
   healthItems.value = channelHealthItems
+}
+
+function pageSlice<T>(items: T[], page: number) {
+  const start = (page - 1) * pageSize
+  return items.slice(start, start + pageSize)
 }
 
 async function runAction(action: () => Promise<{ message: string }>) {
@@ -72,11 +98,13 @@ function issueText(item: ChannelHealth) {
 </script>
 
 <template>
-  <section class="panel-grid">
-    <DataPanel title="采集操作" status="人工触发">
+  <section class="page-stack">
+    <PageTabs :items="tabs" />
+
+    <DataPanel v-if="section === 'actions'" title="采集操作栏" status="人工触发">
       <div class="action-strip">
         <button
-          v-for="item in tasks"
+          v-for="item in pagedActionTasks"
           :key="item.task_code"
           type="button"
           :disabled="isRunning"
@@ -86,12 +114,13 @@ function issueText(item: ChannelHealth) {
         </button>
         <button type="button" :disabled="isRunning" @click="runAction(rebuildEvents)">重建事件</button>
       </div>
+      <PaginationControl v-model:page="actionPage" :page-size="pageSize" :total="tasks.length" />
       <p class="action-message">{{ actionMessage || '用于手动补采重点渠道，或在数据治理后重新生成事件流。' }}</p>
     </DataPanel>
 
-    <DataPanel title="渠道健康" :status="`${healthItems.length} 个渠道`">
-      <ul v-if="healthItems.length" class="data-list data-list--health">
-        <li v-for="item in healthItems" :key="item.channel_code">
+    <DataPanel v-if="section === 'health'" title="渠道健康表" :status="`${healthItems.length} 个渠道`">
+      <ul v-if="pagedHealthItems.length" class="data-list data-list--health">
+        <li v-for="item in pagedHealthItems" :key="item.channel_code">
           <strong>{{ item.channel_name }}</strong>
           <span>健康 {{ item.health_score }} · 成功率 {{ item.success_rate }}% · 详情完整 {{ item.detail_complete_rate }}%</span>
           <span>{{ freshnessText(item) }}</span>
@@ -100,28 +129,31 @@ function issueText(item: ChannelHealth) {
           <small>{{ issueText(item) }}</small>
         </li>
       </ul>
-      <EmptyState v-else title="暂无渠道健康数据" description="采集任务运行后会自动计算成功率、完整率和风险状态。" />
+      <PaginationControl v-model:page="healthPage" :page-size="pageSize" :total="healthItems.length" />
+      <EmptyState v-if="!pagedHealthItems.length" title="暂无渠道健康数据" description="采集任务运行后会自动计算成功率、完整率和风险状态。" />
     </DataPanel>
 
-    <DataPanel title="采集运行日志" :status="`${runs.length} 条`">
-      <ul v-if="runs.length" class="data-list">
-        <li v-for="item in runs" :key="`${item.channel_code}-${item.started_at}`">
+    <DataPanel v-if="section === 'runs'" title="采集运行日志" :status="`${runs.length} 条`">
+      <ul v-if="pagedRuns.length" class="data-list">
+        <li v-for="item in pagedRuns" :key="`${item.channel_code}-${item.started_at}`">
           <strong>{{ item.channel_code }} · {{ item.started_at }}</strong>
           <span>入库 {{ item.saved_count }} / 清洗 {{ item.cleaned_count }} / 详情失败 {{ item.detail_failed_count }}</span>
         </li>
       </ul>
-      <EmptyState v-else title="暂无运行日志" description="等待调度器写入 crawl_run_log。" />
+      <PaginationControl v-model:page="runsPage" :page-size="pageSize" :total="runs.length" />
+      <EmptyState v-if="!pagedRuns.length" title="暂无运行日志" description="等待调度器写入 crawl_run_log。" />
     </DataPanel>
 
-    <DataPanel title="采集任务" :status="`${tasks.length} 个`">
-      <ul v-if="tasks.length" class="data-list">
-        <li v-for="item in tasks" :key="item.task_code">
+    <DataPanel v-if="section === 'tasks'" title="采集任务配置" :status="`${tasks.length} 个`">
+      <ul v-if="pagedTasks.length" class="data-list">
+        <li v-for="item in pagedTasks" :key="item.task_code">
           <strong>{{ item.task_name }}</strong>
           <span>{{ item.channel_name }} · {{ item.schedule_value }}</span>
           <StatusBadge :label="item.status" :tone="item.status === 'active' ? 'success' : 'muted'" />
         </li>
       </ul>
-      <EmptyState v-else title="暂无采集任务" description="启动调度器后会同步渠道任务。" />
+      <PaginationControl v-model:page="tasksPage" :page-size="pageSize" :total="tasks.length" />
+      <EmptyState v-if="!pagedTasks.length" title="暂无采集任务" description="启动调度器后会同步渠道任务。" />
     </DataPanel>
   </section>
 </template>

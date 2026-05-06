@@ -14,6 +14,38 @@ def test_weibo_cookie_can_be_loaded_from_env_file(monkeypatch, tmp_path):
     assert crawler._get_weibo_cookie() == "SUB=session-token; XSRF-TOKEN=csrf-token"
 
 
+def test_weibo_hot_band_source_id_uses_rank_and_heat_context():
+    crawler = WeiboCrawler()
+
+    def fake_fetch_json(url, headers=None):
+        return {
+            "data": {
+                "band_list": [
+                    {
+                        "word": "张雪机车再夺冠军",
+                        "note": "张雪机车再夺冠军",
+                        "rank": 1,
+                        "num": 123456,
+                    },
+                    {
+                        "word": "张雪机车再夺冠军",
+                        "note": "张雪机车再夺冠军",
+                        "rank": 2,
+                        "num": 234567,
+                    },
+                ]
+            }
+        }
+
+    crawler.fetch_json = fake_fetch_json
+
+    items = crawler._crawl_hot_band()
+
+    assert len(items) == 2
+    assert items[0]["source_id"] != items[1]["source_id"]
+    assert "%E5%BC%A0%E9%9B%AA" in items[0]["source_url"]
+
+
 def test_weibo_auth_headers_include_cookie(monkeypatch):
     monkeypatch.setenv("WEIBO_COOKIE", "SUB=session-token; XSRF-TOKEN=csrf-token")
 

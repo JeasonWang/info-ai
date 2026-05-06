@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import time
 from typing import Protocol
 
 from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
@@ -30,18 +31,41 @@ class DetailStrategyChain:
 
     def __init__(self, strategies: list[DetailStrategy]):
         self.strategies = strategies
+        self.execution_logs: list[dict] = []
 
     def run(self, context: DetailContext) -> DetailPipelineResult:
         candidates: list[DetailStrategyResult] = []
         best_result: DetailPipelineResult | None = None
+        self.execution_logs = []
 
         for strategy in self.strategies:
-            candidate = strategy.fetch(context)
+            started_at = time.monotonic()
+            try:
+                candidate = strategy.fetch(context)
+            except Exception as exc:
+                candidate = DetailStrategyResult(
+                    strategy=getattr(strategy, "name", strategy.__class__.__name__),
+                    content="",
+                    failure_reason=f"strategy_exception:{exc}",
+                    matched_rules=["strategy_exception"],
+                )
+            elapsed_ms = int((time.monotonic() - started_at) * 1000)
             candidates.append(candidate)
             current = run_detail_pipeline(
                 title=context.title,
                 list_content=context.list_content,
                 strategy_results=candidates,
+                channel_code=context.channel_code,
+            )
+            self.execution_logs.append(
+                {
+                    "strategy": candidate.strategy,
+                    "status": current.status,
+                    "score": current.score,
+                    "content_length": len(candidate.content or ""),
+                    "failure_reason": current.failure_reason or candidate.failure_reason,
+                    "elapsed_ms": elapsed_ms,
+                }
             )
             if current.status == "complete":
                 return current
@@ -52,4 +76,5 @@ class DetailStrategyChain:
             title=context.title,
             list_content=context.list_content,
             strategy_results=candidates,
+            channel_code=context.channel_code,
         )

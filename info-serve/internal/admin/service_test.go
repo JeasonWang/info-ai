@@ -30,6 +30,17 @@ func (r *fakeActionRunner) TriggerCrawl(ctx context.Context, channelCode string)
 	return ActionResult{Action: r.action, Message: "已触发采集", Data: map[string]any{"channel_code": channelCode}}, nil
 }
 
+func (r *fakeActionRunner) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
+	r.action = "channel_quality_report"
+	r.limit = sampleLimit
+	return map[string]any{
+		"summary": map[string]any{"usable_ratio": 88.0},
+		"channels": []any{
+			map[string]any{"channel_code": "weibo", "usable_ratio": 88.0},
+		},
+	}, nil
+}
+
 func (r *fakeActionRunner) RebuildEvents(ctx context.Context) (ActionResult, error) {
 	r.action = "rebuild_events"
 	return ActionResult{Action: r.action, Message: "已重建事件"}, nil

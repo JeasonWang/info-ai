@@ -10,17 +10,17 @@ LOG_DIR="$ROOT_DIR/logs/local"
 SERVICES=(
   "info-admin"
   "info-max"
+  "info-mvp"
   "info-serve"
   "info_aggregation"
-  "info-mvp"
 )
 
 PORTS=(
   "5174:管理端"
   "5173:用户端"
+  "5175:h5端"
   "8080:业务 API"
   "8000:采集 API"
-  "5175:h5端"
 )
 
 stop_by_pid_file() {

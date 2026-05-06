@@ -4,14 +4,13 @@
 """
 import hashlib
 import html
-import os
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
 
 from .base import BaseCrawler
+from services.credential_provider import get_credential
 from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
@@ -73,48 +72,20 @@ class ZhihuCrawler(BaseCrawler):
         cookie = self._get_zhihu_cookie()
         if cookie:
             headers["Cookie"] = cookie
-        zse_93 = self._get_env_value("ZHIHU_ZSE_93")
-        zse_96 = self._get_env_value("ZHIHU_ZSE_96")
+        zse_93 = get_credential("ZHIHU_ZSE_93")
+        zse_96 = get_credential("ZHIHU_ZSE_96")
         if zse_93:
             headers["x-zse-93"] = zse_93
         if zse_96:
             headers["x-zse-96"] = zse_96
         return headers
 
-    def _get_env_value(self, name: str) -> str:
-        value = os.getenv(name, "").strip()
-        if value:
-            return self._strip_env_quotes(value)
-
-        candidates = [
-            Path.cwd() / ".env",
-            Path.cwd().parent / ".env",
-            Path(__file__).resolve().parents[2] / ".env",
-        ]
-        for env_path in candidates:
-            if not env_path.exists():
-                continue
-            try:
-                for line in env_path.read_text(encoding="utf-8").splitlines():
-                    stripped = line.strip()
-                    if not stripped or stripped.startswith("#") or not stripped.startswith(f"{name}="):
-                        continue
-                    return self._strip_env_quotes(stripped.split("=", 1)[1].strip())
-            except OSError:
-                continue
-        return ""
-
     def _get_zhihu_cookie(self) -> str:
-        return self._get_env_value("ZHIHU_COOKIE")
+        return get_credential("ZHIHU_COOKIE")
 
     def _build_source_id(self, source_url: str, fallback_title: str) -> str:
         source_key = source_url or f"hot_search_{fallback_title}"
         return hashlib.md5(f"zhihu_{source_key}".encode()).hexdigest()[:16]
-
-    def _strip_env_quotes(self, value: str) -> str:
-        if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
-            return value[1:-1]
-        return value
 
     def _parse_cookie_jar(self, raw_cookie: str) -> list[dict]:
         cookies = []

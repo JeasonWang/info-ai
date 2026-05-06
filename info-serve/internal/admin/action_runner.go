@@ -12,6 +12,7 @@ type ActionResult struct {
 // ActionRunner 定义管理后台可触发的采集和治理动作。
 type ActionRunner interface {
 	TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error)
+	GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error)
 	RebuildEvents(ctx context.Context) (ActionResult, error)
 	RefreshQuality(ctx context.Context) (ActionResult, error)
 	RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error)
@@ -31,6 +32,42 @@ func (r *MemoryActionRunner) TriggerCrawl(ctx context.Context, channelCode strin
 		Action:  "trigger_crawl",
 		Message: "本地测试模式已模拟触发采集",
 		Data:    map[string]any{"channel_code": channelCode},
+	}, nil
+}
+
+func (r *MemoryActionRunner) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
+	return map[string]any{
+		"summary": map[string]any{
+			"real_count":               2,
+			"complete_count":           1,
+			"high_value_partial_count": 1,
+			"usable_count":             2,
+			"needs_attention_count":    0,
+			"complete_ratio":           50.0,
+			"usable_ratio":             100.0,
+			"needs_attention_ratio":    0.0,
+			"weak_channels":            []any{},
+		},
+		"channels": []any{
+			map[string]any{
+				"channel_code":              "weibo",
+				"channel_name":              "微博",
+				"real_count":                2,
+				"complete_count":            1,
+				"complete_ratio":            50.0,
+				"high_value_partial_count":  1,
+				"usable_count":              2,
+				"usable_ratio":              100.0,
+				"needs_attention_count":     0,
+				"needs_attention_ratio":     0.0,
+				"avg_detail_score":          82.5,
+				"avg_detail_content_length": 320.0,
+				"top_failure_reasons":       []any{},
+				"top_detail_strategies":     []any{map[string]any{"strategy": "mobile_search", "count": 2}},
+				"credential_health":         map[string]any{"health": "ready"},
+				"weak_samples":              []any{},
+			},
+		},
 	}, nil
 }
 

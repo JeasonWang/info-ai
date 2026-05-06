@@ -54,6 +54,15 @@ func (h *AdminHandler) ChannelHealth(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) ChannelQualityReport(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.GetChannelQualityReport(r.Context(), querySampleLimit(r))
+	if err != nil {
+		response.InternalServerError(w, "渠道质量报告查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListQualitySnapshots(r.Context(), queryLimit(r))
 	if err != nil {
@@ -299,6 +308,11 @@ func (h *AdminHandler) ArchiveDuplicateTitles(w http.ResponseWriter, r *http.Req
 
 func queryLimit(r *http.Request) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	return limit
+}
+
+func querySampleLimit(r *http.Request) int {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("sample_limit"))
 	return limit
 }
 

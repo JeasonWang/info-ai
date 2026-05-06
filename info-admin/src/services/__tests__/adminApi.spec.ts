@@ -9,6 +9,7 @@ import {
   getAdminOverview,
   getAuditLogs,
   getChannelHealth,
+  getChannelQualityReport,
   getDetailJob,
   getDetailJobReport,
   getLowQualityInfos,
@@ -48,6 +49,12 @@ describe('admin API versioned paths', () => {
     await getChannelHealth()
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/v1/admin/channel-health',
+      expect.any(Object),
+    )
+
+    await getChannelQualityReport(6)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/admin/channel-quality-report?sample_limit=6',
       expect.any(Object),
     )
 

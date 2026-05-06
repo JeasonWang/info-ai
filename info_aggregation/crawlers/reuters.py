@@ -226,7 +226,8 @@ class ReutersCrawler(BaseCrawler):
         for item in root.findall(".//item")[:30]:
             raw_title = self._xml_text(item, "title")
             link = self._xml_text(item, "link")
-            description = self._clean_detail_text(html_lib.unescape(self._xml_text(item, "description")))
+            raw_description = html_lib.unescape(self._xml_text(item, "description"))
+            description = self._clean_detail_text(raw_description)
             source = self._xml_text(item, "source")
             if source and "Reuters" not in source:
                 continue
@@ -234,13 +235,15 @@ class ReutersCrawler(BaseCrawler):
             if not title or not link or title in seen:
                 continue
             seen.add(title)
-            source_id = hashlib.md5(f"reuters_google_news_{title}".encode()).hexdigest()[:16]
+            official_url = self._extract_reuters_url_from_index_description(raw_description)
+            source_url = official_url or link
+            source_id = hashlib.md5(f"reuters_google_news_{source_url or title}".encode()).hexdigest()[:16]
             summary = description or f"Reuters indexed news item: {title}"
             results.append({
                 "source_id": source_id,
                 "title": title[:40],
                 "content": summary[:500],
-                "source_url": link,
+                "source_url": source_url,
                 "event_time": datetime.now(),
                 "core_entity": title[:20],
                 "location": "",
@@ -248,10 +251,19 @@ class ReutersCrawler(BaseCrawler):
                 "indicator_value": "",
                 "_allow_title_only": True,
                 "_reuters_source": "google_news_index",
+                "_reuters_index_url": link,
+                "_reuters_lineage": "official_url_from_index" if official_url else "index_summary_only",
             })
             if len(results) >= 20:
                 break
         return results
+
+    def _extract_reuters_url_from_index_description(self, description: str) -> str:
+        """从新闻索引摘要中恢复 Reuters 官方 URL，能恢复时后续继续尝试全文抓取。"""
+        match = re.search(r'https://www\.reuters\.com/[^"\s<>]+', description or "")
+        if not match:
+            return ""
+        return html_lib.unescape(match.group(0)).rstrip(".,)")
 
     def _xml_text(self, item, tag: str) -> str:
         node = item.find(tag)
@@ -262,7 +274,9 @@ class ReutersCrawler(BaseCrawler):
 
     def resolve_detail(self, item: dict):
         candidates = []
-        if item.get("_reuters_source") == "google_news_index" or "news.google.com" in item.get("source_url", ""):
+        is_google_index = item.get("_reuters_source") == "google_news_index" or "news.google.com" in item.get("source_url", "")
+        has_official_url = str(item.get("source_url", "")).startswith("https://www.reuters.com/")
+        if is_google_index and not has_official_url:
             summary = self._clean_detail_text(item.get("content", ""))
             if len(summary) >= 50:
                 candidates.append(DetailStrategyResult(strategy="news_index_summary", content=limit_detail_content(summary)))
@@ -294,6 +308,11 @@ class ReutersCrawler(BaseCrawler):
         html_detail = self._fetch_html_article_detail(item)
         if html_detail:
             candidates.append(html_detail)
+
+        if is_google_index:
+            summary = self._clean_detail_text(item.get("content", ""))
+            if len(summary) >= 50:
+                candidates.append(DetailStrategyResult(strategy="news_index_summary", content=limit_detail_content(summary)))
 
         return run_detail_pipeline(
             title=item.get("title", ""),

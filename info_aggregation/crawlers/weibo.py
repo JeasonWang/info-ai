@@ -3,12 +3,12 @@
 爬取微博热搜榜，获取热点事件信息，并深入爬取详情页获取完整内容
 """
 import hashlib
-import os
 import re
 from datetime import datetime
-from pathlib import Path
+from urllib.parse import quote
 
 from .base import BaseCrawler
+from services.credential_provider import get_credential
 from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
@@ -26,36 +26,14 @@ class WeiboCrawler(BaseCrawler):
     def __init__(self):
         super().__init__("weibo", "微博")
 
-    def _strip_env_quotes(self, value: str) -> str:
-        if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
-            return value[1:-1]
-        return value
-
-    def _get_env_value(self, name: str) -> str:
-        value = os.getenv(name, "").strip()
-        if value:
-            return self._strip_env_quotes(value)
-
-        candidates = [
-            Path.cwd() / ".env",
-            Path.cwd().parent / ".env",
-            Path(__file__).resolve().parents[2] / ".env",
-        ]
-        for env_path in candidates:
-            if not env_path.exists():
-                continue
-            try:
-                for line in env_path.read_text(encoding="utf-8").splitlines():
-                    stripped = line.strip()
-                    if not stripped or stripped.startswith("#") or not stripped.startswith(f"{name}="):
-                        continue
-                    return self._strip_env_quotes(stripped.split("=", 1)[1].strip())
-            except OSError:
-                continue
-        return ""
-
     def _get_weibo_cookie(self) -> str:
-        return self._get_env_value("WEIBO_COOKIE")
+        return get_credential("WEIBO_COOKIE")
+
+    def _build_source_id(self, source_key: str) -> str:
+        return hashlib.md5(f"weibo_{source_key}".encode()).hexdigest()[:16]
+
+    def _build_search_url(self, word: str) -> str:
+        return f"https://s.weibo.com/weibo?q=%23{quote(word)}%23"
 
     def _build_weibo_headers(self, referer: str, accept_json: bool = False) -> dict:
         headers = self._build_headers()
@@ -104,12 +82,13 @@ class WeiboCrawler(BaseCrawler):
                 title = desc.strip() if desc else ""
                 if not title:
                     continue
-                source_id = hashlib.md5(f"weibo_{title}".encode()).hexdigest()[:16]
+                source_url = self._build_search_url(title)
+                source_id = self._build_source_id(source_url)
                 results.append({
                     "source_id": source_id,
                     "title": title[:40],
                     "content": title[:500],
-                    "source_url": f"https://s.weibo.com/weibo?q=%23{title}%23",
+                    "source_url": source_url,
                     "event_time": datetime.now(),
                     "core_entity": title[:20],
                     "location": "",
@@ -151,12 +130,14 @@ class WeiboCrawler(BaseCrawler):
             if num:
                 content_parts.append(f"热度值：{num}")
             content = "。".join(content_parts)
-            source_id = hashlib.md5(f"weibo_{word}".encode()).hexdigest()[:16]
+            source_url = self._build_search_url(word)
+            source_key = f"{source_url}|rank:{rank}|num:{num}"
+            source_id = self._build_source_id(source_key)
             results.append({
                 "source_id": source_id,
                 "title": word[:40],
                 "content": content[:500],
-                "source_url": f"https://s.weibo.com/weibo?q=%23{word}%23",
+                "source_url": source_url,
                 "event_time": datetime.now(),
                 "core_entity": word[:20],
                 "location": "",
@@ -178,12 +159,13 @@ class WeiboCrawler(BaseCrawler):
             word = word.strip()
             if not word:
                 continue
-            source_id = hashlib.md5(f"weibo_{word}".encode()).hexdigest()[:16]
+            source_url = self._build_search_url(word)
+            source_id = self._build_source_id(source_url)
             results.append({
                 "source_id": source_id,
                 "title": word[:40],
                 "content": word[:500],
-                "source_url": f"https://s.weibo.com/weibo?q=%23{word}%23",
+                "source_url": source_url,
                 "event_time": datetime.now(),
                 "core_entity": word[:20],
                 "location": "",

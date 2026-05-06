@@ -26,21 +26,25 @@ onMounted(refreshCategories)
 </script>
 
 <template>
-  <DataPanel title="分类管理" :status="`${categories.length} 个分类`">
-    <form class="inline-form" @submit.prevent="submitCategory">
-      <input v-model="form.name" required placeholder="分类名称，例如 体育" />
-      <input v-model="form.code" required placeholder="分类编码，例如 sports" />
-      <input v-model="form.description" placeholder="分类说明" />
-      <button type="submit">新增分类</button>
-    </form>
-    <p class="form-message">{{ message }}</p>
+  <section class="page-stack">
+    <DataPanel title="新增分类" :status="`${categories.length} 个分类`">
+      <form class="inline-form" @submit.prevent="submitCategory">
+        <input v-model="form.name" required placeholder="分类名称，例如 体育" />
+        <input v-model="form.code" required placeholder="分类编码，例如 sports" />
+        <input v-model="form.description" placeholder="分类说明" />
+        <button type="submit">新增分类</button>
+      </form>
+      <p class="form-message">{{ message }}</p>
+    </DataPanel>
 
-    <ul v-if="categories.length" class="data-list">
-      <li v-for="item in categories" :key="item.id">
-        <strong>{{ item.name }} · {{ item.code }}</strong>
-        <span>{{ item.description || '暂无说明' }}</span>
-      </li>
-    </ul>
-    <EmptyState v-else title="暂无分类" description="请先创建分类，再添加渠道。" />
-  </DataPanel>
+    <DataPanel title="分类列表" :status="`${categories.length} 个`">
+      <ul v-if="categories.length" class="data-list">
+        <li v-for="item in categories" :key="item.id">
+          <strong>{{ item.name }} · {{ item.code }}</strong>
+          <span>{{ item.description || '暂无说明' }}</span>
+        </li>
+      </ul>
+      <EmptyState v-else title="暂无分类" description="请先创建分类，再添加渠道。" />
+    </DataPanel>
+  </section>
 </template>

@@ -59,6 +59,43 @@ def test_xiaohongshu_feed_desc_is_preserved_for_list_quality():
     assert item["_search_content"]
 
 
+def test_xiaohongshu_feed_card_includes_tags_and_interactions():
+    crawler = XiaohongshuCrawler()
+
+    item = crawler._extract_note_from_feed(
+        {
+            "id": "abc",
+            "xsecToken": "token",
+            "noteCard": {
+                "displayTitle": "AI 工具真实体验",
+                "desc": "这篇笔记详细分享了提示词准备、任务拆解和结果校验。",
+                "tagList": [{"name": "AI工具"}, {"name": "效率"}],
+                "interactInfo": {"likedCount": "1088", "commentCount": "45"},
+            },
+        }
+    )
+
+    assert "AI工具" in item["content"]
+    assert "点赞1088" in item["content"]
+    assert "评论45" in item["content"]
+
+
+def test_xiaohongshu_feed_filters_low_information_note():
+    crawler = XiaohongshuCrawler()
+
+    item = crawler._extract_note_from_feed(
+        {
+            "id": "abc",
+            "noteCard": {
+                "displayTitle": "太绝了",
+                "desc": "",
+            },
+        }
+    )
+
+    assert item is None
+
+
 def test_xiaohongshu_cookie_is_loaded_from_env_file(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("XHS_COOKIE=a=1; web_session=abc\n", encoding="utf-8")

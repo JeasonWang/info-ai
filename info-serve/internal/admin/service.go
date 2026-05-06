@@ -272,6 +272,16 @@ func (s *Service) ListChannelHealth(ctx context.Context) ([]ChannelHealth, error
 	return s.store.ListChannelHealth(ctx)
 }
 
+func (s *Service) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
+	if sampleLimit < 1 {
+		sampleLimit = 5
+	}
+	if sampleLimit > 20 {
+		sampleLimit = 20
+	}
+	return s.runner.GetChannelQualityReport(ctx, sampleLimit)
+}
+
 func (s *Service) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
 	if limit < 1 {
 		limit = 8

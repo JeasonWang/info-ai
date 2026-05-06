@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import DataPanel from '@/components/DataPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import PageTabs from '@/components/PageTabs.vue'
+import PaginationControl from '@/components/PaginationControl.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import {
   batchCancelDetailJobs,
@@ -13,26 +16,43 @@ import {
 } from '@/services/adminApi'
 import type { DetailJobDetail, DetailJobReport, DetailJobSample } from '@/types/admin'
 
+const route = useRoute()
 const report = ref<DetailJobReport | null>(null)
 const actionMessage = ref('')
 const actingJobId = ref<number | null>(null)
 const isBatchRunning = ref(false)
 const selectedJob = ref<DetailJobDetail | null>(null)
+const pendingPage = ref(1)
+const failedPage = ref(1)
+const pageSize = 8
 const filters = ref({
   channelCode: '',
   failureReason: '',
 })
 
+const section = computed(() => String(route.meta.section || 'overview'))
+const tabs = [
+  { to: '/detail-jobs/overview', label: '补偿总览', description: '队列规模和失败分布' },
+  { to: '/detail-jobs/pending', label: '待处理任务', description: '查看、取消积压任务' },
+  { to: '/detail-jobs/failed', label: '失败任务', description: '定位失败并重试' },
+]
 const statusItems = computed(() => Object.entries(report.value?.status_counts || {}))
 const channelItems = computed(() => Object.entries(report.value?.channel_counts || {}))
 const failureReasonItems = computed(() => report.value?.top_failure_reasons || [])
+const pagedPendingSamples = computed(() => pageSlice(report.value?.pending_samples || [], pendingPage.value))
+const pagedFailedSamples = computed(() => pageSlice(report.value?.failed_samples || [], failedPage.value))
 
 async function refreshData() {
   report.value = await getDetailJobReport({
-    limit: 10,
+    limit: 50,
     channelCode: filters.value.channelCode,
     failureReason: filters.value.failureReason,
   })
+}
+
+function pageSlice<T>(items: T[], page: number) {
+  const start = (page - 1) * pageSize
+  return items.slice(start, start + pageSize)
 }
 
 function statusTone(status: string) {
@@ -125,7 +145,9 @@ onMounted(refreshData)
 
 <template>
   <div class="page-stack">
-    <DataPanel title="详情补偿队列" :status="report ? `${report.total} 个任务` : '加载中'">
+    <PageTabs :items="tabs" />
+
+    <DataPanel v-if="section === 'overview'" title="详情补偿队列" :status="report ? `${report.total} 个任务` : '加载中'">
       <div v-if="report" class="metric-grid metric-grid--compact">
         <div class="metric-card">
           <span>队列总量</span>
@@ -146,7 +168,7 @@ onMounted(refreshData)
       <EmptyState v-else title="正在加载" description="详情补偿队列报告加载中。" />
     </DataPanel>
 
-    <DataPanel title="队列筛选" :status="filters.channelCode || filters.failureReason ? '已筛选' : '全部任务'">
+    <DataPanel v-if="section !== 'overview'" title="查询条件" :status="filters.channelCode || filters.failureReason ? '已筛选' : '全部任务'">
       <div class="inline-form detail-job-filter">
         <label>
           <span>渠道</span>
@@ -184,7 +206,7 @@ onMounted(refreshData)
       </div>
     </DataPanel>
 
-    <DataPanel title="队列分布" status="按状态 / 渠道">
+    <DataPanel v-if="section === 'overview'" title="队列分布" status="按状态 / 渠道">
       <div v-if="report" class="panel-grid panel-grid--split">
         <section>
           <h3>状态分布</h3>
@@ -209,7 +231,7 @@ onMounted(refreshData)
       </div>
     </DataPanel>
 
-    <DataPanel title="失败原因" :status="`${report?.top_failure_reasons.length || 0} 类`">
+    <DataPanel v-if="section === 'overview'" title="失败原因" :status="`${report?.top_failure_reasons.length || 0} 类`">
       <ul v-if="report?.top_failure_reasons.length" class="data-list">
         <li v-for="item in report.top_failure_reasons" :key="item.reason">
           <strong>{{ item.reason }}</strong>
@@ -220,9 +242,9 @@ onMounted(refreshData)
       <EmptyState v-else title="暂无失败原因" description="失败样本出现后会在这里聚合。" />
     </DataPanel>
 
-    <DataPanel title="待处理样本" :status="`${report?.pending_samples.length || 0} 条`">
-      <ul v-if="report?.pending_samples.length" class="data-list data-list--detail-jobs">
-        <li v-for="item in report.pending_samples" :key="item.id">
+    <DataPanel v-if="section === 'pending'" title="待处理任务表" :status="`${report?.pending_samples.length || 0} 条`">
+      <ul v-if="pagedPendingSamples.length" class="data-list data-list--detail-jobs">
+        <li v-for="item in pagedPendingSamples" :key="item.id">
           <strong>{{ item.title }}</strong>
           <span>{{ sampleMeta(item) }}</span>
           <StatusBadge :label="item.status" :tone="statusTone(item.status)" />
@@ -247,12 +269,17 @@ onMounted(refreshData)
           </div>
         </li>
       </ul>
-      <EmptyState v-else title="暂无待处理任务" description="当前没有积压的详情补偿任务。" />
+      <PaginationControl
+        v-model:page="pendingPage"
+        :page-size="pageSize"
+        :total="report?.pending_samples.length || 0"
+      />
+      <EmptyState v-if="!pagedPendingSamples.length" title="暂无待处理任务" description="当前没有积压的详情补偿任务。" />
     </DataPanel>
 
-    <DataPanel title="失败样本" :status="`${report?.failed_samples.length || 0} 条`">
-      <ul v-if="report?.failed_samples.length" class="data-list data-list--detail-jobs">
-        <li v-for="item in report.failed_samples" :key="item.id">
+    <DataPanel v-if="section === 'failed'" title="失败任务表" :status="`${report?.failed_samples.length || 0} 条`">
+      <ul v-if="pagedFailedSamples.length" class="data-list data-list--detail-jobs">
+        <li v-for="item in pagedFailedSamples" :key="item.id">
           <strong>{{ item.title }}</strong>
           <span>{{ sampleMeta(item) }}</span>
           <StatusBadge :label="item.status" tone="warning" />
@@ -285,7 +312,12 @@ onMounted(refreshData)
           </div>
         </li>
       </ul>
-      <EmptyState v-else title="暂无失败任务" description="达到最大重试次数的任务会在这里展示。" />
+      <PaginationControl
+        v-model:page="failedPage"
+        :page-size="pageSize"
+        :total="report?.failed_samples.length || 0"
+      />
+      <EmptyState v-if="!pagedFailedSamples.length" title="暂无失败任务" description="达到最大重试次数的任务会在这里展示。" />
     </DataPanel>
   </div>
 </template>
