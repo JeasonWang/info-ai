@@ -41,3 +41,20 @@ func TestRouterAddsCorsHeadersToAPIResponses(t *testing.T) {
 		t.Fatalf("allow origin = %q", res.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
+
+func TestRouterAllowsDynamicLocalhostDevPorts(t *testing.T) {
+	router := NewRouter(Services{})
+	req := httptest.NewRequest(http.MethodOptions, "/api/events", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:5176")
+	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	res := httptest.NewRecorder()
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+	if res.Header().Get("Access-Control-Allow-Origin") != "http://127.0.0.1:5176" {
+		t.Fatalf("allow origin = %q", res.Header().Get("Access-Control-Allow-Origin"))
+	}
+}

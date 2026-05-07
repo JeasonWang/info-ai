@@ -291,4 +291,50 @@ function getActiveSortLabel(): string {
   font-family: 'uniicons';
   font-size: 24rpx;
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .filter-panel {
+    padding: 0 24px;
+  }
+
+  .collapsed-bar {
+    justify-content: space-between;
+  }
+
+  .active-label {
+    font-size: 14px;
+    gap: 8px;
+  }
+
+  .filter-btn {
+    padding: 8px 14px;
+    gap: 6px;
+  }
+
+  .filter-label {
+    font-size: 14px;
+  }
+
+  .expanded-card {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  .option-grid {
+    gap: 10px;
+  }
+
+  .option-pill {
+    padding: 8px 14px;
+    font-size: 14px;
+    border-radius: 999px;
+  }
+}
+/* #endif */
 </style>

@@ -1,6 +1,6 @@
 # info-mvp
 
-InfoMVP 是 info-max 的 uni-app 重构版本，一套代码同时编译到 **H5** 和 **微信小程序**。
+info-mvp 是“信息达人”用户端的 uni-app 重构版本，一套代码同时编译到 **H5**、**微信小程序**，并为后续 App 端打包保留扩展空间。后续用户端只维护 info-mvp，info-max 进入废弃迁移阶段。
 
 ## 技术栈
 
@@ -56,6 +56,15 @@ npm run build:mp-weixin
 # 用微信开发者工具上传
 ```
 
+### 构建质量门禁
+
+```bash
+npm run verify:h5
+npm run verify:mp-weixin
+```
+
+`verify` 脚本会透传构建日志，并额外识别 uni-app 条件编译失败、缺失 `#endif` 等日志级失败，避免构建命令退出码不准确时漏检。
+
 ## 项目结构
 
 ```
@@ -79,7 +88,8 @@ src/
 
 | 变量 | 开发默认值 | 说明 |
 |------|-----------|------|
-| `VITE_API_BASE_URL` | `/api` | 后端 API 基地址 |
+| `VITE_API_BASE_URL` | `/api` | 后端 API 基地址，推荐统一使用 |
+| `VITE_INFO_SERVE_BASE_URL` | - | 兼容旧部署变量，未设置 `VITE_API_BASE_URL` 时自动补 `/api` |
 
 ## 多端兼容
 

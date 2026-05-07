@@ -92,7 +92,7 @@ services:
       context: ./info-mvp
       dockerfile: Dockerfile
       args:
-        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8080}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     container_name: info-mvp
     restart: unless-stopped
     ports:

@@ -89,6 +89,14 @@ function formatHeat(score: number): string {
     </view>
 
     <view
+      v-else-if="hasMore && events.length > 0"
+      class="load-more load-more-action"
+      @click.stop="emit('load-more')"
+    >
+      <text>加载更多</text>
+    </view>
+
+    <view
       v-else-if="!hasMore && events.length > 0"
       class="no-more"
     >
@@ -298,6 +306,15 @@ function formatHeat(score: number): string {
   color: var(--text-muted);
 }
 
+.load-more-action {
+  color: var(--brand-accent);
+  font-weight: 600;
+}
+
+.load-more-action:active {
+  opacity: 0.75;
+}
+
 .spinner {
   width: 28rpx;
   height: 28rpx;
@@ -344,4 +361,37 @@ function formatHeat(score: number): string {
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .event-list {
+    padding: 0;
+  }
+
+  .card {
+    margin-bottom: 16px;
+    border-radius: 14px;
+  }
+
+  .card-body {
+    padding: 20px;
+  }
+
+  .title {
+    font-size: 18px;
+    line-height: 1.45;
+  }
+
+  .summary {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .badge,
+  .badge-more,
+  .source-count {
+    font-size: 12px;
+  }
+}
+/* #endif */
 </style>

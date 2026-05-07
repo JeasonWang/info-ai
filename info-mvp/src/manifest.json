@@ -1,7 +1,7 @@
 {
   "name": "info-mvp",
   "appid": "",
-  "description": "热点事件 - 信息聚合平台",
+  "description": "信息达人 - 热点事件分析平台",
   "versionName": "0.1.0",
   "versionCode": "100",
   "transformPx": false,
@@ -53,6 +53,6 @@
       "mode": "hash",
       "base": "./"
     },
-    "title": "InfoMVP"
+    "title": "信息达人"
   }
 }

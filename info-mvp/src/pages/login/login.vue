@@ -308,4 +308,33 @@ function toggleMode() {
   font-size: var(--text-sm);
   color: var(--brand-accent);
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .login-page {
+    min-height: 100vh;
+    justify-content: center;
+    align-items: center;
+    padding: 48px;
+    background: linear-gradient(135deg, #f7f8fa 0%, #eef5ff 100%);
+  }
+
+  .hero,
+  .form-card {
+    width: 440px;
+  }
+
+  .hero {
+    padding: 44px 40px 54px;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .form-card {
+    flex: initial;
+    margin: -22px 0 0;
+    padding: 40px;
+    border-radius: 22px;
+  }
+}
+/* #endif */
 </style>

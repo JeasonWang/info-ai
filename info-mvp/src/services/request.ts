@@ -1,7 +1,9 @@
 import type { ApiResponse } from '@/types'
-import { getToken, removeToken } from '@/utils/storage'
+import { useUserStore } from '@/stores/user'
+import { getToken, removeStoredUser, removeToken } from '@/utils/storage'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_INFO_SERVE_BASE_URL || '/api'
+const BASE_URL = RAW_BASE_URL.endsWith('/api') ? RAW_BASE_URL : `${RAW_BASE_URL.replace(/\/$/, '')}/api`
 const API_PREFIX = '/v1'
 
 interface RequestConfig {
@@ -20,6 +22,12 @@ function showError(message: string) {
 
 function handleUnauthorized() {
   removeToken()
+  removeStoredUser()
+  try {
+    useUserStore().clearAuth()
+  } catch {
+    // Pinia may not be ready during very early app boot.
+  }
   if (isReLaunchingToLogin) return
   isReLaunchingToLogin = true
   // 只在用户曾经登录过（本地有缓存的用户信息）时才提示“过期”

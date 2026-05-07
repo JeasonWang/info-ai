@@ -1,22 +1,14 @@
 <script setup lang="ts">
 import { onLaunch } from '@dcloudio/uni-app'
+import { getCurrentUser } from '@/services/api'
 import { useUserStore } from '@/stores/user'
 
 onLaunch(() => {
   const store = useUserStore()
   if (store.token) {
-    uni.request({
-      url: `${import.meta.env.VITE_API_BASE_URL || '/api'}/v1/me`,
-      header: { Authorization: `Bearer ${store.token}` },
-      success: (res) => {
-        if (res.statusCode !== 200) {
-          store.clearAuth()
-        }
-      },
-      fail: () => {
-        store.clearAuth()
-      },
-    })
+    getCurrentUser()
+      .then((user) => store.setUser(user))
+      .catch(() => store.clearAuth())
   }
 })
 </script>
@@ -34,6 +26,10 @@ page {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   background-color: #f7f8fa;
   color: #1d2129;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
 
   /* Brand */
   --brand-primary: #2563eb;
@@ -98,4 +94,17 @@ page {
   --transition-base: 0.25s ease;
   --transition-slow: 0.4s ease;
 }
+
+/* #ifdef H5 */
+html,
+body,
+#app,
+uni-page-body,
+uni-page-wrapper {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+/* #endif */
 </style>

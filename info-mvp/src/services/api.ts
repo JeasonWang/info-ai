@@ -136,6 +136,7 @@ export function removeFavoriteEvent(eventId: number) {
 
 interface HomeFilterPreferenceResponse {
   category_code: string
+  channel_code?: string
   sort: 'composite' | 'latest'
   keyword: string
 }
@@ -146,11 +147,13 @@ export function getHomeFilterPreference() {
 
 export function saveHomeFilterPreference(preference: {
   categoryCode: string
+  channelCode: string
   sortMode: 'composite' | 'latest'
   keyword: string
 }) {
   return put<HomeFilterPreferenceResponse>('/me/preferences/home-filter', {
     category_code: preference.categoryCode,
+    channel_code: preference.channelCode,
     sort: preference.sortMode,
     keyword: preference.keyword,
   })

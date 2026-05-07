@@ -302,4 +302,25 @@ function retry() {
   color: var(--danger-color, #ef4444);
   padding: 8rpx 16rpx;
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .favorites-page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 28px 72px;
+  }
+
+  .list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .card {
+    margin-bottom: 0;
+    border-radius: 16px;
+  }
+}
+/* #endif */
 </style>

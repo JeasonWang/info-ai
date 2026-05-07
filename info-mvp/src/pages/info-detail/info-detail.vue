@@ -97,7 +97,7 @@ function onShareAppMessage() {
       <view class="article-body">
         <!-- #ifdef H5 -->
         <view class="article" v-html="info.content" />
-        <!-- #endif --
+        <!-- #endif -->
 
         <!-- #ifdef MP-WEIXIN -->
         <rich-text class="article" :nodes="info.content" />
@@ -300,4 +300,39 @@ function onShareAppMessage() {
   border-radius: 6rpx;
   margin-bottom: 16rpx;
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .detail-page {
+    padding: 32px 0 72px;
+  }
+
+  .content {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  .article-header,
+  .article-body {
+    border-radius: 16px;
+    padding: 32px;
+  }
+
+  .source-card {
+    margin: 0;
+    border-radius: 16px;
+  }
+
+  .title {
+    font-size: 32px;
+    line-height: 1.35;
+  }
+
+  .article {
+    font-size: 17px;
+    line-height: 1.95;
+  }
+}
+/* #endif */
 </style>

@@ -4,21 +4,13 @@ import { computed, ref } from 'vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import { getEventById, recordReadHistory } from '@/services/api'
 import { getToken } from '@/utils/storage'
-import type { EventDetail, EventTimelineItem } from '@/types'
+import type { EventDetail } from '@/types'
 
 const event = ref<EventDetail | null>(null)
 const loading = ref(true)
 const error = ref('')
 const eventId = ref(0)
 const timelineExpanded = ref(false)
-
-const summaryTypeMap: Record<string, string> = {
-  what_happened: '发生了什么',
-  why_it_matters: '为什么重要',
-  latest_update: '最新进展',
-  key_takeaway: '核心要点',
-  source_compare: '来源对比',
-}
 
 onLoad((options) => {
   const id = Number(options?.id)
@@ -202,6 +194,20 @@ function onShareAppMessage() {
         </view>
         <view class="fact-card">
           <text class="fact-text">{{ latestUpdate }}</text>
+        </view>
+      </view>
+
+      <!-- ========== 多源视角 ========== -->
+      <view v-if="event.source_views.length > 0" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-blue);" />
+          <text class="section-title">多源视角</text>
+        </view>
+        <view class="source-view-grid">
+          <view v-for="view in event.source_views" :key="view.channel_name" class="source-view-card">
+            <text class="source-view-channel">{{ view.channel_name }}</text>
+            <text class="source-view-summary">{{ view.summary }}</text>
+          </view>
         </view>
       </view>
 
@@ -527,6 +533,36 @@ function onShareAppMessage() {
   color: var(--cat-orange);
 }
 
+.source-view-grid {
+  display: grid;
+  gap: 16rpx;
+}
+
+.source-view-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 24rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.source-view-channel,
+.source-view-summary {
+  display: block;
+}
+
+.source-view-channel {
+  color: var(--brand-accent);
+  font-size: 24rpx;
+  font-weight: 700;
+  margin-bottom: 10rpx;
+}
+
+.source-view-summary {
+  color: var(--text-secondary);
+  font-size: 27rpx;
+  line-height: 1.7;
+}
+
 /* ========== Timeline ========== */
 .timeline-card {
   background: var(--card-bg);
@@ -683,4 +719,47 @@ function onShareAppMessage() {
   border-radius: 6rpx;
   margin-bottom: 16rpx;
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .detail-page {
+    padding-bottom: 72px;
+  }
+
+  .content {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 28px 72px;
+  }
+
+  .hero-panel {
+    margin: 24px 0 32px;
+    padding: 32px;
+    border-radius: 16px;
+  }
+
+  .hero-title {
+    max-width: 840px;
+    font-size: 34px;
+  }
+
+  .hero-summary {
+    max-width: 820px;
+    font-size: 17px;
+  }
+
+  .source-view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .source-view-card,
+  .fact-card,
+  .tag-card,
+  .timeline-card,
+  .source-card {
+    border-radius: 14px;
+  }
+}
+/* #endif */
 </style>

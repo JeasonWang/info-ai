@@ -96,4 +96,34 @@ function clearInput() {
   font-weight: 500;
   padding: 0 8rpx;
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .filter-card {
+    margin: 18px 24px 0;
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .search-row {
+    gap: 12px;
+  }
+
+  .search-box {
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+  }
+
+  .search-input {
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .search-btn {
+    font-size: 15px;
+    padding: 0 8px;
+  }
+}
+/* #endif */
 </style>

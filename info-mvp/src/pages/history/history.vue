@@ -271,4 +271,19 @@ function retry() {
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .history-page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 32px 28px 72px;
+  }
+
+  .item {
+    border-radius: 16px;
+    padding: 24px;
+  }
+}
+/* #endif */
 </style>

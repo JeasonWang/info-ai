@@ -1,6 +1,10 @@
 package transporthttp
 
-import "net/http"
+import (
+	"net/http"
+	"net/url"
+	"strings"
+)
 
 var allowedBrowserOrigins = map[string]bool{
 	"http://localhost":      true,
@@ -15,11 +19,24 @@ var allowedBrowserOrigins = map[string]bool{
 	"http://127.0.0.1:8081": true,
 }
 
+// isAllowedBrowserOrigin 允许本地开发端口自动变化，避免 Vite 端口被占用后切到 5176/5177 时触发跨域。
+func isAllowedBrowserOrigin(origin string) bool {
+	if allowedBrowserOrigins[origin] {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return parsed.Scheme == "http" && (host == "localhost" || host == "127.0.0.1" || host == "::1")
+}
+
 // withCORS 允许本地用户端和管理后台跨端口访问 info-serve。
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if allowedBrowserOrigins[origin] {
+		if isAllowedBrowserOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")

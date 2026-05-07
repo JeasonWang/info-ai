@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onLoad, onPullDownRefresh, onReachBottom, onPageScroll } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import EventList from '@/components/EventList.vue'
 import FilterPanel from '@/components/FilterPanel.vue'
 import FilterBar from '@/components/FilterBar.vue'
@@ -28,6 +28,16 @@ const keyword = ref(memory.value.keyword)
 const appliedKeyword = ref(memory.value.keyword)
 const sortMode = ref<'composite' | 'latest'>(memory.value.sortMode)
 const showBackToTop = ref(false)
+const nearBottomDistance = 180
+const activeCategoryName = computed(() => {
+  if (activeCategoryCode.value === 'all') return '全网热点'
+  return categories.value.find((item) => item.code === activeCategoryCode.value)?.name || '全网热点'
+})
+const activeChannelName = computed(() => {
+  if (activeChannelCode.value === 'all') return '全部渠道'
+  return channels.value.find((item) => item.code === activeChannelCode.value)?.name || '全部渠道'
+})
+const leadingEvents = computed(() => events.value.slice(0, 3))
 
 const {
   list: events,
@@ -104,6 +114,7 @@ async function restoreServerFilterPreference() {
   try {
     const preference = await getHomeFilterPreference()
     activeCategoryCode.value = preference.category_code || 'all'
+    activeChannelCode.value = preference.channel_code || 'all'
     sortMode.value = preference.sort === 'latest' ? 'latest' : 'composite'
     keyword.value = preference.keyword || ''
     appliedKeyword.value = preference.keyword || ''
@@ -155,6 +166,16 @@ function scrollToTop() {
   uni.pageScrollTo({ scrollTop: 0, duration: 300 })
 }
 
+function updateBackToTop(scrollTop: number) {
+  showBackToTop.value = scrollTop > 360
+}
+
+function maybeLoadMoreByScroll(scrollTop: number, viewportHeight: number, scrollHeight: number) {
+  if (scrollHeight - scrollTop - viewportHeight <= nearBottomDistance) {
+    void loadMore()
+  }
+}
+
 async function handleRetry() {
   await refresh()
 }
@@ -191,8 +212,36 @@ onReachBottom(() => {
 })
 
 onPageScroll((e) => {
-  showBackToTop.value = e.scrollTop > 360
+  updateBackToTop(e.scrollTop)
 })
+
+// #ifdef H5
+let nativeScrollFrame = 0
+
+function handleNativeScroll() {
+  if (nativeScrollFrame) return
+  nativeScrollFrame = window.requestAnimationFrame(() => {
+    nativeScrollFrame = 0
+    const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+    const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
+    updateBackToTop(scrollTop)
+    maybeLoadMoreByScroll(scrollTop, viewportHeight, scrollHeight)
+  })
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleNativeScroll, { passive: true })
+  handleNativeScroll()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleNativeScroll)
+  if (nativeScrollFrame) {
+    window.cancelAnimationFrame(nativeScrollFrame)
+  }
+})
+// #endif
 
 // #ifdef MP-WEIXIN
 function onShareAppMessage() {
@@ -216,8 +265,9 @@ function onShareTimeline() {
     <!-- 顶部导航栏 -->
     <view class="nav-bar">
       <view class="brand">
-        <text class="brand-name">热点事件</text>
-        <text class="brand-tag">实时聚合 · {{ eventTotal }}条</text>
+        <text class="brand-name">信息达人</text>
+        <text class="brand-count">{{ eventTotal }}</text>
+        <text class="brand-tag">{{ activeCategoryName }} · {{ eventTotal }} 条</text>
       </view>
       <view class="user-actions">
         <template v-if="userStore.isLoggedIn">
@@ -237,41 +287,71 @@ function onShareTimeline() {
       </view>
     </view>
 
-    <!-- 搜索框 -->
-    <FilterBar
-      :keyword="keyword"
-      @search="onSearch"
-    />
-
-    <!-- 筛选面板（分类+排序） -->
-    <view style="margin-top: 16rpx; margin-bottom: 16rpx;">
-      <FilterPanel
-        :categories="categories"
-        :channels="channels"
-        :active-code="activeCategoryCode"
-        :active-channel-code="activeChannelCode"
-        :sort-mode="sortMode"
-        @category-change="onCategoryChange"
-        @channel-change="onChannelChange"
-        @sort-change="onSortChange"
+    <view class="home-shell">
+      <!-- 搜索框 -->
+      <FilterBar
+        :keyword="keyword"
+        @search="onSearch"
       />
+
+      <!-- 筛选面板（分类+渠道+排序） -->
+      <view class="filter-wrap">
+        <FilterPanel
+          :categories="categories"
+          :channels="channels"
+          :active-code="activeCategoryCode"
+          :active-channel-code="activeChannelCode"
+          :sort-mode="sortMode"
+          @category-change="onCategoryChange"
+          @channel-change="onChannelChange"
+          @sort-change="onSortChange"
+        />
+      </view>
+
+      <view class="desktop-grid">
+        <view class="feed-column">
+          <SkeletonBlock v-if="loading && events.length === 0" />
+
+          <view v-else-if="error && events.length === 0" class="error-state">
+            <text class="error-icon">&#xe60c;</text>
+            <text class="error-text">{{ error }}</text>
+            <text class="retry-btn" @click="handleRetry">点击重试</text>
+          </view>
+
+          <EventList
+            :events="events"
+            :loading="loading"
+            :has-more="hasMore"
+            @load-more="loadMore"
+            @retry="handleLoadMoreRetry"
+          />
+        </view>
+
+        <view class="insight-rail">
+          <view class="rail-card">
+            <text class="rail-title">当前视图</text>
+            <text class="rail-line">{{ activeCategoryName }}</text>
+            <text class="rail-line">{{ activeChannelName }}</text>
+            <text class="rail-line">{{ sortMode === 'latest' ? '最新发布优先' : '综合热度优先' }}</text>
+          </view>
+          <view class="rail-card">
+            <text class="rail-title">值得先看</text>
+            <view v-if="leadingEvents.length" class="lead-list">
+              <view
+                v-for="item in leadingEvents"
+                :key="item.id"
+                class="lead-item"
+                @click="uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${item.id}` })"
+              >
+                <text class="lead-title">{{ item.title }}</text>
+                <text class="lead-meta">{{ item.source_count }} 来源 · 热度 {{ Math.round(item.heat_score || 0) }}</text>
+              </view>
+            </view>
+            <text v-else class="rail-empty">加载后展示最值得优先阅读的事件。</text>
+          </view>
+        </view>
+      </view>
     </view>
-
-    <SkeletonBlock v-if="loading && events.length === 0" />
-
-    <view v-else-if="error && events.length === 0" class="error-state">
-      <text class="error-icon">&#xe60c;</text>
-      <text class="error-text">{{ error }}</text>
-      <text class="retry-btn" @click="handleRetry">点击重试</text>
-    </view>
-
-    <EventList
-      :events="events"
-      :loading="loading"
-      :has-more="hasMore"
-      @load-more="loadMore"
-      @retry="handleLoadMoreRetry"
-    />
 
     <view
       v-if="showBackToTop"
@@ -285,9 +365,21 @@ function onShareTimeline() {
 
 <style scoped>
 .home-page {
+  width: 100vw;
+  max-width: 100vw;
+  box-sizing: border-box;
   padding-bottom: 40rpx;
   background: var(--bg-color);
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.home-shell {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* 顶部导航栏 */
@@ -295,15 +387,23 @@ function onShareTimeline() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
   padding: 24rpx;
   background: var(--card-bg);
   border-bottom: 1rpx solid var(--divider);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(18px);
+  max-width: 100vw;
+  box-sizing: border-box;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12rpx;
+  min-width: 0;
 }
 
 .brand-name {
@@ -313,6 +413,21 @@ function onShareTimeline() {
   letter-spacing: 2rpx;
 }
 
+.brand-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36rpx;
+  height: 32rpx;
+  padding: 0 10rpx;
+  color: #fff;
+  background: var(--brand-accent);
+  border-radius: var(--radius-pill);
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 32rpx;
+}
+
 .brand-tag {
   font-size: 20rpx;
   color: var(--brand-accent);
@@ -320,12 +435,17 @@ function onShareTimeline() {
   padding: 4rpx 12rpx;
   border-radius: var(--radius-sm);
   font-weight: 500;
+  max-width: 240rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .user-actions {
   display: flex;
   align-items: center;
   gap: 12rpx;
+  flex-shrink: 0;
 }
 
 .icon-btn {
@@ -362,6 +482,83 @@ function onShareTimeline() {
 .login-btn:active {
   transform: scale(0.95);
   background: rgba(37, 99, 235, 0.85);
+}
+
+.rail-title,
+.rail-line,
+.rail-empty,
+.lead-title,
+.lead-meta {
+  display: block;
+}
+
+.filter-wrap {
+  margin-top: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.desktop-grid {
+  display: block;
+}
+
+.feed-column {
+  min-width: 0;
+}
+
+.insight-rail {
+  display: none;
+}
+
+.rail-card {
+  background: var(--card-bg);
+  border: 1rpx solid var(--divider);
+  border-radius: var(--radius-lg);
+  padding: 26rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.rail-title {
+  color: var(--text-primary);
+  font-size: 30rpx;
+  font-weight: 800;
+  margin-bottom: 18rpx;
+}
+
+.rail-line {
+  color: var(--text-secondary);
+  font-size: 26rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--divider);
+}
+
+.rail-line:last-child {
+  border-bottom: 0;
+}
+
+.lead-list {
+  display: grid;
+  gap: 14rpx;
+}
+
+.lead-item {
+  padding: 18rpx;
+  background: var(--bg-color);
+  border-radius: var(--radius-md);
+}
+
+.lead-title {
+  color: var(--text-primary);
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.lead-meta,
+.rail-empty {
+  color: var(--text-muted);
+  font-size: 22rpx;
+  line-height: 1.5;
+  margin-top: 8rpx;
 }
 
 /* 错误状态 */
@@ -423,6 +620,28 @@ function onShareTimeline() {
   color: var(--text-secondary);
 }
 
+@media (max-width: 700px) {
+  .nav-bar {
+    padding: 12px 16px;
+  }
+
+  .brand-tag {
+    display: none;
+  }
+
+  .brand-count {
+    min-width: 24px;
+    height: 20px;
+    padding: 0 7px;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .filter-wrap {
+    max-width: 358px;
+  }
+}
+
 @keyframes float-in {
   from {
     opacity: 0;
@@ -433,4 +652,83 @@ function onShareTimeline() {
     transform: translateY(0) scale(1);
   }
 }
+
+/* #ifdef H5 */
+@media (min-width: 960px) {
+  .home-page {
+    padding-bottom: 72px;
+  }
+
+  .nav-bar {
+    padding: 18px 32px;
+  }
+
+  .brand-name {
+    font-size: 24px;
+    letter-spacing: 0;
+  }
+
+  .brand-tag {
+    font-size: 13px;
+    padding: 4px 10px;
+  }
+
+  .brand-count {
+    min-width: 26px;
+    height: 22px;
+    padding: 0 8px;
+    font-size: 13px;
+    line-height: 22px;
+  }
+
+  .user-actions {
+    gap: 10px;
+  }
+
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .login-btn {
+    padding: 9px 18px;
+    font-size: 14px;
+  }
+
+  .desktop-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+    padding: 0 24px;
+    align-items: start;
+  }
+
+  .insight-rail {
+    position: sticky;
+    top: 86px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .rail-card {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .rail-title {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .rail-line,
+  .lead-title {
+    font-size: 14px;
+  }
+
+  .lead-meta,
+  .rail-empty {
+    font-size: 12px;
+  }
+}
+/* #endif */
 </style>
