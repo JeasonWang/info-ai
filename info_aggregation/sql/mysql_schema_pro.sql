@@ -1,5 +1,6 @@
--- 信息达人 Pro 版本 MySQL 建表语句
+-- 信息达人 Max 版本 MySQL 表结构脚本
 -- 目标数据库：MySQL 8.x
+-- 职责边界：本文件只负责创建数据库和完整表结构，不负责初始化业务数据。
 -- 说明：所有业务字段保留中文注释，便于后续维护、迁移和管理后台展示。
 
 CREATE DATABASE IF NOT EXISTS `info-max`
@@ -40,8 +41,7 @@ CREATE TABLE IF NOT EXISTS `channel` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_name` (`name`),
   UNIQUE KEY `uk_channel_code` (`code`),
-  KEY `idx_channel_category` (`category_id`),
-  CONSTRAINT `fk_channel_category` FOREIGN KEY (`category_id`) REFERENCES `category` (`id`)
+  KEY `idx_channel_category` (`category_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='渠道表：保存微博、央视体育网、CSDN等采集来源';
 
 CREATE TABLE IF NOT EXISTS `info` (
@@ -76,9 +76,7 @@ CREATE TABLE IF NOT EXISTS `info` (
   KEY `idx_info_event_time` (`event_time`),
   KEY `idx_info_created_at` (`created_at`),
   KEY `idx_info_detail_fetch_status` (`detail_fetch_status`),
-  KEY `idx_info_deleted_category_time` (`is_deleted`, `category_id`, `event_time`),
-  CONSTRAINT `fk_info_category` FOREIGN KEY (`category_id`) REFERENCES `category` (`id`),
-  CONSTRAINT `fk_info_channel` FOREIGN KEY (`channel_id`) REFERENCES `channel` (`id`)
+  KEY `idx_info_deleted_category_time` (`is_deleted`, `category_id`, `event_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='信息主表：保存采集到的原始内容和详情质量字段';
 
 CREATE TABLE IF NOT EXISTS `info_acquisition_log` (
@@ -95,8 +93,7 @@ CREATE TABLE IF NOT EXISTS `info_acquisition_log` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_info_acquisition_info_created` (`info_id`, `created_at`),
-  KEY `idx_info_acquisition_channel_strategy` (`channel_code`, `strategy`),
-  CONSTRAINT `fk_info_acquisition_info` FOREIGN KEY (`info_id`) REFERENCES `info` (`id`)
+  KEY `idx_info_acquisition_channel_strategy` (`channel_code`, `strategy`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='详情采集日志表：记录单条内容的详情抓取过程';
 
 CREATE TABLE IF NOT EXISTS `detail_job` (
@@ -115,8 +112,7 @@ CREATE TABLE IF NOT EXISTS `detail_job` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_detail_job_info_status` (`info_id`, `status`),
   KEY `idx_detail_job_status_priority` (`status`, `priority`, `next_run_at`),
-  KEY `idx_detail_job_channel_status` (`channel_code`, `status`),
-  CONSTRAINT `fk_detail_job_info` FOREIGN KEY (`info_id`) REFERENCES `info` (`id`)
+  KEY `idx_detail_job_channel_status` (`channel_code`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='详情补偿任务表：保存低分、失败或列表态内容的二次抓取任务';
 
 CREATE TABLE IF NOT EXISTS `event` (
@@ -137,8 +133,7 @@ CREATE TABLE IF NOT EXISTS `event` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_event_key` (`event_key`),
   KEY `idx_event_category_score` (`primary_category_id`, `composite_score`, `last_updated_at`),
-  KEY `idx_event_status_updated` (`status`, `last_updated_at`),
-  CONSTRAINT `fk_event_category` FOREIGN KEY (`primary_category_id`) REFERENCES `category` (`id`)
+  KEY `idx_event_status_updated` (`status`, `last_updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件主表：面向用户展示的聚合热点事件';
 
 CREATE TABLE IF NOT EXISTS `event_item_link` (
@@ -151,9 +146,7 @@ CREATE TABLE IF NOT EXISTS `event_item_link` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_event_item` (`event_id`, `item_id`),
-  KEY `idx_event_item_item_id` (`item_id`),
-  CONSTRAINT `fk_event_item_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`),
-  CONSTRAINT `fk_event_item_info` FOREIGN KEY (`item_id`) REFERENCES `info` (`id`)
+  KEY `idx_event_item_item_id` (`item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件内容关联表：保存事件与原始内容之间的关系';
 
 CREATE TABLE IF NOT EXISTS `event_timeline_entry` (
@@ -166,9 +159,7 @@ CREATE TABLE IF NOT EXISTS `event_timeline_entry` (
   `display_order` INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  KEY `idx_event_timeline_event_time` (`event_id`, `occurred_at`),
-  CONSTRAINT `fk_event_timeline_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`),
-  CONSTRAINT `fk_event_timeline_info` FOREIGN KEY (`source_item_id`) REFERENCES `info` (`id`)
+  KEY `idx_event_timeline_event_time` (`event_id`, `occurred_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件时间线表：保存事件发展脉络';
 
 CREATE TABLE IF NOT EXISTS `event_summary_snapshot` (
@@ -179,8 +170,7 @@ CREATE TABLE IF NOT EXISTS `event_summary_snapshot` (
   `version` INT NOT NULL DEFAULT 1 COMMENT '摘要版本号',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  KEY `idx_event_summary_lookup` (`event_id`, `summary_type`, `version`),
-  CONSTRAINT `fk_event_summary_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`)
+  KEY `idx_event_summary_lookup` (`event_id`, `summary_type`, `version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件摘要快照表：保存不同类型的事件摘要';
 
 CREATE TABLE IF NOT EXISTS `user_account` (
@@ -211,8 +201,7 @@ CREATE TABLE IF NOT EXISTS `user_session` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_session_token_hash` (`session_token_hash`),
-  KEY `idx_user_session_user_expires` (`user_id`, `expires_at`),
-  CONSTRAINT `fk_user_session_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`)
+  KEY `idx_user_session_user_expires` (`user_id`, `expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户会话表：保存登录态和管理后台会话';
 
 CREATE TABLE IF NOT EXISTS `user_favorite_event` (
@@ -222,9 +211,7 @@ CREATE TABLE IF NOT EXISTS `user_favorite_event` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_favorite_event` (`user_id`, `event_id`),
-  KEY `idx_user_favorite_event_event` (`event_id`),
-  CONSTRAINT `fk_user_favorite_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`),
-  CONSTRAINT `fk_user_favorite_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`)
+  KEY `idx_user_favorite_event_event` (`event_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户事件收藏表：保存登录用户收藏的热点事件';
 
 CREATE TABLE IF NOT EXISTS `user_follow_keyword` (
@@ -234,8 +221,7 @@ CREATE TABLE IF NOT EXISTS `user_follow_keyword` (
   `category_code` VARCHAR(50) NOT NULL DEFAULT 'all' COMMENT '关键词所属分类编码，all表示全局',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_follow_keyword` (`user_id`, `keyword`, `category_code`),
-  CONSTRAINT `fk_user_follow_keyword_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`)
+  UNIQUE KEY `uk_user_follow_keyword` (`user_id`, `keyword`, `category_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户关键词关注表：保存登录用户关注主题';
 
 CREATE TABLE IF NOT EXISTS `user_preference` (
@@ -246,8 +232,7 @@ CREATE TABLE IF NOT EXISTS `user_preference` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_preference_key` (`user_id`, `preference_key`),
-  CONSTRAINT `fk_user_preference_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`)
+  UNIQUE KEY `uk_user_preference_key` (`user_id`, `preference_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户偏好表：保存登录用户个性化配置';
 
 CREATE TABLE IF NOT EXISTS `user_read_history` (
@@ -257,10 +242,7 @@ CREATE TABLE IF NOT EXISTS `user_read_history` (
   `info_id` BIGINT UNSIGNED NULL COMMENT '信息ID',
   `read_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '阅读时间',
   PRIMARY KEY (`id`),
-  KEY `idx_user_read_history_user_time` (`user_id`, `read_at`),
-  CONSTRAINT `fk_user_read_history_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`),
-  CONSTRAINT `fk_user_read_history_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`),
-  CONSTRAINT `fk_user_read_history_info` FOREIGN KEY (`info_id`) REFERENCES `info` (`id`)
+  KEY `idx_user_read_history_user_time` (`user_id`, `read_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户阅读历史表：保存登录用户浏览记录';
 
 CREATE TABLE IF NOT EXISTS `admin_audit_log` (
@@ -274,8 +256,7 @@ CREATE TABLE IF NOT EXISTS `admin_audit_log` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_admin_audit_user_time` (`admin_user_id`, `created_at`),
-  KEY `idx_admin_audit_action_time` (`action`, `created_at`),
-  CONSTRAINT `fk_admin_audit_user` FOREIGN KEY (`admin_user_id`) REFERENCES `user_account` (`id`)
+  KEY `idx_admin_audit_action_time` (`action`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管理后台审计表：记录管理员关键操作';
 
 CREATE TABLE IF NOT EXISTS `crawl_task` (
@@ -293,8 +274,7 @@ CREATE TABLE IF NOT EXISTS `crawl_task` (
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_crawl_task_code` (`task_code`),
-  KEY `idx_crawl_task_channel_status` (`channel_id`, `status`),
-  CONSTRAINT `fk_crawl_task_channel` FOREIGN KEY (`channel_id`) REFERENCES `channel` (`id`)
+  KEY `idx_crawl_task_channel_status` (`channel_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采集任务表：保存可调度的数据采集任务';
 
 CREATE TABLE IF NOT EXISTS `crawl_run_log` (
@@ -314,8 +294,7 @@ CREATE TABLE IF NOT EXISTS `crawl_run_log` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_crawl_run_channel_time` (`channel_code`, `started_at`),
-  KEY `idx_crawl_run_task_time` (`task_id`, `started_at`),
-  CONSTRAINT `fk_crawl_run_task` FOREIGN KEY (`task_id`) REFERENCES `crawl_task` (`id`)
+  KEY `idx_crawl_run_task_time` (`task_id`, `started_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采集运行日志表：记录每次采集执行结果';
 
 CREATE TABLE IF NOT EXISTS `crawl_health_snapshot` (

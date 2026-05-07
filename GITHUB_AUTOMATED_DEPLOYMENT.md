@@ -100,7 +100,7 @@ EOF
 1. 拉取代码。
 2. 构建 `info-aggregation`、`info-serve`、`info-mvp`、`info-admin` 镜像。
 3. 导出镜像包 `images/info-ai-images.tar.gz`。
-4. 上传镜像包、`docker-compose.yml`、`deploy.sh`、`mysql_migration_max.sql` 到服务器。
+4. 上传镜像包、`docker-compose.yml`、`deploy.sh`、`mysql_schema_pro.sql`、`mysql_migration_max.sql` 到服务器。
 5. 在服务器执行：
 
 ```bash
@@ -139,13 +139,19 @@ curl http://127.0.0.1:18000/health
 
 ## 7. 数据库初始化和迁移说明
 
-`docker-compose.yml` 使用：
+数据库脚本分工：
 
 ```text
-info_aggregation/sql/mysql_migration_max.sql
+info_aggregation/sql/mysql_schema_pro.sql      创建数据库和完整表结构
+info_aggregation/sql/mysql_migration_max.sql   初始化必要数据
 ```
 
-该脚本会在 MySQL 容器首次创建数据卷时自动执行。
+如果使用容器 MySQL，首次初始化时应按顺序执行：
+
+```text
+01-schema.sql
+02-init-data.sql
+```
 
 注意：
 
