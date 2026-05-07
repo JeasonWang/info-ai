@@ -42,7 +42,7 @@ create_env_file() {
     if [ -f ".env" ]; then
         return
     fi
-
+    echo "生成 .env 文件..."
     local session_secret
     local mysql_password
     local admin_password
@@ -148,7 +148,6 @@ bootstrap_admin() {
     done
 
     echo "错误: 管理员账号初始化失败，请查看日志: ${COMPOSE_CMD} -f ${COMPOSE_FILE} logs info-serve"
-    exit 1
 }
 
 check_services() {
