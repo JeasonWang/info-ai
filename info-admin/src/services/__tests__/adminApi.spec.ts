@@ -35,105 +35,105 @@ describe('admin API versioned paths', () => {
     await getAdminOverview()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/overview',
+      '/api/v1/admin/overview',
       expect.any(Object),
     )
 
     await getAuditLogs(10)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/audit-logs?limit=10',
+      '/api/v1/admin/audit-logs?limit=10',
       expect.any(Object),
     )
 
     await getChannelHealth()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/channel-health',
+      '/api/v1/admin/channel-health',
       expect.any(Object),
     )
 
     await getChannelQualityReport(6)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/channel-quality-report?sample_limit=6',
+      '/api/v1/admin/channel-quality-report?sample_limit=6',
       expect.any(Object),
     )
 
     await getLowQualityInfos(12)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/low-quality-infos?limit=12',
+      '/api/v1/admin/low-quality-infos?limit=12',
       expect.any(Object),
     )
 
     await getDetailJobReport({ limit: 7, channelCode: '36kr', failureReason: 'empty_content' })
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/detail-jobs?limit=7&channel_code=36kr&failure_reason=empty_content',
+      '/api/v1/admin/detail-jobs?limit=7&channel_code=36kr&failure_reason=empty_content',
       expect.any(Object),
     )
 
     await triggerCrawlTask('weibo')
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/crawl-tasks/weibo/trigger',
+      '/api/v1/admin/crawl-tasks/weibo/trigger',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await rebuildEvents()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/rebuild-events',
+      '/api/v1/admin/rebuild-events',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await refreshQuality()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/refresh-quality',
+      '/api/v1/admin/refresh-quality',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await retryLowQualityDetails(15)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/retry-low-quality-details?limit=15',
+      '/api/v1/admin/retry-low-quality-details?limit=15',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await batchRetryDetailJobs({ channelCode: '36kr', failureReason: 'empty_content', limit: 20 })
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/detail-jobs/retry?limit=20&channel_code=36kr&failure_reason=empty_content',
+      '/api/v1/admin/detail-jobs/retry?limit=20&channel_code=36kr&failure_reason=empty_content',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await batchCancelDetailJobs({ channelCode: '36kr', failureReason: 'empty_content', limit: 20 })
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/detail-jobs/cancel?limit=20&channel_code=36kr&failure_reason=empty_content',
+      '/api/v1/admin/detail-jobs/cancel?limit=20&channel_code=36kr&failure_reason=empty_content',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await getDetailJob(11)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/detail-jobs/11',
+      '/api/v1/admin/detail-jobs/11',
       expect.any(Object),
     )
 
     await retryDetailJob(11)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/detail-jobs/11/retry',
+      '/api/v1/admin/detail-jobs/11/retry',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await cancelDetailJob(11)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/detail-jobs/11/cancel',
+      '/api/v1/admin/detail-jobs/11/cancel',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await archiveLowQualityInfos()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/archive-low-quality',
+      '/api/v1/admin/archive-low-quality',
       expect.objectContaining({ method: 'POST' }),
     )
 
     await archiveDuplicateTitles()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/admin/archive-duplicate-titles',
+      '/api/v1/admin/archive-duplicate-titles',
       expect.objectContaining({ method: 'POST' }),
     )
   })
@@ -147,7 +147,7 @@ describe('admin API versioned paths', () => {
     await loginAdmin('admin@example.com', 'Admin123456')
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/v1/auth/login',
+      '/api/v1/auth/login',
       expect.objectContaining({
         method: 'POST',
       }),

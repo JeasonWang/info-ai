@@ -19,7 +19,7 @@ describe('httpClient', () => {
 
     expect(result.ok).toBe(true)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8085/api/admin/overview',
+      '/api/admin/overview',
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer admin-token',

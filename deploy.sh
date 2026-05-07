@@ -12,7 +12,7 @@ COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.yml}
 IMAGE_TAR=${IMAGE_TAR:-images/info-ai-images.tar.gz}
 
 echo "========================================"
-echo "信息达人 Max 部署脚本"
+echo "信息达人 Max 部署脚本（info-mvp 用户端，不部署 info-max）"
 echo "环境: ${ENV_NAME}"
 echo "模式: ${DEPLOY_MODE}"
 echo "========================================"
@@ -28,6 +28,14 @@ resolve_compose_cmd() {
     fi
     echo "错误: 未找到 docker compose 或 docker-compose" >&2
     exit 1
+}
+
+read_env_value() {
+    local key="$1"
+    if [ ! -f ".env" ]; then
+        return
+    fi
+    awk -F= -v key="${key}" '$1 == key { print substr($0, index($0, "=") + 1); exit }' .env
 }
 
 create_env_file() {
@@ -55,6 +63,7 @@ DB_USER=root
 DB_PASSWORD=${mysql_password}
 DB_NAME=info-max
 LOG_LEVEL=INFO
+ENABLE_SEED_DATA=false
 
 # info-serve 配置
 INFO_SERVE_MYSQL_DSN=root:${mysql_password}@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
@@ -72,9 +81,16 @@ WEIBO_COOKIE=
 # 小红书渠道凭据。用于提升动态详情页和渲染兜底成功率。
 XHS_COOKIE=
 
-# 浏览器访问 info-serve 的公开地址。
-# 本机部署可用 http://127.0.0.1:8085，服务器部署请改成真实域名或公网 IP。
-VITE_INFO_SERVE_BASE_URL=http://127.0.0.1:8085
+# 前端接口配置。
+# 生产 Docker 默认同源 /api，经由前端容器 Nginx 代理到 info-serve。
+VITE_API_BASE_URL=/api
+VITE_INFO_SERVE_BASE_URL=
+
+# 部署完成后的提示地址。服务器部署请改成真实域名或公网 IP。
+PUBLIC_SITE_URL=http://localhost:8082
+PUBLIC_ADMIN_URL=http://localhost:8081
+PUBLIC_API_URL=http://localhost:8085
+PUBLIC_AGGREGATION_URL=http://127.0.0.1:18000
 EOF
 
     echo "已创建 .env 文件并生成随机数据库密码、会话密钥和管理员初始密码。请妥善保存 .env。"
@@ -167,11 +183,16 @@ deploy_services
 bootstrap_admin
 check_services
 
+PUBLIC_SITE_URL_VALUE=$(read_env_value "PUBLIC_SITE_URL")
+PUBLIC_ADMIN_URL_VALUE=$(read_env_value "PUBLIC_ADMIN_URL")
+PUBLIC_API_URL_VALUE=$(read_env_value "PUBLIC_API_URL")
+PUBLIC_AGGREGATION_URL_VALUE=$(read_env_value "PUBLIC_AGGREGATION_URL")
+
 echo ""
 echo "========================================"
 echo "部署完成"
-echo "管理后台: http://localhost:8081"
-echo "h5后台: http://localhost:8082"
-echo "采集 API: http://localhost:18000"
-echo "业务 API: http://localhost:8085"
+echo "用户端: ${PUBLIC_SITE_URL_VALUE:-http://localhost:8082}"
+echo "管理后台: ${PUBLIC_ADMIN_URL_VALUE:-http://localhost:8081}"
+echo "业务 API: ${PUBLIC_API_URL_VALUE:-http://localhost:8085}"
+echo "采集 API: ${PUBLIC_AGGREGATION_URL_VALUE:-http://127.0.0.1:18000}"
 echo "========================================"

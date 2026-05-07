@@ -7,10 +7,10 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-info-max}
     ports:
-      - "13306:3306"
+      - "127.0.0.1:13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./info_aggregation/sql/mysql_schema_pro.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./info_aggregation/sql/mysql_migration_max.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -25,7 +25,7 @@ services:
     container_name: info-aggregation
     restart: unless-stopped
     ports:
-      - "18000:8000"
+      - "127.0.0.1:18000:8000"
     environment:
       DATA_DIR: /app/data
       LOG_DIR: /app/data/logs
@@ -92,7 +92,7 @@ services:
       context: ./info-admin
       dockerfile: Dockerfile
       args:
-        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8085}
+        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-}
     container_name: info-admin
     restart: unless-stopped
     ports:
