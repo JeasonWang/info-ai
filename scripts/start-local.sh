@@ -17,7 +17,6 @@ MYSQL_DSN="${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(${MYSQL_HOST}:${MYSQL_PORT})/${MY
 
 AGGREGATION_PORT="${AGGREGATION_PORT:-8000}"
 INFO_SERVE_PORT="${INFO_SERVE_PORT:-8085}"
-INFO_MAX_PORT="${INFO_MAX_PORT:-5173}"
 INFO_ADMIN_PORT="${INFO_ADMIN_PORT:-5174}"
 INFO_MVP_PORT="${INFO_MVP_PORT:-5175}"
 
@@ -93,14 +92,12 @@ require_command npm
 require_path "$ROOT_DIR/info_aggregation/.venv/bin/python" "缺少 Python 虚拟环境"
 require_path "$ROOT_DIR/info_aggregation/main.py" "缺少采集服务入口"
 require_path "$ROOT_DIR/info-serve/go.mod" "缺少 Go 服务模块"
-require_path "$ROOT_DIR/info-max/package.json" "缺少用户端项目"
 require_path "$ROOT_DIR/info-admin/package.json" "缺少管理端项目"
 require_path "$ROOT_DIR/info-mvp/package.json" "缺少h5端项目"
 
 log_step "检查端口"
 check_port_free "$AGGREGATION_PORT" "采集 API"
 check_port_free "$INFO_SERVE_PORT" "业务 API"
-check_port_free "$INFO_MAX_PORT" "用户端"
 check_port_free "$INFO_ADMIN_PORT" "管理端"
 check_port_free "$INFO_MVP_PORT" "h5端"
 
@@ -126,10 +123,6 @@ start_service "info-serve" "$ROOT_DIR/info-serve" env \
   INFO_AGGREGATION_BASE_URL="http://127.0.0.1:${AGGREGATION_PORT}" \
   go run ./cmd/server
 
-start_service "info-max" "$ROOT_DIR/info-max" env \
-  VITE_INFO_SERVE_BASE_URL="http://127.0.0.1:${INFO_SERVE_PORT}" \
-  npm run dev -- --host 127.0.0.1 --port "$INFO_MAX_PORT"
-
 start_service "info-admin" "$ROOT_DIR/info-admin" env \
   VITE_INFO_SERVE_BASE_URL="http://127.0.0.1:${INFO_SERVE_PORT}" \
   npm run dev -- --host 127.0.0.1 --port "$INFO_ADMIN_PORT"
@@ -141,7 +134,6 @@ start_service "info-mvp" "$ROOT_DIR/info-mvp" env \
 log_step "等待服务就绪"
 wait_for_url "http://127.0.0.1:${AGGREGATION_PORT}/" "采集 API"
 wait_for_url "http://127.0.0.1:${INFO_SERVE_PORT}/health" "业务 API"
-wait_for_url "http://127.0.0.1:${INFO_MAX_PORT}/" "用户端"
 wait_for_url "http://127.0.0.1:${INFO_ADMIN_PORT}/" "管理端"
 wait_for_url "http://127.0.0.1:${INFO_MVP_PORT}/" "h5端"
 
@@ -152,7 +144,6 @@ cat <<EOF
 MySQL:   ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}
 采集 API: http://localhost:${AGGREGATION_PORT}
 业务 API: http://localhost:${INFO_SERVE_PORT}
-用户端:   http://localhost:${INFO_MAX_PORT}
 管理端:   http://localhost:${INFO_ADMIN_PORT}
 h5端:  http://localhost:${INFO_MVP_PORT}
 

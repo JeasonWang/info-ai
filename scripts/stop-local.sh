@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 一键关闭本地五个服务。
+# 一键关闭本地个服务。
 # 本脚本不停止 MySQL，不操作 Docker。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,7 +9,6 @@ LOG_DIR="$ROOT_DIR/logs/local"
 
 SERVICES=(
   "info-admin"
-  "info-max"
   "info-mvp"
   "info-serve"
   "info_aggregation"
@@ -17,7 +16,6 @@ SERVICES=(
 
 PORTS=(
   "5174:管理端"
-  "5173:用户端"
   "5175:h5端"
   "8085:业务 API"
   "8000:采集 API"
@@ -85,4 +83,4 @@ for port in "${PORTS[@]}"; do
   cleanup_port "$port"
 done
 
-echo "本地五个服务已关闭。MySQL 未处理。"
+echo "本地四个服务已关闭。MySQL 未处理。"
