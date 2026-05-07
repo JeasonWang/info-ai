@@ -72,20 +72,6 @@ services:
       info-aggregation:
         condition: service_started
 
-  info-max:
-    image: info-ai-info-max:pro
-    build:
-      context: ./info-max
-      dockerfile: Dockerfile
-      args:
-        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8085}
-    container_name: info-max
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - info-serve
-
   info-mvp:
     image: info-ai-info-mvp:pro
     build:

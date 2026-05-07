@@ -141,8 +141,8 @@ check_services() {
     sleep 8
 
     local failed=0
-    local containers=("info-mysql" "info-aggregation" "info-serve" "info-max" "info-mvp" "info-admin")
-    local compose_services=("mysql" "info-aggregation" "info-serve" "info-max" "info-mvp" "info-admin")
+    local containers=("info-mysql" "info-aggregation" "info-serve" "info-mvp" "info-admin")
+    local compose_services=("mysql" "info-aggregation" "info-serve" "info-mvp" "info-admin")
     for index in "${!containers[@]}"; do
         local svc="${containers[$index]}"
         local compose_svc="${compose_services[$index]}"
@@ -170,7 +170,6 @@ check_services
 echo ""
 echo "========================================"
 echo "部署完成"
-echo "用户端:   http://localhost"
 echo "管理后台: http://localhost:8081"
 echo "h5后台: http://localhost:8082"
 echo "采集 API: http://localhost:18000"
