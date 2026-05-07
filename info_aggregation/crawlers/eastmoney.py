@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class EastmoneyCrawler(BaseCrawler):
@@ -80,51 +81,91 @@ class EastmoneyCrawler(BaseCrawler):
         return results
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        return self.resolve_detail(item).content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+        market_context = self._fetch_market_context_detail(item)
+        if market_context:
+            candidates.append(market_context)
+
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+            channel_code=self.channel_code,
+        )
+
+    def _fetch_market_context_detail(self, item: dict):
         try:
             indicator_name = item.get("indicator_name", "")
             if not indicator_name:
-                return ""
+                return None
             headers = self._build_headers()
             headers["Referer"] = "https://so.eastmoney.com/"
             headers["Accept"] = "application/json, text/plain, */*"
 
-            try:
-                search_url = f"https://search-api-web.eastmoney.com/search/jsonp?cb=jQuery&param={json.dumps({'uid':'','keyword':indicator_name,'type':['cmsArticleWebOld'],'client':'web','clientType':'web','clientVersion':'curr','param':{'cmsArticleWebOld':{'searchScope':'default','sort':'default','pageIndex':1,'pageSize':3}}}, ensure_ascii=False)}"
-                response = self.fetch(search_url, headers=headers)
-                text = response.text
-                json_match = re.search(r'jQuery\((.*)\)', text, re.DOTALL)
-                if json_match:
-                    search_data = json.loads(json_match.group(1))
-                    articles = search_data.get("result", {}).get("cmsArticleWebOld", {}).get("list", [])
-                    if articles:
-                        article = articles[0]
-                        article_url = article.get("url", "")
-                        if article_url:
-                            try:
-                                art_response = self.fetch(article_url, headers=headers)
-                                art_text = self._extract_text_from_html(art_response.text)
-                                if len(art_text) >= 50:
-                                    return art_text[:500]
-                            except Exception:
-                                pass
-                        content = article.get("content", "")
-                        if content:
-                            content = re.sub(r'<[^>]+>', '', content)
-                            content = re.sub(r'\s+', ' ', content).strip()
-                            if len(content) >= 50:
-                                return content[:500]
-                        title = article.get("title", "")
-                        summary = article.get("content", article.get("description", ""))
-                        if summary:
-                            summary = re.sub(r'<[^>]+>', '', summary)
-                            summary = re.sub(r'\s+', ' ', summary).strip()
-                        combined = f"{title}。{summary}" if title and summary else (title or summary or "")
-                        if len(combined) >= 50:
-                            return combined[:500]
-            except Exception:
-                pass
-
-            return ""
+            search_url = f"https://search-api-web.eastmoney.com/search/jsonp?cb=jQuery&param={json.dumps({'uid':'','keyword':indicator_name,'type':['cmsArticleWebOld'],'client':'web','clientType':'web','clientVersion':'curr','param':{'cmsArticleWebOld':{'searchScope':'default','sort':'default','pageIndex':1,'pageSize':5}}}, ensure_ascii=False)}"
+            response = self.fetch(search_url, headers=headers)
+            articles = self._extract_search_articles(response.text)
+            content = self._build_indicator_context(item, articles)
+            if len(content) >= 50:
+                return DetailStrategyResult(strategy="eastmoney_market_context", content=limit_detail_content(content))
         except Exception as e:
             self.logger.warning(f"东方财富详情爬取失败: {e}")
-            return ""
+        return None
+
+    def _extract_search_articles(self, jsonp_text: str) -> list[dict]:
+        json_match = re.search(r'jQuery\((.*)\)', jsonp_text or "", re.DOTALL)
+        if not json_match:
+            return []
+        try:
+            search_data = json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            return []
+        result = search_data.get("result", {})
+        if isinstance(result, list):
+            return result
+        if not isinstance(result, dict):
+            return []
+        article_node = result.get("cmsArticleWebOld", {})
+        if isinstance(article_node, list):
+            return article_node
+        if isinstance(article_node, dict):
+            return article_node.get("list", []) or []
+        return []
+
+    def _build_indicator_context(self, item: dict, articles: list[dict]) -> str:
+        parts = []
+        base_content = self._clean_text(item.get("content", ""))
+        if base_content:
+            parts.append(base_content)
+        indicator_name = item.get("indicator_name", "")
+        indicator_value = item.get("indicator_value", "")
+        if indicator_name and indicator_value:
+            parts.append(f"{indicator_name}当前指标值为{indicator_value}，需要结合宏观数据、市场情绪和政策预期观察后续走势。")
+
+        for article in articles[:3]:
+            title = self._clean_text(article.get("title", ""))
+            summary = self._clean_text(article.get("content") or article.get("description") or "")
+            combined = f"{title}。{summary}" if title and summary else title or summary
+            if combined:
+                parts.append(combined)
+
+        return self._merge_distinct_parts(parts)
+
+    def _clean_text(self, value: str) -> str:
+        text = re.sub(r"<[^>]+>", " ", str(value or ""))
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    def _merge_distinct_parts(self, parts: list[str]) -> str:
+        merged = []
+        for part in parts:
+            text = self._clean_text(part)
+            if not text:
+                continue
+            if any(text in existing or existing in text for existing in merged):
+                continue
+            merged.append(text)
+        return " ".join(merged)

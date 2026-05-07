@@ -17,6 +17,7 @@ from .sports_utils import (
     normalize_url,
     stable_source_id,
 )
+from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class CctvSportsCrawler(BaseCrawler):
@@ -88,14 +89,31 @@ class CctvSportsCrawler(BaseCrawler):
         }
 
     def fetch_detail(self, source_url: str, item: dict) -> str:
+        return self.resolve_detail(item).content
+
+    def resolve_detail(self, item: dict):
+        candidates = []
+        detail = self._fetch_sports_article_detail(item)
+        if detail:
+            candidates.append(detail)
+        return run_detail_pipeline(
+            title=item.get("title", ""),
+            list_content=item.get("content", ""),
+            strategy_results=candidates,
+            channel_code=self.channel_code,
+        )
+
+    def _fetch_sports_article_detail(self, item: dict):
+        source_url = item.get("source_url", "")
+        if not source_url:
+            return None
         try:
             headers = self._build_headers()
             headers["Referer"] = self.HOME_URL
             response = self.fetch(source_url, headers=headers)
             content = extract_article_text(self._get_response_text(response), self.DETAIL_PATTERNS)
             if content:
-                return content
-            return ""
+                return DetailStrategyResult(strategy="sports_article", content=content)
         except Exception as exc:
             self.logger.warning(f"央视体育详情爬取失败: {exc}")
-            return ""
+        return None

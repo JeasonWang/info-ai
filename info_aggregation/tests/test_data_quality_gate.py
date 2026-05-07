@@ -6,8 +6,9 @@ from scheduler import _save_crawled_data
 from scheduler import _fetch_details_for_items
 from crawlers.registry import crawler_registry
 from services.detail_pipeline import DetailPipelineResult
-from sql.init_data import init_mock_data
+from sql.init_data import init_all_data, init_mock_data
 from services.data_maintenance import refresh_info_semantics
+from crawlers.sports_utils import extract_article_text
 
 
 def test_clean_info_list_removes_near_duplicate_title_and_content():
@@ -151,6 +152,16 @@ def test_fetch_details_marks_title_duplicate_detail_as_low_quality(session, monk
     assert refreshed.detail_fetch_error == "title_content_duplicate"
 
 
+def test_sports_article_extraction_preserves_long_body_text():
+    body = "中国女排在比赛中展现出稳定的一传、防守韧性和关键分把握能力。" * 90
+    html = f'<html><body><div class="content_area"><p>{body}</p></div></body></html>'
+
+    content = extract_article_text(html, [r'<div[^>]+class=["\'][^"\']*content_area[^"\']*["\'][^>]*>(.*?)</div>'])
+
+    assert content == body
+    assert len(content) > 500
+
+
 def test_seed_data_populates_tech_semantic_fields(session):
     tech = Category(name="科技动向", code="tech", description="科技事件")
     ai = Category(name="AI大模型动向", code="ai", description="AI事件")
@@ -200,6 +211,16 @@ def test_seed_data_populates_tech_semantic_fields(session):
     ai_agent = session.query(Info).filter(Info.source_id == "mock_zh_001").first()
     assert ai_agent.tech_topic_type
     assert ai_agent.tech_keywords
+
+
+def test_init_all_data_skips_mock_data_unless_enabled(session, monkeypatch):
+    monkeypatch.delenv("ENABLE_SEED_DATA", raising=False)
+
+    init_all_data()
+
+    assert session.query(Category).count() > 0
+    assert session.query(Channel).count() > 0
+    assert session.query(Info).count() == 0
 
 
 def test_refresh_info_semantics_removes_stale_general_tech_and_populates_real_keywords(session):

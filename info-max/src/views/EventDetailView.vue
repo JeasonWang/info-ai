@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import EventTimeline from '@/components/EventTimeline.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
-import { getEventById } from '@/services/api'
+import { useEventFavorites } from '@/composables/useEventFavorites'
+import { getEventById, recordReadHistory } from '@/services/api'
+import { getUserToken } from '@/services/userSession'
 import type { EventDetail, EventTimelineItem } from '@/types'
 import { formatDateTime } from '@/utils'
 
@@ -12,6 +14,8 @@ const router = useRouter()
 const loading = ref(false)
 const error = ref('')
 const detail = ref<EventDetail | null>(null)
+const favoriteFeedback = ref('')
+const { isFavorite, syncFavoritesFromServer, toggleFavorite } = useEventFavorites()
 
 const eventId = computed(() => Number(route.params.id))
 function normalizeText(text?: string | null) {
@@ -106,6 +110,15 @@ async function loadDetail() {
 
   try {
     detail.value = await getEventById(eventId.value)
+    const token = getUserToken()
+    if (token) {
+      await recordReadHistory(token, { eventId: eventId.value }).catch(() => undefined)
+    }
+    try {
+      await syncFavoritesFromServer()
+    } catch {
+      // 收藏是登录增强能力，同步失败不应该阻断热点详情阅读。
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '事件详情加载失败'
   } finally {
@@ -119,6 +132,17 @@ function handleBack() {
     return
   }
   router.push('/')
+}
+
+async function handleFavorite() {
+  if (!detail.value) return
+
+  favoriteFeedback.value = ''
+  try {
+    await toggleFavorite(detail.value.event.id)
+  } catch (err) {
+    favoriteFeedback.value = err instanceof Error ? err.message : '收藏同步失败，请稍后再试'
+  }
 }
 
 onMounted(loadDetail)
@@ -154,6 +178,17 @@ onMounted(loadDetail)
             <span v-if="detail.event.last_updated_at">更新 {{ formatDateTime(detail.event.last_updated_at) }}</span>
           </div>
         </div>
+        <div class="detail-utility-actions detail-utility-actions--event">
+          <button
+            type="button"
+            class="detail-utility-action"
+            data-testid="event-favorite-button"
+            @click="handleFavorite"
+          >
+            {{ isFavorite(detail.event.id) ? '已收藏' : '收藏' }}
+          </button>
+        </div>
+        <p v-if="favoriteFeedback" class="feedback">{{ favoriteFeedback }}</p>
 
         <div class="detail-hero__support" data-testid="event-detail-support">
           <article class="detail-focus-card detail-focus-card--primary detail-focus-card--lead">

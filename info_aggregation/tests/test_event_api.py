@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 
 from api import app
+import api
+from crawlers.registry import crawler_registry
 from database import Category, Channel, Event, Info
 from services.event_builder import rebuild_events
 
@@ -68,6 +70,35 @@ def seed_event_data(session):
         ]
     )
     session.commit()
+
+
+def test_trigger_crawl_returns_accepted_without_waiting_for_crawler(monkeypatch):
+    class SlowCrawler:
+        channel_code = "zhihu"
+
+        def safe_crawl(self):
+            raise AssertionError("endpoint should schedule background task instead of crawling inline")
+
+    triggered = []
+    previous = crawler_registry.get("zhihu")
+    crawler_registry.register("zhihu", SlowCrawler())
+    monkeypatch.setattr(api, "_run_manual_crawl", lambda channel_code: triggered.append(channel_code))
+    try:
+        client = TestClient(app)
+        response = client.post("/api/crawl/trigger?channel_code=zhihu")
+    finally:
+        if previous:
+            crawler_registry.register("zhihu", previous)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message"] == "采集任务已提交，后台执行中"
+    assert payload["data"] == {
+        "channel": "zhihu",
+        "status": "accepted",
+        "trigger_type": "manual",
+    }
+    assert triggered == ["zhihu"]
 
 
 def test_list_events_returns_grouped_cards(session):

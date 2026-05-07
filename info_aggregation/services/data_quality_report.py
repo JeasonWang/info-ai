@@ -6,7 +6,7 @@
 """
 from collections import Counter
 
-from database import Event, Info
+from database import DataQualitySnapshot, Event, Info
 from services.data_quality import is_low_quality_list_item, is_title_content_duplicate, normalize_text, text_similarity
 
 
@@ -43,6 +43,22 @@ def _is_incomplete_detail(info: Info) -> bool:
     if status == "partial" and (info.detail_score or 0) < 60:
         return True
     return (info.detail_content_length or len(info.content or "")) < 30
+
+
+def _is_seed_detail(info: Info) -> bool:
+    """识别演示初始化数据，避免模拟完整详情污染真实采集质量口径。"""
+    return (info.detail_strategy or "").strip().lower() == "seed"
+
+
+def _is_real_complete_detail(info: Info) -> bool:
+    """判断非 seed 数据是否已经具备可阅读的完整详情。"""
+    if _is_seed_detail(info):
+        return False
+    return (
+        (info.detail_fetch_status or "").strip() == "complete"
+        and (info.detail_score or 0) >= 70
+        and (info.detail_content_length or len(info.content or "")) >= 40
+    )
 
 
 def _count_duplicate_titles(infos: list[Info]) -> int:
@@ -119,6 +135,9 @@ def build_data_quality_report(session) -> dict:
     low_quality_count = sum(1 for info in infos if is_low_quality_list_item(info.title, info.content))
     title_content_duplicate_count = sum(1 for info in infos if is_title_content_duplicate(info.title, info.content))
     incomplete_detail_count = sum(1 for info in infos if _is_incomplete_detail(info))
+    seed_detail_count = sum(1 for info in infos if _is_seed_detail(info))
+    real_detail_infos = [info for info in infos if not _is_seed_detail(info)]
+    real_complete_detail_count = sum(1 for info in real_detail_infos if _is_real_complete_detail(info))
     semantic_infos = [info for info in infos if _needs_semantic_fields(info)]
     missing_semantic_count = sum(1 for info in semantic_infos if _is_missing_semantic(info))
     duplicate_title_count = _count_duplicate_titles(infos)
@@ -143,6 +162,10 @@ def build_data_quality_report(session) -> dict:
             "title_content_duplicate_count": title_content_duplicate_count,
             "incomplete_detail_count": incomplete_detail_count,
             "incomplete_detail_ratio": _percent(incomplete_detail_count, len(infos)),
+            "seed_detail_count": seed_detail_count,
+            "real_detail_total": len(real_detail_infos),
+            "real_complete_detail_count": real_complete_detail_count,
+            "real_complete_detail_ratio": _percent(real_complete_detail_count, len(real_detail_infos)),
             "semantic_scope_total": len(semantic_infos),
             "missing_semantic_count": missing_semantic_count,
             "missing_semantic_ratio": _percent(missing_semantic_count, len(semantic_infos)),
@@ -161,3 +184,30 @@ def build_data_quality_report(session) -> dict:
         "samples": _build_issue_samples(infos, semantic_infos),
         "recommendations": _build_recommendations(metrics),
     }
+
+
+def save_data_quality_snapshot(session, category_code: str = "all") -> DataQualitySnapshot:
+    """把当前质量体检结果保存到 Pro 监控快照表。"""
+    report = build_data_quality_report(session)
+    info_metrics = report["info"]
+    snapshot = DataQualitySnapshot(
+        category_code=category_code,
+        total_count=info_metrics["total"],
+        duplicate_title_count=info_metrics["duplicate_title_count"],
+        empty_content_count=sum(
+            1
+            for info in session.query(Info).filter(Info.is_deleted == 0).all()
+            if not (info.content or "").strip()
+        ),
+        low_detail_score_count=sum(
+            1
+            for info in session.query(Info).filter(Info.is_deleted == 0).all()
+            if (info.detail_score or 0) < 60
+        ),
+        missing_entity_count=info_metrics["missing_semantic_count"],
+        snapshot_payload=report,
+    )
+    session.add(snapshot)
+    session.commit()
+    session.refresh(snapshot)
+    return snapshot

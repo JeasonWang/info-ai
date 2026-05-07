@@ -2,6 +2,7 @@ export type HomeSortMode = 'composite' | 'latest'
 
 export interface HomeFilterMemory {
   categoryCode: string
+  channelCode: string
   sortMode: HomeSortMode
   keyword: string
 }
@@ -14,22 +15,23 @@ function isHomeSortMode(value: unknown): value is HomeSortMode {
 
 export function loadHomeFilterMemory(): HomeFilterMemory {
   if (typeof window === 'undefined') {
-    return { categoryCode: 'all', sortMode: 'composite', keyword: '' }
+    return { categoryCode: 'all', channelCode: 'all', sortMode: 'composite', keyword: '' }
   }
 
   try {
     const rawValue = window.localStorage.getItem(STORAGE_KEY)
     if (!rawValue) {
-      return { categoryCode: 'all', sortMode: 'composite', keyword: '' }
+      return { categoryCode: 'all', channelCode: 'all', sortMode: 'composite', keyword: '' }
     }
     const parsed = JSON.parse(rawValue) as Partial<HomeFilterMemory>
     return {
       categoryCode: typeof parsed.categoryCode === 'string' && parsed.categoryCode ? parsed.categoryCode : 'all',
+      channelCode: typeof parsed.channelCode === 'string' && parsed.channelCode ? parsed.channelCode : 'all',
       sortMode: isHomeSortMode(parsed.sortMode) ? parsed.sortMode : 'composite',
       keyword: typeof parsed.keyword === 'string' ? parsed.keyword : '',
     }
   } catch {
-    return { categoryCode: 'all', sortMode: 'composite', keyword: '' }
+    return { categoryCode: 'all', channelCode: 'all', sortMode: 'composite', keyword: '' }
   }
 }
 

@@ -3,6 +3,7 @@
 创建分类、渠道记录，并插入模拟数据以便程序启动时有数据返回
 """
 import logging
+import os
 from datetime import datetime, timedelta
 import random
 
@@ -91,6 +92,13 @@ def init_channels(session, category_map: dict) -> dict:
                 base_url=ch_def["base_url"],
                 category_id=category_map[ch_def["category"]],
                 crawl_interval=ch_def["interval"],
+                base_interval_minutes=ch_def["interval"],
+                hot_interval_minutes=max(3, min(10, ch_def["interval"])),
+                min_interval_minutes=3 if ch_def["interval"] <= 30 else 10,
+                max_interval_minutes=max(120, ch_def["interval"] * 4),
+                manual_interval_enabled=1,
+                effective_interval_minutes=ch_def["interval"],
+                schedule_version=1,
                 is_active=1,
             )
             session.add(ch)
@@ -195,7 +203,10 @@ def init_all_data():
     try:
         category_map = init_categories(session)
         channel_map = init_channels(session, category_map)
-        init_mock_data(session, category_map, channel_map)
+        if os.getenv("ENABLE_SEED_DATA", "").strip().lower() in {"1", "true", "yes", "on"}:
+            init_mock_data(session, category_map, channel_map)
+        else:
+            logger.info("未启用 ENABLE_SEED_DATA，跳过模拟数据插入")
         rebuild_events(session)
         logger.info("数据初始化完成")
     except Exception as e:

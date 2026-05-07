@@ -10,6 +10,8 @@ import re
 from datetime import datetime
 from urllib.parse import urljoin
 
+from services.detail_pipeline import limit_detail_content
+
 
 SPORTS_SKIP_KEYWORDS = (
     "彩票",
@@ -79,7 +81,7 @@ def extract_article_text(html_text: str, patterns: list[str]) -> str:
             continue
         content = clean_html_text(match.group(1))
         if len(content) >= 40:
-            return content[:500]
+            return limit_detail_content(content)
 
     description = re.search(
         r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']',
@@ -89,6 +91,6 @@ def extract_article_text(html_text: str, patterns: list[str]) -> str:
     if description:
         content = clean_html_text(description.group(1))
         if len(content) >= 20:
-            return content[:500]
+            return limit_detail_content(content)
 
     return ""

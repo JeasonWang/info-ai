@@ -3,12 +3,14 @@
 爬取掘金热门技术文章，并深入爬取详情页获取完整内容
 """
 import hashlib
+import html as html_lib
 import json
 import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.html_article_extractor import HtmlArticleExtractor
 
 
 class JuejinCrawler(BaseCrawler):
@@ -65,34 +67,6 @@ class JuejinCrawler(BaseCrawler):
 
         return " ".join(merged_parts).strip()
 
-    def _extract_web_fallback_content(self, html: str, title: str) -> str:
-        """优先从文章正文块提取内容，减少掘金壳页面噪声污染。"""
-        block_patterns = [
-            r"<article[^>]*>(.*?)</article>",
-            r'<div[^>]*class="[^"]*(?:article|content|detail|body)[^"]*"[^>]*>(.*?)</div>',
-            r"<main[^>]*>(.*?)</main>",
-        ]
-
-        cleaned_blocks = []
-        for pattern in block_patterns:
-            for match in re.findall(pattern, html, re.DOTALL | re.IGNORECASE):
-                cleaned = self._clean_html_text(match)
-                if cleaned:
-                    cleaned_blocks.append(cleaned)
-
-        for block in cleaned_blocks:
-            if title and title in block and len(block) >= 40:
-                return block
-
-        for block in cleaned_blocks:
-            if len(block) >= 80:
-                return block
-
-        fallback_text = self._extract_text_from_html(html)
-        if title and title in fallback_text:
-            return fallback_text
-        return fallback_text
-
     def crawl(self) -> list:
         results = []
         try:
@@ -126,6 +100,9 @@ class JuejinCrawler(BaseCrawler):
         results = []
         for article in articles[:20]:
             article_info = article.get("article_info", {})
+            if not article_info and isinstance(article.get("item_info"), dict):
+                item_info = article.get("item_info", {})
+                article_info = item_info.get("article_info", {}) or item_info
             title = article_info.get("title", "").strip()
             if not title:
                 continue
@@ -142,6 +119,7 @@ class JuejinCrawler(BaseCrawler):
                 "location": "",
                 "indicator_name": "",
                 "indicator_value": "",
+                "_allow_title_only": True,
             })
         return results
 
@@ -192,6 +170,7 @@ class JuejinCrawler(BaseCrawler):
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
 
     def _fetch_api_detail(self, item: dict):
@@ -212,7 +191,10 @@ class JuejinCrawler(BaseCrawler):
                 timeout=15,
             )
             data = response.json()
-            article_data = data.get("data", {}).get("article_info", {})
+            root = data.get("data") if isinstance(data, dict) else {}
+            if not isinstance(root, dict):
+                return None
+            article_data = root.get("article_info") or {}
             parts = []
 
             mark_content = self._clean_markdown_text(article_data.get("mark_content", ""))
@@ -225,7 +207,7 @@ class JuejinCrawler(BaseCrawler):
 
             combined = self._merge_distinct_parts(parts)
             if len(combined) >= 20:
-                return DetailStrategyResult(strategy="fetch_detail", content=combined[:500])
+                return DetailStrategyResult(strategy="fetch_detail", content=limit_detail_content(combined))
         except Exception as e:
             self.logger.warning(f"掘金API详情解析失败: {e}")
 
@@ -242,10 +224,42 @@ class JuejinCrawler(BaseCrawler):
             headers["Content-Type"] = "application/json"
             response = self.fetch(source_url, headers=headers)
             html = response.text
+            state_content = self._extract_content_from_inline_state(html)
+            if state_content:
+                return DetailStrategyResult(strategy="inline_state", content=limit_detail_content(state_content))
             text = self._extract_web_fallback_content(html, item.get("title", ""))
             if text and len(text) >= 20:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
         except Exception as e:
             self.logger.warning(f"掘金网页兜底解析失败: {e}")
 
         return None
+
+    def _extract_content_from_inline_state(self, html: str) -> str:
+        parts = []
+        for field in ("mark_content", "content"):
+            for raw_value in re.findall(rf'"{field}"\s*:\s*"((?:\\.|[^"\\])*)"', html or "")[:4]:
+                try:
+                    decoded = json.loads(f'"{raw_value}"')
+                except json.JSONDecodeError:
+                    decoded = raw_value
+                cleaned = self._clean_markdown_text(decoded) if field == "mark_content" else self._clean_html_text(decoded)
+                cleaned = html_lib.unescape(cleaned)
+                if len(cleaned) >= 80:
+                    parts.append(cleaned)
+        combined = self._merge_distinct_parts(parts)
+        return combined if len(combined) >= 80 else ""
+
+    def _extract_web_fallback_content(self, html: str, title: str) -> str:
+        local_text = super()._extract_text_from_html(html)
+        article_text = HtmlArticleExtractor().extract(html)
+        if article_text and len(article_text) >= 40:
+            return article_text
+        candidates = [local_text]
+        for text in candidates:
+            if title and title in text and len(text) >= 80:
+                return text
+        for text in candidates:
+            if len(text) >= 120:
+                return text
+        return article_text or local_text

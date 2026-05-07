@@ -1,0 +1,84 @@
+services:
+  info-aggregation:
+    image: info-ai-info-aggregation:pro
+    build:
+      context: ./info_aggregation
+      dockerfile: Dockerfile
+    container_name: info-aggregation
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18000:8000"
+    environment:
+      DATA_DIR: /app/data
+      LOG_DIR: /app/data/logs
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DB_TYPE: ${DB_TYPE:-mysql}
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root1234}
+      DB_NAME: ${DB_NAME:-info-max}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENABLE_SEED_DATA: ${ENABLE_SEED_DATA:-false}
+      ZHIHU_COOKIE: ${ZHIHU_COOKIE:-}
+      ZHIHU_ZSE_93: ${ZHIHU_ZSE_93:-}
+      ZHIHU_ZSE_96: ${ZHIHU_ZSE_96:-}
+      WEIBO_COOKIE: ${WEIBO_COOKIE:-}
+      XHS_COOKIE: ${XHS_COOKIE:-}
+    volumes:
+      - aggregation_data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  info-serve:
+    image: info-ai-info-serve:pro
+    build:
+      context: ./info-serve
+      dockerfile: Dockerfile
+    container_name: info-serve
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      INFO_SERVE_HTTP_ADDR: :8085
+      INFO_SERVE_MYSQL_DSN: ${INFO_SERVE_MYSQL_DSN:-root:root1234@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local}
+      INFO_SERVE_SESSION_SECRET: ${INFO_SERVE_SESSION_SECRET:-change-me-in-production}
+      INFO_AGGREGATION_BASE_URL: http://info-aggregation:8000
+      INFO_ADMIN_EMAIL: ${INFO_ADMIN_EMAIL:-admin@info-daren.local}
+      INFO_ADMIN_PASSWORD: ${INFO_ADMIN_PASSWORD:-Admin123456}
+    depends_on:
+      - info-aggregation
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  info-mvp:
+    image: info-ai-info-mvp:pro
+    build:
+      context: ./info-mvp
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    container_name: info-mvp
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    depends_on:
+      - info-serve
+
+  info-admin:
+    image: info-ai-info-admin:pro
+    build:
+      context: ./info-admin
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    container_name: info-admin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - info-serve
+
+volumes:
+  aggregation_data:

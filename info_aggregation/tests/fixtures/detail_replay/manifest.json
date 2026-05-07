@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "weibo-topic-json",
+      "channel_code": "weibo",
+      "title": "OpenAI 发布新模型",
+      "list_content": "OpenAI 发布新模型",
+      "source_file": "weibo_topic.json",
+      "source_format": "json",
+      "expected_terms": ["OpenAI 发布新模型", "API 接入节奏", "开放计划"],
+      "forbidden_terms": ["请先登录"]
+    },
+    {
+      "name": "kr36-article-html",
+      "channel_code": "36kr",
+      "title": "Anthropic 发布新模型",
+      "list_content": "Anthropic 发布新模型",
+      "source_file": "kr36_article.html",
+      "source_format": "html",
+      "expected_terms": ["Anthropic 发布新模型", "工具调用能力", "企业客户"],
+      "forbidden_terms": ["登录后查看更多内容"]
+    },
+    {
+      "name": "csdn-article-html",
+      "channel_code": "csdn",
+      "title": "OpenAI API 更新",
+      "list_content": "OpenAI API 更新",
+      "source_file": "csdn_article.html",
+      "source_format": "html",
+      "expected_terms": ["OpenAI API 更新", "响应格式", "线上稳定性"],
+      "forbidden_terms": ["推荐作者", "登录后查看更多内容"]
+    }
+  ]
+}

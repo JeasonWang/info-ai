@@ -83,6 +83,62 @@ def test_build_data_quality_report_counts_duplicate_and_missing_fields(session):
     assert report["samples"]["missing_semantics"][0]["source_id"] == "quality-001"
 
 
+def test_build_data_quality_report_separates_seed_from_real_detail_quality(session):
+    category, channel = _seed_category_and_channel(session)
+    session.add_all(
+        [
+            Info(
+                title="今日头条真实热榜",
+                content="今日头条真实热榜。hot",
+                category_id=category.id,
+                channel_id=channel.id,
+                source_id="real-toutiao-weak",
+                source_url="https://www.toutiao.com/trending/123/",
+                event_time=datetime(2026, 4, 29, 9, 0, 0),
+                detail_fetch_status="list_only",
+                detail_strategy="list_fallback",
+                detail_score=10,
+                detail_content_length=12,
+            ),
+            Info(
+                title="模拟完整详情",
+                content="这是一条模拟详情，用于初始化演示，不应该参与真实采集完整率。",
+                category_id=category.id,
+                channel_id=channel.id,
+                source_id="seed-complete",
+                source_url="https://example.com/seed",
+                event_time=datetime(2026, 4, 29, 10, 0, 0),
+                detail_fetch_status="complete",
+                detail_strategy="seed",
+                detail_score=100,
+                detail_content_length=80,
+            ),
+            Info(
+                title="真实完整详情",
+                content="真实完整详情包含足够长的正文、背景和影响分析，能够支撑用户阅读和事件聚合。",
+                category_id=category.id,
+                channel_id=channel.id,
+                source_id="real-complete",
+                source_url="https://example.com/real-complete",
+                event_time=datetime(2026, 4, 29, 11, 0, 0),
+                detail_fetch_status="complete",
+                detail_strategy="html_article",
+                detail_score=90,
+                detail_content_length=70,
+            ),
+        ]
+    )
+    session.commit()
+
+    report = build_data_quality_report(session)
+
+    assert report["info"]["total"] == 3
+    assert report["info"]["seed_detail_count"] == 1
+    assert report["info"]["real_detail_total"] == 2
+    assert report["info"]["real_complete_detail_count"] == 1
+    assert report["info"]["real_complete_detail_ratio"] == 50.0
+
+
 def test_admin_data_quality_report_api_returns_metrics(session):
     _seed_category_and_channel(session)
     session.commit()
@@ -186,6 +242,60 @@ def test_admin_archive_low_quality_infos_api_rebuilds_quality_report(session):
     payload = response.json()["data"]
     assert payload["archived_count"] == 1
     assert payload["quality_report"]["info"]["total"] == 0
+
+
+def test_admin_retry_low_quality_details_api_groups_records_by_channel(session, monkeypatch):
+    category, channel = _seed_category_and_channel(session)
+    weak_info = Info(
+        title="OpenAI 讨论升温",
+        content="OpenAI 讨论升温",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="retry-detail-weak",
+        source_url="https://example.com/retry-detail-weak",
+        event_time=datetime(2026, 4, 21, 9, 0, 0),
+        detail_fetch_status="list_only",
+        detail_score=10,
+        detail_content_length=8,
+    )
+    strong_info = Info(
+        title="芯片行业新进展",
+        content=(
+            "芯片行业新进展带来供应链和算力平台讨论，信息正文已经足够完整。"
+            "报道进一步补充了产业链上下游、先进封装、云端推理和终端应用的多方观点，"
+            "可以作为完整详情样例，不应该进入低完整详情重抓队列。"
+        ),
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="retry-detail-strong",
+        source_url="https://example.com/retry-detail-strong",
+        event_time=datetime(2026, 4, 21, 10, 0, 0),
+        detail_fetch_status="complete",
+        detail_score=95,
+        detail_content_length=130,
+        tech_entities="芯片",
+        tech_keywords="供应链,算力",
+    )
+    session.add_all([weak_info, strong_info])
+    session.commit()
+
+    calls = []
+
+    def fake_fetch_details(channel_code, info_ids):
+        calls.append((channel_code, info_ids))
+        return {"detail_success_count": len(info_ids), "detail_failed_count": 0}
+
+    monkeypatch.setattr("scheduler._fetch_details_for_items", fake_fetch_details)
+
+    client = TestClient(app)
+    response = client.post("/api/admin/retry-low-quality-details?limit=10")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["selected_count"] == 1
+    assert payload["detail_success_count"] == 1
+    assert payload["detail_failed_count"] == 0
+    assert calls == [("weibo", [weak_info.id])]
 
 
 def test_archive_duplicate_title_infos_keeps_highest_quality_record(session):

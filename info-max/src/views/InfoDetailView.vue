@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import DetailContent from '@/components/DetailContent.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useFavorites } from '@/composables/useFavorites'
-import { getInfoById } from '@/services/api'
+import { getInfoById, recordReadHistory } from '@/services/api'
+import { getUserToken } from '@/services/userSession'
 import type { InfoItem } from '@/types'
 import { formatDateTime } from '@/utils'
 
@@ -106,6 +107,10 @@ async function loadDetail() {
 
   try {
     info.value = await getInfoById(infoId.value)
+    const token = getUserToken()
+    if (token) {
+      await recordReadHistory(token, { infoId: infoId.value }).catch(() => undefined)
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '详情加载失败'
   } finally {

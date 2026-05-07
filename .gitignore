@@ -18,7 +18,9 @@ dist/
 
 # Local env and runtime files
 .env
-.env.*
 *.log
 *.db
 .runtime/
+.DS_Store
+
+logs

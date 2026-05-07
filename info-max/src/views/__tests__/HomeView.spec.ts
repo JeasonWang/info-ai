@@ -12,7 +12,7 @@ describe('HomeView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.endsWith('/api/event-categories')) {
+      if (url.endsWith('/api/v1/event-categories')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -25,7 +25,7 @@ describe('HomeView', () => {
         )
       }
 
-      if (url.includes('/api/events?category_code=all&keyword=OpenAI')) {
+      if (url.includes('/api/v1/events?category_code=all&keyword=OpenAI')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -55,7 +55,7 @@ describe('HomeView', () => {
         )
       }
 
-      if (url.includes('/api/events?category_code=tech&keyword=OpenAI')) {
+      if (url.includes('/api/v1/events?category_code=tech&keyword=OpenAI')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -85,7 +85,7 @@ describe('HomeView', () => {
         )
       }
 
-      if (url.includes('/api/events?category_code=tech')) {
+      if (url.includes('/api/v1/events?category_code=tech')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -158,11 +158,11 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/event-categories'),
+      expect.stringContaining('/api/v1/event-categories'),
       expect.any(Object),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=all&sort=composite&page=1&page_size=10'),
+      expect.stringContaining('/api/v1/events?category_code=all&sort=composite&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.find('[data-testid="home-compact-header"]').exists()).toBe(true)
@@ -181,7 +181,7 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=tech&sort=composite&page=1&page_size=10'),
+      expect.stringContaining('/api/v1/events?category_code=tech&sort=composite&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('科技频道热点')
@@ -192,7 +192,7 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=tech&keyword=OpenAI&sort=composite&page=1&page_size=10'),
+      expect.stringContaining('/api/v1/events?category_code=tech&keyword=OpenAI&sort=composite&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('科技频道 OpenAI 热点')
@@ -202,7 +202,7 @@ describe('HomeView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.endsWith('/api/event-categories')) {
+      if (url.endsWith('/api/v1/event-categories')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -239,7 +239,7 @@ describe('HomeView', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('全网 · 综合分优先')
+    expect(wrapper.text()).toContain('全网 · 全部渠道 · 综合分优先')
     expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
 
     await wrapper.get('[data-testid="home-filter-toggle"]').trigger('click')
@@ -248,10 +248,10 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=all&sort=latest&page=1&page_size=10'),
+      expect.stringContaining('/api/v1/events?category_code=all&sort=latest&page=1&page_size=10'),
       expect.any(Object),
     )
-    expect(wrapper.text()).toContain('全网 · 最新更新优先')
+    expect(wrapper.text()).toContain('全网 · 全部渠道 · 最新更新优先')
     expect(wrapper.find('[data-testid="home-filter-panel"]').exists()).toBe(false)
   })
 
@@ -268,7 +268,7 @@ describe('HomeView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.endsWith('/api/event-categories')) {
+      if (url.endsWith('/api/v1/event-categories')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -324,19 +324,128 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=sports&keyword=NBA&sort=latest&page=1&page_size=10'),
+      expect.stringContaining('/api/v1/events?category_code=sports&keyword=NBA&sort=latest&page=1&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('体育 · 1 条')
-    expect(wrapper.text()).toContain('体育 · 最新更新优先')
+    expect(wrapper.text()).toContain('体育 · 全部渠道 · 最新更新优先')
     expect(wrapper.get<HTMLInputElement>('input[type="search"]').element.value).toBe('NBA')
+  })
+
+  it('restores signed-in home filters from the server and persists them locally', async () => {
+    window.localStorage.setItem('info-max-token', 'session-token')
+    window.localStorage.setItem(
+      'info-daren:home-filter-memory',
+      JSON.stringify({
+        categoryCode: 'all',
+        sortMode: 'composite',
+        keyword: '',
+      }),
+    )
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url.endsWith('/api/v1/event-categories')) {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: [
+              { code: 'all', name: '全网', display_order: 0 },
+              { code: 'sports', name: '体育', display_order: 3 },
+            ],
+          }),
+        )
+      }
+
+      if (url.includes('/api/v1/me/preferences/home-filter') && init?.method === 'PUT') {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: { category_code: 'sports', sort: 'latest', keyword: 'NBA' },
+          }),
+        )
+      }
+
+      if (url.includes('/api/v1/me/preferences/home-filter')) {
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            message: 'success',
+            data: { category_code: 'sports', sort: 'latest', keyword: 'NBA' },
+          }),
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          message: 'success',
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 10,
+            items: [
+              {
+                id: 18,
+                representative_info_id: 188,
+                title: '服务端恢复的体育热点',
+                one_line_summary: '登录后从账号偏好恢复筛选条件。',
+                primary_category: { code: 'sports', name: '体育' },
+                heat_score: 90,
+                freshness_score: 90,
+                composite_score: 90,
+                last_updated_at: '2026-04-22 08:00:00',
+                source_count: 1,
+                source_badges: ['央视体育网'],
+                new_update_count: 0,
+              },
+            ],
+          },
+        }),
+      )
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('scrollTo', vi.fn())
+
+    const wrapper = mount(HomeView, {
+      global: {
+        stubs: {
+          RouterLink: RouterLinkStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/me/preferences/home-filter'),
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer session-token' }) }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/events?category_code=sports&keyword=NBA&sort=latest&page=1&page_size=10'),
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/me/preferences/home-filter'),
+      expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({ Authorization: 'Bearer session-token' }),
+      }),
+    )
+    expect(wrapper.text()).toContain('服务端恢复的体育热点')
+    expect(wrapper.text()).toContain('体育 · 全部渠道 · 最新更新优先')
+    expect(window.localStorage.getItem('info-daren:home-filter-memory')).toContain('"categoryCode":"sports"')
   })
 
   it('shows a back-to-top button after scrolling and scrolls smoothly to the top', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.endsWith('/api/event-categories')) {
+      if (url.endsWith('/api/v1/event-categories')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -387,7 +496,7 @@ describe('HomeView', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
-      if (url.endsWith('/api/event-categories')) {
+      if (url.endsWith('/api/v1/event-categories')) {
         return new Response(
           JSON.stringify({
             code: 0,
@@ -504,7 +613,7 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/events?category_code=all&sort=composite&page=2&page_size=10'),
+      expect.stringContaining('/api/v1/events?category_code=all&sort=composite&page=2&page_size=10'),
       expect.any(Object),
     )
     expect(wrapper.text()).toContain('第一条首页热点')

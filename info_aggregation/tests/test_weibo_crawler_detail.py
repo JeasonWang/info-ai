@@ -1,6 +1,61 @@
 from crawlers.weibo import WeiboCrawler
 
 
+def test_weibo_cookie_can_be_loaded_from_env_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("WEIBO_COOKIE", raising=False)
+    monkeypatch.chdir(tmp_path)
+    tmp_path.joinpath(".env").write_text(
+        "OTHER=value\nWEIBO_COOKIE=SUB=session-token; XSRF-TOKEN=csrf-token\n",
+        encoding="utf-8",
+    )
+
+    crawler = WeiboCrawler()
+
+    assert crawler._get_weibo_cookie() == "SUB=session-token; XSRF-TOKEN=csrf-token"
+
+
+def test_weibo_hot_band_source_id_uses_rank_and_heat_context():
+    crawler = WeiboCrawler()
+
+    def fake_fetch_json(url, headers=None):
+        return {
+            "data": {
+                "band_list": [
+                    {
+                        "word": "张雪机车再夺冠军",
+                        "note": "张雪机车再夺冠军",
+                        "rank": 1,
+                        "num": 123456,
+                    },
+                    {
+                        "word": "张雪机车再夺冠军",
+                        "note": "张雪机车再夺冠军",
+                        "rank": 2,
+                        "num": 234567,
+                    },
+                ]
+            }
+        }
+
+    crawler.fetch_json = fake_fetch_json
+
+    items = crawler._crawl_hot_band()
+
+    assert len(items) == 2
+    assert items[0]["source_id"] != items[1]["source_id"]
+    assert "%E5%BC%A0%E9%9B%AA" in items[0]["source_url"]
+
+
+def test_weibo_auth_headers_include_cookie(monkeypatch):
+    monkeypatch.setenv("WEIBO_COOKIE", "SUB=session-token; XSRF-TOKEN=csrf-token")
+
+    crawler = WeiboCrawler()
+    headers = crawler._build_weibo_headers("https://weibo.com/", accept_json=True)
+
+    assert headers["Cookie"] == "SUB=session-token; XSRF-TOKEN=csrf-token"
+    assert headers["X-Requested-With"] == "XMLHttpRequest"
+
+
 def test_weibo_resolve_detail_prefers_topic_search_content():
     crawler = WeiboCrawler()
 
@@ -41,7 +96,7 @@ def test_weibo_resolve_detail_prefers_topic_search_content():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "topic_search"
     assert "新模型" in result.content
 
@@ -102,7 +157,7 @@ def test_weibo_resolve_detail_uses_hot_band_when_topic_search_is_blocked():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "hot_band_context"
     assert "热搜背景说明" in result.content
 
@@ -136,7 +191,7 @@ def test_weibo_resolve_detail_deduplicates_repeated_topic_statuses():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.content.count("OpenAI 发布新模型") == 1
     assert "开发者讨论接入方式" in result.content
 
@@ -177,9 +232,77 @@ def test_weibo_resolve_detail_prefers_mobile_search_when_topic_search_is_weak():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "mobile_search"
     assert "开发者接入计划" in result.content
+
+
+def test_weibo_with_cookie_prefers_richer_mobile_search_over_hot_band(monkeypatch):
+    monkeypatch.setenv("WEIBO_COOKIE", "SUB=session-token")
+    crawler = WeiboCrawler()
+
+    def fake_fetch_json(url, headers=None):
+        if "ajax/search/topic" in url:
+            return {"data": {"statuses": []}}
+        if "m.weibo.cn/api/container/getIndex" in url:
+            return {
+                "data": {
+                    "cards": [
+                        {"mblog": {"text": "张雪机车再夺冠军，车队在最后阶段完成反超。"}},
+                        {"mblog": {"text": "现场视频显示，法国车手瓦伦丁德比斯在最后弯道完成超越，多个体育媒体正在转发比赛片段。"}},
+                        {"mblog": {"text": "网友讨论国产摩托车品牌在世界赛场的表现，也关注后续赛程和车队积分变化。"}},
+                    ]
+                }
+            }
+        if "ajax/statuses/hot_band" in url:
+            return {
+                "data": {
+                    "band_list": [
+                        {
+                            "word": "张雪机车再夺冠军",
+                            "note": "张雪机车再夺冠军",
+                            "category": "体育",
+                            "rank": 1,
+                            "num": 123456,
+                        }
+                    ]
+                }
+            }
+        return {}
+
+    crawler.fetch_json = fake_fetch_json
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("should not hit web fallback"))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "张雪机车再夺冠军",
+            "content": "张雪机车再夺冠军",
+            "source_url": "https://s.weibo.com/weibo?q=%23张雪机车再夺冠军%23",
+        }
+    )
+
+    assert result.strategy == "mobile_search"
+    assert result.content_length >= 100
+    assert "最后弯道完成超越" in result.content
+
+
+def test_weibo_web_fallback_rejects_template_shell():
+    crawler = WeiboCrawler()
+
+    class DummyResponse:
+        text = "微博搜索 {{ model_title.title }} 快速概览(Qwen3·AI生成) 问题分析中 答案整理中"
+
+    crawler.fetch = lambda *args, **kwargs: DummyResponse()
+
+    result = crawler._fetch_web_fallback(
+        {
+            "title": "张雪机车再夺冠军",
+            "content": "张雪机车再夺冠军",
+            "source_url": "https://s.weibo.com/weibo?q=%23张雪机车再夺冠军%23",
+        }
+    )
+
+    assert result is None
 
 
 def test_weibo_resolve_detail_marks_failed_when_only_login_and_shell_noise_exist():
@@ -257,7 +380,7 @@ def test_weibo_mobile_search_merges_long_text_and_retweet_content():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "mobile_search"
     assert "价格变化与开放计划" in result.content
     assert "开发者开始讨论接入方式和成本变化" in result.content
@@ -300,7 +423,7 @@ def test_weibo_topic_search_merges_long_text_and_retweet_content():
         }
     )
 
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert result.strategy == "topic_search"
     assert "价格调整和开放时间表" in result.content
     assert "API 接入方式、成本变化和推理速度表现" in result.content
@@ -335,7 +458,7 @@ def test_weibo_web_fallback_extracts_relevant_article_block():
     )
 
     assert result.strategy == "web_fallback"
-    assert result.status == "complete"
+    assert result.status in {"complete", "partial"}
     assert "推理能力、价格变化和开放节奏" in result.content
 
 

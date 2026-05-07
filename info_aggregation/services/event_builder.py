@@ -1,5 +1,8 @@
 from collections import defaultdict
 from difflib import SequenceMatcher
+import hashlib
+
+from sqlalchemy import inspect
 
 from database import Event, EventItemLink, EventSummarySnapshot, EventTimelineEntry, Info
 
@@ -14,6 +17,13 @@ TECH_TOPIC_LABELS = {
 def _build_event_key(item: Info) -> tuple[int, str]:
     anchor = (item.core_entity or item.title[:16]).strip().lower()
     return item.category_id, anchor
+
+
+def _build_event_key_value(category_id: int, anchor: str) -> str:
+    """生成事件稳定键，保证同一分类下同一核心实体重建时能命中同一事件。"""
+
+    raw_key = f"{category_id}:{_normalize_summary_text(anchor).lower()}"
+    return hashlib.sha1(raw_key.encode("utf-8")).hexdigest()
 
 
 def _text_similarity(left: str, right: str) -> float:
@@ -150,11 +160,23 @@ def _build_latest_update(items: list[Info]) -> str:
     return latest_content
 
 
+def _load_existing_events(session) -> dict[str, Event]:
+    """按稳定键加载已有事件，用于重建时复用原事件ID。"""
+
+    table_names = set(inspect(session.get_bind()).get_table_names())
+    if "event" not in table_names:
+        return {}
+    columns = {column["name"] for column in inspect(session.get_bind()).get_columns("event")}
+    if "event_key" not in columns:
+        return {}
+    return {event.event_key: event for event in session.query(Event).filter(Event.event_key != "").all()}
+
+
 def rebuild_events(session, limit: int = 200):
     items = (
         session.query(Info)
         .filter(Info.is_deleted == 0)
-        .order_by(Info.event_time.asc(), Info.created_at.asc())
+        .order_by(Info.event_time.desc(), Info.created_at.desc(), Info.id.desc())
         .limit(limit)
         .all()
     )
@@ -165,31 +187,34 @@ def rebuild_events(session, limit: int = 200):
             continue
         grouped_items[_build_event_key(item)].append(item)
 
+    existing_events = _load_existing_events(session)
     session.query(EventItemLink).delete()
     session.query(EventTimelineEntry).delete()
     session.query(EventSummarySnapshot).delete()
-    session.query(Event).delete()
+    session.query(Event).update({Event.status: "archived"}, synchronize_session="fetch")
     session.flush()
 
-    for _, group in grouped_items.items():
+    for (category_id, anchor), group in grouped_items.items():
         group.sort(key=lambda item: item.event_time or item.created_at)
         lead_item = sorted(group, key=_quality_score, reverse=True)[0]
         group = [lead_item] + [item for item in group if item.id != lead_item.id]
         lead_item = group[0]
         latest_item = group[-1]
-        event = Event(
-            title=lead_item.title,
-            one_line_summary=_build_one_line(group),
-            primary_category_id=lead_item.category_id,
-            status="active",
-            heat_score=min(100, 60 + len(group) * 10),
-            freshness_score=90,
-            composite_score=min(100, 70 + len(group) * 8),
-            source_count=len(group),
-            started_at=lead_item.event_time or lead_item.created_at,
-            last_updated_at=latest_item.event_time or latest_item.created_at,
-        )
-        session.add(event)
+        event_key = _build_event_key_value(category_id, anchor)
+        event = existing_events.get(event_key) or Event(event_key=event_key)
+        event.title = lead_item.title
+        event.one_line_summary = _build_one_line(group)
+        event.primary_category_id = lead_item.category_id
+        event.status = "active"
+        event.heat_score = min(100, 60 + len(group) * 10)
+        event.freshness_score = 90
+        event.composite_score = min(100, 70 + len(group) * 8)
+        event.source_count = len(group)
+        event.started_at = lead_item.event_time or lead_item.created_at
+        event.last_updated_at = latest_item.event_time or latest_item.created_at
+        event.event_key = event_key
+        if event.id is None:
+            session.add(event)
         session.flush()
 
         session.add_all(

@@ -19,9 +19,19 @@ export const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
-    path: '/settings',
-    name: 'settings',
-    component: () => import('./views/SettingsView.vue'),
+    path: '/login',
+    name: 'login',
+    component: () => import('./views/LoginView.vue'),
+  },
+  {
+    path: '/history',
+    name: 'history',
+    component: () => import('./views/ReadHistoryView.vue'),
+  },
+  {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('./views/FavoriteEventsView.vue'),
   },
 ]
 

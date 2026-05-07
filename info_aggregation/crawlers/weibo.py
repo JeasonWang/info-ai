@@ -5,9 +5,11 @@
 import hashlib
 import re
 from datetime import datetime
+from urllib.parse import quote
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.credential_provider import get_credential
+from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class WeiboCrawler(BaseCrawler):
@@ -23,6 +25,26 @@ class WeiboCrawler(BaseCrawler):
 
     def __init__(self):
         super().__init__("weibo", "微博")
+
+    def _get_weibo_cookie(self) -> str:
+        return get_credential("WEIBO_COOKIE")
+
+    def _build_source_id(self, source_key: str) -> str:
+        return hashlib.md5(f"weibo_{source_key}".encode()).hexdigest()[:16]
+
+    def _build_search_url(self, word: str) -> str:
+        return f"https://s.weibo.com/weibo?q=%23{quote(word)}%23"
+
+    def _build_weibo_headers(self, referer: str, accept_json: bool = False) -> dict:
+        headers = self._build_headers()
+        headers["Referer"] = referer
+        if accept_json:
+            headers["Accept"] = "application/json, text/plain, */*"
+            headers["X-Requested-With"] = "XMLHttpRequest"
+        cookie = self._get_weibo_cookie()
+        if cookie:
+            headers["Cookie"] = cookie
+        return headers
 
     def crawl(self) -> list:
         results = []
@@ -49,9 +71,7 @@ class WeiboCrawler(BaseCrawler):
         return results
 
     def _crawl_mobile_api(self) -> list:
-        headers = self._build_headers()
-        headers["Referer"] = "https://m.weibo.cn/"
-        headers["Accept"] = "application/json, text/plain, */*"
+        headers = self._build_weibo_headers("https://m.weibo.cn/", accept_json=True)
         data = self.fetch_json(self.MOBILE_HOT_API, headers=headers)
         cards = data.get("data", {}).get("cards", [])
         results = []
@@ -62,27 +82,26 @@ class WeiboCrawler(BaseCrawler):
                 title = desc.strip() if desc else ""
                 if not title:
                     continue
-                source_id = hashlib.md5(f"weibo_{title}".encode()).hexdigest()[:16]
+                source_url = self._build_search_url(title)
+                source_id = self._build_source_id(source_url)
                 results.append({
                     "source_id": source_id,
                     "title": title[:40],
                     "content": title[:500],
-                    "source_url": f"https://s.weibo.com/weibo?q=%23{title}%23",
+                    "source_url": source_url,
                     "event_time": datetime.now(),
                     "core_entity": title[:20],
                     "location": "",
                     "indicator_name": "",
                     "indicator_value": "",
+                    "_allow_title_only": True,
                 })
             if len(results) >= 20:
                 break
         return results[:20]
 
     def _crawl_hot_band(self) -> list:
-        headers = self._build_headers()
-        headers["Referer"] = "https://weibo.com/"
-        headers["Accept"] = "application/json, text/plain, */*"
-        headers["X-Requested-With"] = "XMLHttpRequest"
+        headers = self._build_weibo_headers("https://weibo.com/", accept_json=True)
         data = self.fetch_json(self.HOT_BAND_API, headers=headers)
         band_list = data.get("data", {}).get("band_list", [])
         results = []
@@ -93,29 +112,43 @@ class WeiboCrawler(BaseCrawler):
             note = band.get("note", word)
             raw_text = band.get("raw_text", "")
             desc = band.get("desc", "")
+            label_name = band.get("label_name", "")
+            category = band.get("category", "")
+            rank = band.get("rank", "")
+            num = band.get("num", "")
             content_parts = [note]
             if raw_text and raw_text != note:
                 content_parts.append(raw_text)
             if desc and desc != note and desc != raw_text:
                 content_parts.append(desc)
+            if label_name:
+                content_parts.append(f"热榜标签：{label_name}")
+            if category:
+                content_parts.append(f"热榜分类：{category}")
+            if rank != "":
+                content_parts.append(f"当前排名：{rank}")
+            if num:
+                content_parts.append(f"热度值：{num}")
             content = "。".join(content_parts)
-            source_id = hashlib.md5(f"weibo_{word}".encode()).hexdigest()[:16]
+            source_url = self._build_search_url(word)
+            source_key = f"{source_url}|rank:{rank}|num:{num}"
+            source_id = self._build_source_id(source_key)
             results.append({
                 "source_id": source_id,
                 "title": word[:40],
                 "content": content[:500],
-                "source_url": f"https://s.weibo.com/weibo?q=%23{word}%23",
+                "source_url": source_url,
                 "event_time": datetime.now(),
                 "core_entity": word[:20],
                 "location": "",
                 "indicator_name": "",
                 "indicator_value": "",
+                "_allow_title_only": True,
             })
         return results
 
     def _crawl_web_page(self) -> list:
-        headers = self._build_headers()
-        headers["Referer"] = "https://s.weibo.com/"
+        headers = self._build_weibo_headers("https://s.weibo.com/")
         url = "https://s.weibo.com/top/summary"
         response = self.fetch(url, headers=headers)
         html = response.text
@@ -126,17 +159,19 @@ class WeiboCrawler(BaseCrawler):
             word = word.strip()
             if not word:
                 continue
-            source_id = hashlib.md5(f"weibo_{word}".encode()).hexdigest()[:16]
+            source_url = self._build_search_url(word)
+            source_id = self._build_source_id(source_url)
             results.append({
                 "source_id": source_id,
                 "title": word[:40],
                 "content": word[:500],
-                "source_url": f"https://s.weibo.com/weibo?q=%23{word}%23",
+                "source_url": source_url,
                 "event_time": datetime.now(),
                 "core_entity": word[:20],
                 "location": "",
                 "indicator_name": "",
                 "indicator_value": "",
+                "_allow_title_only": True,
             })
         return results
 
@@ -150,24 +185,47 @@ class WeiboCrawler(BaseCrawler):
         topic_search = self._fetch_topic_search(item)
         if topic_search:
             candidates.append(topic_search)
+            topic_result = self._run_detail_pipeline(item, candidates)
+            if self._is_good_enough_without_mobile_search(topic_result):
+                return topic_result
+
+        # 登录态可用时，移动搜索通常能拿到多条真实微博正文，比热榜上下文更有分析价值。
+        if self._get_weibo_cookie():
+            mobile_search = self._fetch_mobile_search(item)
+            if mobile_search:
+                mobile_result = self._run_detail_pipeline(item, [mobile_search])
+                if mobile_result.status in {"complete", "partial"} and mobile_result.content_length >= 120:
+                    return mobile_result
+                candidates.append(mobile_search)
 
         hot_band_context = self._fetch_hot_band_context(item)
         if hot_band_context:
             candidates.append(hot_band_context)
+            hot_band_result = self._run_detail_pipeline(item, candidates)
+            if self._is_good_enough_without_mobile_search(hot_band_result):
+                return hot_band_result
 
-        mobile_search = self._fetch_mobile_search(item)
-        if mobile_search:
-            candidates.append(mobile_search)
+        if not self._get_weibo_cookie():
+            mobile_search = self._fetch_mobile_search(item)
+            if mobile_search:
+                candidates.append(mobile_search)
 
         web_fallback = self._fetch_web_fallback(item)
         if web_fallback:
             candidates.append(web_fallback)
 
+        return self._run_detail_pipeline(item, candidates)
+
+    def _run_detail_pipeline(self, item: dict, candidates: list[DetailStrategyResult]):
         return run_detail_pipeline(
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
+            channel_code=self.channel_code,
         )
+
+    def _is_good_enough_without_mobile_search(self, result) -> bool:
+        return result.status in {"complete", "partial"}
 
     def _clean_weibo_text(self, text: str) -> str:
         """清洗微博正文文本，去掉标签和多余空白。"""
@@ -232,6 +290,9 @@ class WeiboCrawler(BaseCrawler):
         """
         从微博网页搜索结果中优先抽取正文块，避免把整页导航噪声当成详情内容。
         """
+        if self._looks_like_weibo_template_shell(html):
+            return ""
+
         block_patterns = [
             r"<article[^>]*>(.*?)</article>",
             r'<div[^>]*class="[^"]*(?:card-wrap|content|article|detail|body)[^"]*"[^>]*>(.*?)</div>',
@@ -259,11 +320,19 @@ class WeiboCrawler(BaseCrawler):
             return fallback_text
         return fallback_text
 
+    def _looks_like_weibo_template_shell(self, html: str) -> bool:
+        shell_markers = (
+            "{{ model_title.title }}",
+            "{{ item.user_name }}",
+            "快速概览(Qwen3",
+            "深度思考(DS-R1",
+            "问题分析中",
+            "答案整理中",
+        )
+        return any(marker in (html or "") for marker in shell_markers)
+
     def _fetch_topic_search(self, item: dict):
-        headers = self._build_headers()
-        headers["Referer"] = "https://weibo.com/"
-        headers["Accept"] = "application/json, text/plain, */*"
-        headers["X-Requested-With"] = "XMLHttpRequest"
+        headers = self._build_weibo_headers("https://weibo.com/", accept_json=True)
         word = item.get("title", "")
         if not word:
             return None
@@ -284,10 +353,7 @@ class WeiboCrawler(BaseCrawler):
         return None
 
     def _fetch_hot_band_context(self, item: dict):
-        headers = self._build_headers()
-        headers["Referer"] = "https://weibo.com/"
-        headers["Accept"] = "application/json, text/plain, */*"
-        headers["X-Requested-With"] = "XMLHttpRequest"
+        headers = self._build_weibo_headers("https://weibo.com/", accept_json=True)
         word = item.get("title", "").strip()
         if not word:
             return None
@@ -303,9 +369,21 @@ class WeiboCrawler(BaseCrawler):
                     value = str(band.get(key, "")).strip()
                     if value and value not in content_parts:
                         content_parts.append(value)
+                label_name = str(band.get("label_name", "")).strip()
+                category = str(band.get("category", "")).strip()
+                rank = str(band.get("rank", "")).strip()
+                num = str(band.get("num", "")).strip()
+                if label_name:
+                    content_parts.append(f"热榜标签：{label_name}")
+                if category:
+                    content_parts.append(f"热榜分类：{category}")
+                if rank:
+                    content_parts.append(f"当前排名：{rank}")
+                if num:
+                    content_parts.append(f"热度值：{num}")
                 # 热榜上下文通常偏短，补上标题作为事件锚点，减少被判成弱相关或部分详情。
                 combined = self._merge_distinct_parts(content_parts, prefix=word)
-                if combined and len(combined) < 40:
+                if combined and len(combined) < 80:
                     combined = f"微博热搜 {word} 正在持续发酵，当前背景包括：{'；'.join(content_parts)}。"
                 if combined:
                     return DetailStrategyResult(strategy="hot_band_context", content=combined)
@@ -314,9 +392,7 @@ class WeiboCrawler(BaseCrawler):
         return None
 
     def _fetch_mobile_search(self, item: dict):
-        headers = self._build_headers()
-        headers["Referer"] = "https://m.weibo.cn/"
-        headers["Accept"] = "application/json, text/plain, */*"
+        headers = self._build_weibo_headers("https://m.weibo.cn/", accept_json=True)
         word = item.get("title", "")
         if not word:
             return None
@@ -341,10 +417,7 @@ class WeiboCrawler(BaseCrawler):
 
     def _fetch_web_fallback(self, item: dict):
         try:
-            headers = self._build_headers()
-            headers["Referer"] = "https://weibo.com/"
-            headers["Accept"] = "application/json, text/plain, */*"
-            headers["X-Requested-With"] = "XMLHttpRequest"
+            headers = self._build_weibo_headers("https://weibo.com/", accept_json=True)
 
             word = item.get("title", "")
             if not word:
@@ -353,7 +426,7 @@ class WeiboCrawler(BaseCrawler):
             # 网页兜底只抽正文相关区块，不直接使用整页文本，避免把导航壳页面误当成详情。
             text = self._extract_web_fallback_content(response.text, word)
             if text:
-                return DetailStrategyResult(strategy="web_fallback", content=text[:500])
+                return DetailStrategyResult(strategy="web_fallback", content=limit_detail_content(text))
             return None
         except Exception as e:
             self.logger.warning(f"微博详情爬取失败: {e}")
