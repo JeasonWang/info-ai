@@ -84,7 +84,6 @@ XHS_COOKIE=
 # 前端接口配置。
 # 生产 Docker 默认同源 /api，经由前端容器 Nginx 代理到 info-serve。
 VITE_API_BASE_URL=/api
-VITE_INFO_SERVE_BASE_URL=
 
 # 部署完成后的提示地址。服务器部署请改成真实域名或公网 IP。
 PUBLIC_SITE_URL=http://localhost:8082

@@ -124,11 +124,11 @@ start_service "info-serve" "$ROOT_DIR/info-serve" env \
   go run ./cmd/server
 
 start_service "info-admin" "$ROOT_DIR/info-admin" env \
-  VITE_INFO_SERVE_BASE_URL="http://127.0.0.1:${INFO_SERVE_PORT}" \
+  VITE_API_BASE_URL="/api" \
   npm run dev -- --host 127.0.0.1 --port "$INFO_ADMIN_PORT"
   
 start_service "info-mvp" "$ROOT_DIR/info-mvp" env \
-  VITE_INFO_SERVE_BASE_URL="http://127.0.0.1:${INFO_SERVE_PORT}" \
+  VITE_API_BASE_URL="/api" \
   npm run dev:h5 -- --host 127.0.0.1 --port "$INFO_MVP_PORT"
 
 log_step "等待服务就绪"

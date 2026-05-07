@@ -89,7 +89,6 @@ src/
 | 变量 | 开发默认值 | 说明 |
 |------|-----------|------|
 | `VITE_API_BASE_URL` | `/api` | 后端 API 基地址，推荐统一使用 |
-| `VITE_INFO_SERVE_BASE_URL` | - | 兼容旧部署变量，未设置 `VITE_API_BASE_URL` 时自动补 `/api` |
 
 ## 多端兼容
 

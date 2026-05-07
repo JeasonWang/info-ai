@@ -49,10 +49,9 @@ docker compose version
 
 | Variable | 默认值 | 说明 |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | `/api` | `info-mvp` 前端 API 基地址 |
-| `VITE_INFO_SERVE_BASE_URL` | 空 | `info-admin` API 基地址；默认空表示同源 `/api` |
+| `VITE_API_BASE_URL` | `/api` | 前端统一 API 基地址，用户端和管理端都使用它 |
 
-推荐保持两个前端变量默认值，让用户端和管理端都走同源 `/api` 代理。
+推荐保持默认值，让用户端和管理端都走同源 `/api` 代理。
 
 ## 4. 服务器 `.env` 配置
 
@@ -84,7 +83,6 @@ WEIBO_COOKIE=
 XHS_COOKIE=
 
 VITE_API_BASE_URL=/api
-VITE_INFO_SERVE_BASE_URL=
 
 PUBLIC_SITE_URL=http://服务器IP:8082
 PUBLIC_ADMIN_URL=http://服务器IP:8081

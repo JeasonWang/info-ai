@@ -36,7 +36,7 @@ npm run dev
 如需自定义后端地址，请在 `.env` 中设置：
 
 ```bash
-VITE_INFO_SERVE_BASE_URL=http://localhost:8085
+VITE_API_BASE_URL=http://localhost:8085
 ```
 
 ## 测试与构建

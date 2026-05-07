@@ -2,7 +2,7 @@ import type { ApiResponse } from '@/types'
 import { useUserStore } from '@/stores/user'
 import { getToken, removeStoredUser, removeToken } from '@/utils/storage'
 
-const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_INFO_SERVE_BASE_URL || '/api'
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 const BASE_URL = RAW_BASE_URL.endsWith('/api') ? RAW_BASE_URL : `${RAW_BASE_URL.replace(/\/$/, '')}/api`
 const API_PREFIX = '/v1'
 

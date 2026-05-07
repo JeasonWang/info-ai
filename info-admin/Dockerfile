@@ -2,8 +2,8 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-ARG VITE_INFO_SERVE_BASE_URL=
-ENV VITE_INFO_SERVE_BASE_URL=${VITE_INFO_SERVE_BASE_URL}
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 COPY package.json package-lock.json* ./
 RUN npm install

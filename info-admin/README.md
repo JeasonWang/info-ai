@@ -27,10 +27,10 @@ npm run dev
 ## 环境变量
 
 ```text
-VITE_INFO_SERVE_BASE_URL=http://localhost:8085
+VITE_API_BASE_URL=/api
 ```
 
-未配置时默认使用 `http://localhost:8085`。
+未配置时默认使用同源请求。生产 Docker 会由 Nginx 将 `/api` 代理到 `info-serve:8085`；本地开发会由 Vite 代理到 `http://127.0.0.1:8085`。
 
 后台业务接口统一请求 `info-serve` 的 `/api/v1/*` 路径；旧 `/api/*` 路径只作为服务端兼容入口保留。
 

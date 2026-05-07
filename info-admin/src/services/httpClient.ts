@@ -1,11 +1,20 @@
 import { clearAdminSession, adminTokenStorage } from '@/stores/authStore'
 import { ApiError, type ApiResponse } from '@/types/api'
 
-const API_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || ''
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+
+function buildRequestUrl(path: string) {
+  const base = API_BASE_URL.replace(/\/$/, '')
+  if (!base) return path
+  if (base.endsWith('/api') && path.startsWith('/api/')) {
+    return `${base}${path.slice('/api'.length)}`
+  }
+  return `${base}${path}`
+}
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = adminTokenStorage.get()
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(buildRequestUrl(path), {
     ...init,
     headers: {
       'Content-Type': 'application/json',

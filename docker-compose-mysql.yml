@@ -1,4 +1,22 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: info-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-info-max}
+    ports:
+      - "127.0.0.1:13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./info_aggregation/sql/mysql_migration_max.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   info-aggregation:
     image: info-ai-info-aggregation:pro
     build:
@@ -14,8 +32,8 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
       DB_TYPE: ${DB_TYPE:-mysql}
-      DB_HOST: ${DB_HOST:-host.docker.internal}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: mysql
+      DB_PORT: 3306
       DB_USER: ${DB_USER:-root}
       DB_PASSWORD: ${DB_PASSWORD:-root1234}
       DB_NAME: ${DB_NAME:-info-max}
@@ -28,8 +46,9 @@ services:
       XHS_COOKIE: ${XHS_COOKIE:-}
     volumes:
       - aggregation_data:/app/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   info-serve:
     image: info-ai-info-serve:pro
@@ -42,15 +61,16 @@ services:
       - "8085:8085"
     environment:
       INFO_SERVE_HTTP_ADDR: :8085
-      INFO_SERVE_MYSQL_DSN: ${INFO_SERVE_MYSQL_DSN:-root:root1234@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local}
+      INFO_SERVE_MYSQL_DSN: ${INFO_SERVE_MYSQL_DSN:-root:root1234@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local}
       INFO_SERVE_SESSION_SECRET: ${INFO_SERVE_SESSION_SECRET:-change-me-in-production}
       INFO_AGGREGATION_BASE_URL: http://info-aggregation:8000
       INFO_ADMIN_EMAIL: ${INFO_ADMIN_EMAIL:-admin@info-daren.local}
       INFO_ADMIN_PASSWORD: ${INFO_ADMIN_PASSWORD:-Admin123456}
     depends_on:
-      - info-aggregation
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      mysql:
+        condition: service_healthy
+      info-aggregation:
+        condition: service_started
 
   info-mvp:
     image: info-ai-info-mvp:pro
@@ -81,4 +101,5 @@ services:
       - info-serve
 
 volumes:
+  mysql_data:
   aggregation_data:
