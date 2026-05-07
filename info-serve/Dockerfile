@@ -18,6 +18,6 @@ WORKDIR /app
 COPY --from=builder /app/info-serve .
 COPY --from=builder /app/create-admin .
 
-EXPOSE 8080
+EXPOSE 8085
 
 CMD ["./info-serve"]

@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "sql" / "mysql_schema_pro.sql"
+MAX_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "sql" / "mysql_migration_max.sql"
 
 
 def test_pro_mysql_schema_contains_core_tables_and_comments():
@@ -51,3 +52,31 @@ def test_pro_mysql_schema_uses_utf8mb4_and_innodb():
     assert "engine=innodb" in schema
     assert "default charset=utf8mb4" in schema
     assert "collate=utf8mb4_unicode_ci" in schema
+
+
+def test_max_mysql_migration_contains_initial_data_and_tasks():
+    migration = MAX_MIGRATION_PATH.read_text(encoding="utf-8")
+
+    assert "SOURCE info_aggregation/sql/mysql_schema_pro.sql;" in migration
+    assert "INSERT INTO `category`" in migration
+    assert "INSERT INTO `channel`" in migration
+    assert "INSERT INTO `crawl_task`" in migration
+    assert "admin@info-daren.local" in migration
+    assert "Admin123456" in migration
+    assert "ON DUPLICATE KEY UPDATE" in migration
+
+    for channel_code in [
+        "weibo",
+        "toutiao",
+        "xiaohongshu",
+        "zhihu",
+        "eastmoney",
+        "reuters",
+        "csdn",
+        "juejin",
+        "cnblogs",
+        "36kr",
+        "cctv_sports",
+        "sina_sports",
+    ]:
+        assert f"'{channel_code}'" in migration

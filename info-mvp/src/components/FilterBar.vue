@@ -43,11 +43,12 @@ function clearInput() {
 
 <style scoped>
 .filter-card {
-  background: var(--card-bg);
-  margin: 20rpx 24rpx 0;
+  background: rgba(255, 255, 255, 0.94);
+  margin: 16rpx 24rpx 0;
   padding: 24rpx;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
 .search-row {
@@ -58,10 +59,11 @@ function clearInput() {
 
 .search-box {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   height: 76rpx;
-  background: var(--bg-color);
+  background: #f8f3ee;
   border-radius: var(--radius-pill);
   padding: 0 24rpx;
   gap: 12rpx;
@@ -69,7 +71,7 @@ function clearInput() {
 }
 
 .search-box:focus-within {
-  box-shadow: 0 0 0 3rpx rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3rpx rgba(240, 90, 61, 0.14);
 }
 
 .search-icon,
@@ -91,10 +93,37 @@ function clearInput() {
 }
 
 .search-btn {
+  flex-shrink: 0;
   font-size: 30rpx;
   color: var(--brand-accent);
   font-weight: 500;
   padding: 0 8rpx;
+}
+
+@media (max-width: 700px) {
+  .filter-card {
+    width: 358px;
+    max-width: calc(100% - 32px);
+    margin: 12px 16px 0;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+
+  .search-row {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .search-box {
+    min-width: 0;
+  }
+
+  .search-btn {
+    width: 42px;
+    padding: 0;
+    text-align: right;
+    font-size: 14px;
+  }
 }
 
 /* #ifdef H5 */

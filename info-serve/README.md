@@ -35,7 +35,7 @@ internal/
 
 ```bash
 cd /Users/jeasonwang/IdeaProjects/info-ai/info-serve
-INFO_SERVE_HTTP_ADDR=:8080 go run ./cmd/server
+INFO_SERVE_HTTP_ADDR=:8085 go run ./cmd/server
 ```
 
 默认 MySQL DSN：

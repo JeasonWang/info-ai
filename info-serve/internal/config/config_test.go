@@ -10,8 +10,8 @@ func TestLoadConfigUsesDevelopmentDefaults(t *testing.T) {
 
 	cfg := Load()
 
-	if cfg.HTTPAddr != ":8080" {
-		t.Fatalf("HTTPAddr = %q, want :8080", cfg.HTTPAddr)
+	if cfg.HTTPAddr != ":8085" {
+		t.Fatalf("HTTPAddr = %q, want :8085", cfg.HTTPAddr)
 	}
 	if cfg.MySQLDSN != "root:root1234@tcp(localhost:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local" {
 		t.Fatalf("MySQLDSN = %q", cfg.MySQLDSN)

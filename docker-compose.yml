@@ -58,9 +58,9 @@ services:
     container_name: info-serve
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8085:8085"
     environment:
-      INFO_SERVE_HTTP_ADDR: :8080
+      INFO_SERVE_HTTP_ADDR: :8085
       INFO_SERVE_MYSQL_DSN: ${INFO_SERVE_MYSQL_DSN:-root:root1234@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local}
       INFO_SERVE_SESSION_SECRET: ${INFO_SERVE_SESSION_SECRET:-change-me-in-production}
       INFO_AGGREGATION_BASE_URL: http://info-aggregation:8000
@@ -78,7 +78,7 @@ services:
       context: ./info-max
       dockerfile: Dockerfile
       args:
-        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8080}
+        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8085}
     container_name: info-max
     restart: unless-stopped
     ports:
@@ -106,7 +106,7 @@ services:
       context: ./info-admin
       dockerfile: Dockerfile
       args:
-        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8080}
+        VITE_INFO_SERVE_BASE_URL: ${VITE_INFO_SERVE_BASE_URL:-http://127.0.0.1:8085}
     container_name: info-admin
     restart: unless-stopped
     ports:

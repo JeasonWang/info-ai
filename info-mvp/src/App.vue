@@ -24,37 +24,39 @@ onLaunch(() => {
 
 page {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  background-color: #f7f8fa;
-  color: #1d2129;
+  background-color: #f3ece1;
+  color: #1f2633;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   box-sizing: border-box;
 
   /* Brand */
-  --brand-primary: #2563eb;
-  --brand-accent: #2563eb;
-  --brand-accent-light: rgba(37, 99, 235, 0.08);
+  --brand-primary: #f05a3d;
+  --brand-accent: #f05a3d;
+  --brand-accent-light: rgba(240, 90, 61, 0.1);
+  --brand-soft: #fff2ea;
+  --brand-warm-bg: #f3ece1;
 
   /* Data highlights */
-  --heat-gradient-start: #f59e0b;
-  --heat-gradient-end: #ef4444;
-  --freshness-color: #10b981;
+  --heat-gradient-start: #f6a23a;
+  --heat-gradient-end: #f04f3a;
+  --freshness-color: #0f9f78;
 
   /* Surfaces */
-  --bg-color: #f7f8fa;
+  --bg-color: #f3ece1;
   --card-bg: #ffffff;
-  --surface-elevated: #ffffff;
+  --surface-elevated: #fffaf5;
 
   /* Text */
-  --text-primary: #1d2129;
-  --text-secondary: #4e5969;
-  --text-muted: #86909c;
+  --text-primary: #1f2633;
+  --text-secondary: #526070;
+  --text-muted: #8b7568;
   --text-inverse: #ffffff;
 
   /* Borders */
-  --border-color: #e5e6eb;
-  --divider: #f2f3f5;
+  --border-color: #eadfd5;
+  --divider: #f1e7dd;
 
   /* Radius */
   --radius-sm: 8rpx;
@@ -63,9 +65,9 @@ page {
   --radius-pill: 9999rpx;
 
   /* Shadows */
-  --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8rpx 32rpx rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 8rpx 24rpx rgba(106, 70, 43, 0.08);
+  --shadow-md: 0 12rpx 36rpx rgba(106, 70, 43, 0.1);
+  --shadow-lg: 0 16rpx 44rpx rgba(106, 70, 43, 0.14);
 
   /* Spacing */
   --space-xs: 8rpx;
@@ -83,11 +85,11 @@ page {
   --text-2xl: 44rpx;
 
   /* Category accent colors (cycled for strips) */
-  --cat-blue: #2563eb;
-  --cat-purple: #7c3aed;
-  --cat-teal: #0d9488;
-  --cat-orange: #ea580c;
-  --cat-rose: #e11d48;
+  --cat-blue: #f05a3d;
+  --cat-purple: #b85c38;
+  --cat-teal: #0f9f78;
+  --cat-orange: #f6a23a;
+  --cat-rose: #ef476f;
 
   /* Transitions */
   --transition-fast: 0.15s ease;

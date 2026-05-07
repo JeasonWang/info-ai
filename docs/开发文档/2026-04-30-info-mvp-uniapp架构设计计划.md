@@ -215,7 +215,7 @@ info-detail 和 event-detail 需要展示 HTML 内容。
 - [x] 配置 `pages.json` 路由
 - [x] 安装依赖：pinia、uni-ui
 - [x] 配置 `request.ts` 基座
-- [x] 配置 `vite.config.ts` 代理（开发时转发到本地 info-serve:8080）
+- [x] 配置 `vite.config.ts` 代理（开发时转发到本地 info-serve:8085）
 - [x] 验证：H5 编译通过 + 微信小程序编译通过
 
 ### Phase 1：首页 + 列表（2 天）✅
@@ -263,7 +263,7 @@ info-detail 和 event-detail 需要展示 HTML 内容。
 
 ```bash
 # .env（开发）
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=http://localhost:8085
 
 # .env.production（生产）
 VITE_API_BASE_URL=https://api.yourdomain.com

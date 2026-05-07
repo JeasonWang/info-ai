@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onLoad, onPullDownRefresh, onReachBottom, onPageScroll } from '@dcloudio/uni-app'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import EventList from '@/components/EventList.vue'
 import FilterPanel from '@/components/FilterPanel.vue'
 import FilterBar from '@/components/FilterBar.vue'
@@ -164,10 +164,16 @@ function onSearch(value: string) {
 
 function scrollToTop() {
   uni.pageScrollTo({ scrollTop: 0, duration: 300 })
+  // #ifdef H5
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+  getH5ScrollElements().forEach((el) => {
+    el.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+  // #endif
 }
 
 function updateBackToTop(scrollTop: number) {
-  showBackToTop.value = scrollTop > 360
+  showBackToTop.value = scrollTop > 180
 }
 
 function maybeLoadMoreByScroll(scrollTop: number, viewportHeight: number, scrollHeight: number) {
@@ -175,6 +181,60 @@ function maybeLoadMoreByScroll(scrollTop: number, viewportHeight: number, scroll
     void loadMore()
   }
 }
+
+// #ifdef H5
+function getH5ScrollElements() {
+  const selectors = [
+    'html',
+    'body',
+    '#app',
+    'uni-page',
+    'uni-page-wrapper',
+    'uni-page-body',
+    '.uni-page-wrapper',
+    '.uni-page-body',
+    '.home-page',
+  ]
+  const elements = selectors
+    .map((selector) => document.querySelector(selector))
+    .filter((el): el is HTMLElement => el instanceof HTMLElement)
+  const scrollingElement = document.scrollingElement
+  if (scrollingElement instanceof HTMLElement) {
+    elements.unshift(scrollingElement)
+  }
+  return [...new Set(elements)]
+}
+
+function getH5ScrollMetrics() {
+  const scrollingElement = document.scrollingElement || document.documentElement
+  const body = document.body
+  const elementMetrics = getH5ScrollElements().map((el) => ({
+    scrollTop: el.scrollTop || 0,
+    viewportHeight: el.clientHeight || window.innerHeight || 0,
+    scrollHeight: el.scrollHeight || 0,
+  }))
+  const scrollTop = Math.max(
+    window.scrollY || 0,
+    scrollingElement.scrollTop || 0,
+    document.documentElement.scrollTop || 0,
+    body?.scrollTop || 0,
+    ...elementMetrics.map((item) => item.scrollTop),
+  )
+  const viewportHeight = Math.max(
+    window.innerHeight || 0,
+    scrollingElement.clientHeight || 0,
+    document.documentElement.clientHeight || 0,
+    ...elementMetrics.map((item) => item.viewportHeight),
+  )
+  const scrollHeight = Math.max(
+    scrollingElement.scrollHeight || 0,
+    document.documentElement.scrollHeight || 0,
+    body?.scrollHeight || 0,
+    ...elementMetrics.map((item) => item.scrollHeight),
+  )
+  return { scrollTop, viewportHeight, scrollHeight }
+}
+// #endif
 
 async function handleRetry() {
   await refresh()
@@ -217,26 +277,54 @@ onPageScroll((e) => {
 
 // #ifdef H5
 let nativeScrollFrame = 0
+let scrollCheckTimer = 0
+let scrollTargets: EventTarget[] = []
+
+function bindH5ScrollTargets() {
+  const nextTargets: EventTarget[] = [window, document, ...getH5ScrollElements()]
+  nextTargets.forEach((target) => {
+    if (!scrollTargets.includes(target)) {
+      target.addEventListener('scroll', handleNativeScroll, { passive: true, capture: true })
+    }
+  })
+  scrollTargets
+    .filter((target) => !nextTargets.includes(target))
+    .forEach((target) => {
+      target.removeEventListener('scroll', handleNativeScroll, { capture: true })
+    })
+  scrollTargets = nextTargets
+}
+
+function syncH5ScrollState() {
+  bindH5ScrollTargets()
+  const { scrollTop, viewportHeight, scrollHeight } = getH5ScrollMetrics()
+  updateBackToTop(scrollTop)
+  maybeLoadMoreByScroll(scrollTop, viewportHeight, scrollHeight)
+}
 
 function handleNativeScroll() {
   if (nativeScrollFrame) return
   nativeScrollFrame = window.requestAnimationFrame(() => {
     nativeScrollFrame = 0
-    const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
-    const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
-    updateBackToTop(scrollTop)
-    maybeLoadMoreByScroll(scrollTop, viewportHeight, scrollHeight)
+    syncH5ScrollState()
   })
 }
 
-onMounted(() => {
-  window.addEventListener('scroll', handleNativeScroll, { passive: true })
-  handleNativeScroll()
+onMounted(async () => {
+  await nextTick()
+  bindH5ScrollTargets()
+  scrollCheckTimer = window.setInterval(syncH5ScrollState, 300)
+  syncH5ScrollState()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleNativeScroll)
+  scrollTargets.forEach((target) => {
+    target.removeEventListener('scroll', handleNativeScroll, { capture: true })
+  })
+  scrollTargets = []
+  if (scrollCheckTimer) {
+    window.clearInterval(scrollCheckTimer)
+  }
   if (nativeScrollFrame) {
     window.cancelAnimationFrame(nativeScrollFrame)
   }
@@ -369,7 +457,9 @@ function onShareTimeline() {
   max-width: 100vw;
   box-sizing: border-box;
   padding-bottom: 40rpx;
-  background: var(--bg-color);
+  background:
+    linear-gradient(180deg, rgba(255, 239, 219, 0.72) 0, rgba(243, 236, 225, 0) 280rpx),
+    var(--bg-color);
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -389,7 +479,7 @@ function onShareTimeline() {
   align-items: center;
   gap: 16rpx;
   padding: 24rpx;
-  background: var(--card-bg);
+  background: rgba(255, 250, 245, 0.92);
   border-bottom: 1rpx solid var(--divider);
   position: sticky;
   top: 0;
@@ -421,7 +511,7 @@ function onShareTimeline() {
   height: 32rpx;
   padding: 0 10rpx;
   color: #fff;
-  background: var(--brand-accent);
+  background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
   border-radius: var(--radius-pill);
   font-size: 22rpx;
   font-weight: 800;
@@ -455,7 +545,7 @@ function onShareTimeline() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--bg-color);
+  background: var(--brand-soft);
   transition: background var(--transition-fast);
 }
 
@@ -471,7 +561,7 @@ function onShareTimeline() {
 
 .login-btn {
   padding: 14rpx 32rpx;
-  background: var(--brand-accent);
+  background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
   color: #fff;
   border-radius: var(--radius-pill);
   font-size: 28rpx;
@@ -481,7 +571,7 @@ function onShareTimeline() {
 
 .login-btn:active {
   transform: scale(0.95);
-  background: rgba(37, 99, 235, 0.85);
+  background: #dd482f;
 }
 
 .rail-title,
@@ -510,7 +600,7 @@ function onShareTimeline() {
 }
 
 .rail-card {
-  background: var(--card-bg);
+  background: rgba(255, 255, 255, 0.94);
   border: 1rpx solid var(--divider);
   border-radius: var(--radius-lg);
   padding: 26rpx;
@@ -542,7 +632,7 @@ function onShareTimeline() {
 
 .lead-item {
   padding: 18rpx;
-  background: var(--bg-color);
+  background: var(--surface-elevated);
   border-radius: var(--radius-md);
 }
 
@@ -600,7 +690,7 @@ function onShareTimeline() {
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-  background: var(--card-bg);
+  background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
   box-shadow: var(--shadow-lg);
   display: flex;
   align-items: center;
@@ -617,10 +707,15 @@ function onShareTimeline() {
 .back-to-top-icon {
   font-family: 'uniicons';
   font-size: 36rpx;
-  color: var(--text-secondary);
+  color: #fff;
 }
 
 @media (max-width: 700px) {
+  .home-shell {
+    max-width: 390px;
+    margin: 0;
+  }
+
   .nav-bar {
     padding: 12px 16px;
   }
@@ -638,7 +733,24 @@ function onShareTimeline() {
   }
 
   .filter-wrap {
-    max-width: 358px;
+    width: 358px;
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
+    margin-top: 14px;
+    margin-bottom: 14px;
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .back-to-top {
+    right: 20px;
+    bottom: 32px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .back-to-top-icon {
+    font-size: 22px;
   }
 }
 

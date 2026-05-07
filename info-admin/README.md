@@ -27,10 +27,10 @@ npm run dev
 ## 环境变量
 
 ```text
-VITE_INFO_SERVE_BASE_URL=http://localhost:8080
+VITE_INFO_SERVE_BASE_URL=http://localhost:8085
 ```
 
-未配置时默认使用 `http://localhost:8080`。
+未配置时默认使用 `http://localhost:8085`。
 
 后台业务接口统一请求 `info-serve` 的 `/api/v1/*` 路径；旧 `/api/*` 路径只作为服务端兼容入口保留。
 

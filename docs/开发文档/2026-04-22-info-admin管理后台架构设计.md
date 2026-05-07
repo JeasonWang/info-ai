@@ -174,7 +174,7 @@ info-admin/
 环境变量：
 
 ```text
-VITE_INFO_SERVE_BASE_URL=http://localhost:8080
+VITE_INFO_SERVE_BASE_URL=http://localhost:8085
 ```
 
 统一 HTTP 客户端负责：

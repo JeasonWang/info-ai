@@ -73,8 +73,8 @@ WEIBO_COOKIE=
 XHS_COOKIE=
 
 # 浏览器访问 info-serve 的公开地址。
-# 本机部署可用 http://127.0.0.1:8080，服务器部署请改成真实域名或公网 IP。
-VITE_INFO_SERVE_BASE_URL=http://127.0.0.1:8080
+# 本机部署可用 http://127.0.0.1:8085，服务器部署请改成真实域名或公网 IP。
+VITE_INFO_SERVE_BASE_URL=http://127.0.0.1:8085
 EOF
 
     echo "已创建 .env 文件并生成随机数据库密码、会话密钥和管理员初始密码。请妥善保存 .env。"
@@ -174,5 +174,5 @@ echo "用户端:   http://localhost"
 echo "管理后台: http://localhost:8081"
 echo "h5后台: http://localhost:8082"
 echo "采集 API: http://localhost:18000"
-echo "业务 API: http://localhost:8080"
+echo "业务 API: http://localhost:8085"
 echo "========================================"

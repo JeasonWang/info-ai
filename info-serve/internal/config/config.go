@@ -13,7 +13,7 @@ type Config struct {
 // Load 从环境变量读取配置，并提供本地开发默认值。
 func Load() Config {
 	return Config{
-		HTTPAddr:           readEnv("INFO_SERVE_HTTP_ADDR", ":8080"),
+		HTTPAddr:           readEnv("INFO_SERVE_HTTP_ADDR", ":8085"),
 		MySQLDSN:           readEnv("INFO_SERVE_MYSQL_DSN", "root:root1234@tcp(localhost:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local"),
 		SessionSecret:      readEnv("INFO_SERVE_SESSION_SECRET", "info-serve-development-session-secret"),
 		AggregationBaseURL: readEnv("INFO_AGGREGATION_BASE_URL", "http://localhost:8000"),

@@ -17,7 +17,7 @@ import type {
 } from '@/types'
 import type { HomeFilterMemory } from '@/services/homeFilterMemory'
 
-const INFO_SERVE_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8080'
+const INFO_SERVE_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8085'
 const INFO_SERVE_API_PREFIX = '/api/v1'
 
 function buildQuery(params: Record<string, string | number | undefined | null>) {

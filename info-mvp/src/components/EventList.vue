@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import type { EventListItem } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   events: EventListItem[]
   loading: boolean
   hasMore: boolean
@@ -11,6 +12,7 @@ const emit = defineEmits<{
   (e: 'load-more'): void
   (e: 'retry'): void
 }>()
+const loadMoreTrigger = ref<HTMLElement | null>(null)
 
 function goDetail(item: EventListItem) {
   uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${item.id}` })
@@ -30,6 +32,57 @@ function formatHeat(score: number): string {
   if (rounded >= 1000) return (rounded / 1000).toFixed(1) + 'k'
   return String(rounded)
 }
+
+function formatEventTime(value: string | null): string {
+  if (!value) return ''
+  const normalized = value.replace(' ', 'T')
+  const date = new Date(normalized)
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 16)
+  }
+  const now = new Date()
+  const sameYear = date.getFullYear() === now.getFullYear()
+  const sameDay = sameYear && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
+  const pad = (num: number) => String(num).padStart(2, '0')
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  if (sameDay) return `今天 ${time}`
+  if (sameYear) return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+// #ifdef H5
+let loadObserver: IntersectionObserver | null = null
+
+function observeLoadTrigger() {
+  if (loadObserver && loadMoreTrigger.value) {
+    loadObserver.observe(loadMoreTrigger.value)
+  }
+}
+
+onMounted(() => {
+  loadObserver = new IntersectionObserver(
+    (entries) => {
+      const isVisible = entries.some((entry) => entry.isIntersecting)
+      if (isVisible && props.hasMore && !props.loading && props.events.length > 0) {
+        emit('load-more')
+      }
+    },
+    { root: null, rootMargin: '240px 0px', threshold: 0 },
+  )
+  if (loadMoreTrigger.value) {
+    observeLoadTrigger()
+  }
+})
+
+watch(loadMoreTrigger, () => {
+  observeLoadTrigger()
+})
+
+onUnmounted(() => {
+  loadObserver?.disconnect()
+  loadObserver = null
+})
+// #endif
 </script>
 
 <template>
@@ -70,6 +123,9 @@ function formatHeat(score: number): string {
             <text v-if="item.source_badges.length > 3" class="badge-more">
               +{{ item.source_badges.length - 3 }}
             </text>
+            <text v-if="item.last_updated_at" class="event-time">
+              {{ formatEventTime(item.last_updated_at) }}
+            </text>
           </view>
 
           <view class="stats">
@@ -90,10 +146,11 @@ function formatHeat(score: number): string {
 
     <view
       v-else-if="hasMore && events.length > 0"
+      ref="loadMoreTrigger"
       class="load-more load-more-action"
       @click.stop="emit('load-more')"
     >
-      <text>加载更多</text>
+      <text>继续加载中...</text>
     </view>
 
     <view
@@ -114,17 +171,19 @@ function formatHeat(score: number): string {
 <style scoped>
 .event-list {
   padding: 0 24rpx;
+  box-sizing: border-box;
 }
 
 .card {
   display: flex;
-  background: var(--card-bg);
+  background: rgba(255, 255, 255, 0.96);
   border-radius: var(--radius-lg);
   margin-bottom: 20rpx;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
   position: relative;
+  box-sizing: border-box;
 }
 
 .card::before {
@@ -134,7 +193,7 @@ function formatHeat(score: number): string {
   left: 0;
   right: 0;
   height: 2rpx;
-  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.08), transparent);
+  background: linear-gradient(90deg, transparent, rgba(240, 90, 61, 0.1), transparent);
   pointer-events: none;
 }
 
@@ -244,6 +303,7 @@ function formatHeat(score: number): string {
   flex-wrap: wrap;
   gap: 8rpx;
   align-items: center;
+  min-width: 0;
 }
 
 .badge {
@@ -262,6 +322,12 @@ function formatHeat(score: number): string {
   border-radius: var(--radius-sm);
 }
 
+.event-time {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .stats {
   display: flex;
   align-items: center;
@@ -275,8 +341,8 @@ function formatHeat(score: number): string {
   gap: 4rpx;
   padding: 4rpx 12rpx;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.12));
-  box-shadow: 0 0 8rpx rgba(239, 68, 68, 0.08);
+  background: linear-gradient(135deg, rgba(246, 162, 58, 0.14), rgba(240, 79, 58, 0.14));
+  box-shadow: 0 0 8rpx rgba(240, 79, 58, 0.08);
 }
 
 .heat-icon {
@@ -362,6 +428,20 @@ function formatHeat(score: number): string {
   color: var(--text-muted);
 }
 
+@media (max-width: 700px) {
+  .event-list {
+    width: 358px;
+    max-width: calc(100% - 32px);
+    padding: 0;
+    margin: 0 16px;
+    box-sizing: border-box;
+  }
+
+  .card {
+    width: 100%;
+  }
+}
+
 /* #ifdef H5 */
 @media (min-width: 960px) {
   .event-list {
@@ -389,6 +469,7 @@ function formatHeat(score: number): string {
 
   .badge,
   .badge-more,
+  .event-time,
   .source-count {
     font-size: 12px;
   }

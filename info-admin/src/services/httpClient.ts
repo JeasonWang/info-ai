@@ -1,7 +1,7 @@
 import { clearAdminSession, adminTokenStorage } from '@/stores/authStore'
 import { ApiError, type ApiResponse } from '@/types/api'
 
-const API_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_INFO_SERVE_BASE_URL || 'http://localhost:8085'
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = adminTokenStorage.get()

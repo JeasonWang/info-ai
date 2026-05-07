@@ -25,7 +25,7 @@
 
 ## 本地启动
 
-1. 启动 Go API 服务 `info-serve`，默认地址为 `http://localhost:8080`
+1. 启动 Go API 服务 `info-serve`，默认地址为 `http://localhost:8085`
 2. 在当前目录安装依赖并启动前端
 
 ```bash
@@ -36,7 +36,7 @@ npm run dev
 如需自定义后端地址，请在 `.env` 中设置：
 
 ```bash
-VITE_INFO_SERVE_BASE_URL=http://localhost:8080
+VITE_INFO_SERVE_BASE_URL=http://localhost:8085
 ```
 
 ## 测试与构建

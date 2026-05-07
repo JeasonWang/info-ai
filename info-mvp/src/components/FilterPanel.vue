@@ -141,6 +141,7 @@ function getActiveSortLabel(): string {
 <style scoped>
 .filter-panel {
   padding: 0 24rpx;
+  box-sizing: border-box;
 }
 
 /* 折叠态 */
@@ -148,6 +149,7 @@ function getActiveSortLabel(): string {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
 }
 
 .active-label {
@@ -155,8 +157,23 @@ function getActiveSortLabel(): string {
   align-items: center;
   gap: 12rpx;
   font-size: 24rpx;
-  color: #595959;
+  color: var(--text-secondary);
   font-weight: 500;
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.active-label text {
+  flex-shrink: 0;
+}
+
+.active-label text:not(.divider) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .active-label .divider {
@@ -172,10 +189,12 @@ function getActiveSortLabel(): string {
   background: var(--brand-accent-light);
   border-radius: var(--radius-pill);
   transition: background var(--transition-fast);
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .filter-btn:active {
-  background: rgba(37, 99, 235, 0.15);
+  background: rgba(240, 90, 61, 0.16);
 }
 
 .filter-icon {
@@ -192,7 +211,7 @@ function getActiveSortLabel(): string {
 
 /* 展开态 */
 .expanded-card {
-  background: var(--card-bg);
+  background: rgba(255, 255, 255, 0.96);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: 24rpx;
@@ -230,7 +249,7 @@ function getActiveSortLabel(): string {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--bg-color);
+  background: var(--brand-soft);
 }
 
 .close-btn:active {
@@ -271,7 +290,7 @@ function getActiveSortLabel(): string {
   padding: 14rpx 28rpx;
   font-size: 28rpx;
   color: var(--text-secondary);
-  background: var(--bg-color);
+  background: #f8f3ee;
   border-radius: var(--radius-pill);
   transition: all var(--transition-fast);
 }
@@ -282,9 +301,9 @@ function getActiveSortLabel(): string {
 
 .option-pill.active {
   color: #fff;
-  background: var(--brand-accent);
+  background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
   font-weight: 500;
-  box-shadow: 0 4rpx 12rpx rgba(37, 99, 235, 0.2);
+  box-shadow: 0 4rpx 12rpx rgba(240, 90, 61, 0.22);
 }
 
 .pill-icon {
@@ -300,6 +319,7 @@ function getActiveSortLabel(): string {
 
   .collapsed-bar {
     justify-content: space-between;
+    width: 100%;
   }
 
   .active-label {
@@ -337,4 +357,36 @@ function getActiveSortLabel(): string {
   }
 }
 /* #endif */
+
+@media (max-width: 700px) {
+  .filter-panel {
+    width: 358px;
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  .collapsed-bar {
+    width: 100%;
+  }
+
+  .active-label {
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .filter-btn {
+    padding: 8px 16px;
+  }
+
+  .filter-label {
+    font-size: 14px;
+  }
+
+  .expanded-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
 </style>

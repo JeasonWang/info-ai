@@ -45,15 +45,15 @@ describe('api service routing', () => {
     await getEventById(7)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/event-categories',
+      'http://localhost:8085/api/v1/event-categories',
       expect.any(Object),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/events?category_code=tech&sort=latest&page=1&page_size=10',
+      'http://localhost:8085/api/v1/events?category_code=tech&sort=latest&page=1&page_size=10',
       expect.any(Object),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/events/7',
+      'http://localhost:8085/api/v1/events/7',
       expect.any(Object),
     )
   })
@@ -114,14 +114,14 @@ describe('api service routing', () => {
     await getInfoById(9)
     await getStats()
 
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/categories', expect.any(Object))
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/channels?category_id=1', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8085/api/v1/categories', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8085/api/v1/channels?category_id=1', expect.any(Object))
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/infos?category_id=1&channel_id=2&keyword=OpenAI&page=1&page_size=10',
+      'http://localhost:8085/api/v1/infos?category_id=1&channel_id=2&keyword=OpenAI&page=1&page_size=10',
       expect.any(Object),
     )
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/infos/9', expect.any(Object))
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/stats', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8085/api/v1/infos/9', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8085/api/v1/stats', expect.any(Object))
   })
 
   it('uses /api/v1 auth APIs for user sessions', async () => {
@@ -182,54 +182,54 @@ describe('api service routing', () => {
     await logoutUser('token')
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/auth/register',
+      'http://localhost:8085/api/v1/auth/register',
       expect.objectContaining({ method: 'POST' }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/auth/login',
+      'http://localhost:8085/api/v1/auth/login',
       expect.objectContaining({ method: 'POST' }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me',
+      'http://localhost:8085/api/v1/me',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/favorites',
+      'http://localhost:8085/api/v1/me/favorites',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/favorite-events',
+      'http://localhost:8085/api/v1/me/favorite-events',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/favorites',
+      'http://localhost:8085/api/v1/me/favorites',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ event_id: 101 }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/favorites/101',
+      'http://localhost:8085/api/v1/me/favorites/101',
       expect.objectContaining({ method: 'DELETE' }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/preferences/home-filter',
+      'http://localhost:8085/api/v1/me/preferences/home-filter',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/preferences/home-filter',
+      'http://localhost:8085/api/v1/me/preferences/home-filter',
       expect.objectContaining({
         method: 'PUT',
         body: JSON.stringify({ category_code: 'sports', channel_code: 'all', sort: 'latest', keyword: 'NBA' }),
       }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/read-history',
+      'http://localhost:8085/api/v1/me/read-history',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/me/read-history',
+      'http://localhost:8085/api/v1/me/read-history',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ event_id: 101 }) }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/auth/logout',
+      'http://localhost:8085/api/v1/auth/logout',
       expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
   })

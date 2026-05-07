@@ -2,7 +2,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-ARG VITE_INFO_SERVE_BASE_URL=http://127.0.0.1:8080
+ARG VITE_INFO_SERVE_BASE_URL=http://127.0.0.1:8085
 ENV VITE_INFO_SERVE_BASE_URL=${VITE_INFO_SERVE_BASE_URL}
 
 COPY package.json package-lock.json* ./
