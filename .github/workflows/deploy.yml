@@ -34,7 +34,7 @@ jobs:
           docker save \
             info-ai-info-aggregation:pro \
             info-ai-info-serve:pro \
-            info-ai-info-max:pro \
+            info-ai-info-mvp:pro \
             info-ai-info-admin:pro \
             | gzip > images/info-ai-images.tar.gz
 
