@@ -156,8 +156,8 @@ check_services() {
     sleep 8
 
     local failed=0
-    local containers=("info-mysql" "info-aggregation" "info-serve" "info-mvp" "info-admin")
-    local compose_services=("mysql" "info-aggregation" "info-serve" "info-mvp" "info-admin")
+    local containers=("info-aggregation" "info-serve" "info-mvp" "info-admin")
+    local compose_services=("info-aggregation" "info-serve" "info-mvp" "info-admin")
     for index in "${!containers[@]}"; do
         local svc="${containers[$index]}"
         local compose_svc="${compose_services[$index]}"
