@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from database import DetailJob, Info
+from services.acquisition_quality import build_acquisition_quality_profile
 
 
 OPEN_DETAIL_JOB_STATUSES = {"pending", "running"}
@@ -8,22 +9,16 @@ REUSABLE_DETAIL_JOB_STATUSES = {"failed", "cancelled"}
 
 
 def _needs_detail_job(info: Info) -> bool:
-    status = (info.detail_fetch_status or "").strip()
-    if status in {"pending", "failed", "list_only"}:
-        return True
-    if status == "partial" and (info.detail_score or 0) < 60:
-        return True
-    return (info.detail_score or 0) < 60 or (info.detail_content_length or len(info.content or "")) < 30
+    return build_acquisition_quality_profile(info).should_enqueue_detail_job
 
 
 def _failure_reason(info: Info) -> str:
     if info.detail_fetch_error:
         return info.detail_fetch_error[:255]
-    if (info.detail_score or 0) < 60:
-        return "low_detail_score"
-    if (info.detail_content_length or len(info.content or "")) < 30:
-        return "short_detail_content"
-    return "detail_incomplete"
+    profile = build_acquisition_quality_profile(info)
+    if profile.risk_reasons:
+        return profile.risk_reasons[0][:255]
+    return profile.recommended_action[:255]
 
 
 def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:

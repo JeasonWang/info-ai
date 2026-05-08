@@ -103,7 +103,7 @@ export function getStats() {
 }
 
 export function registerUser(email: string, password: string) {
-  return post<PublicUser>('/auth/register', { email, password }, true)
+  return post<LoginResult>('/auth/register', { email, password }, true)
 }
 
 export function loginUser(email: string, password: string) {

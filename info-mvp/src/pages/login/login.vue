@@ -31,8 +31,8 @@ function validatePassword(value: string): boolean {
     passwordError.value = '请输入密码'
     return false
   }
-  if (value.length < 6) {
-    passwordError.value = '密码至少6位'
+  if (value.length < 8) {
+    passwordError.value = '密码至少8位'
     return false
   }
   return true
@@ -110,7 +110,7 @@ function toggleMode() {
             class="input"
             :class="{ 'input--error': passwordError }"
             type="password"
-            placeholder="密码（至少6位）"
+            placeholder="密码（至少8位）"
             @blur="validatePassword(password)"
           />
         </view>

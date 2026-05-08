@@ -83,11 +83,15 @@ type SourceView struct {
 }
 
 type RepresentativeSource struct {
-	InfoID      int64  `json:"info_id"`
-	Title       string `json:"title"`
-	ChannelName string `json:"channel_name"`
-	SourceURL   string `json:"source_url"`
-	EventTime   string `json:"event_time"`
+	InfoID              int64  `json:"info_id"`
+	Title               string `json:"title"`
+	ChannelName         string `json:"channel_name"`
+	SourceURL           string `json:"source_url"`
+	EventTime           string `json:"event_time"`
+	Content             string `json:"content"`
+	DetailFetchStatus   string `json:"detail_fetch_status"`
+	DetailScore         int    `json:"detail_score"`
+	DetailContentLength int    `json:"detail_content_length"`
 }
 
 type TechTopic struct {

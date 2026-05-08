@@ -281,7 +281,7 @@ LIMIT 6`,
 		if seen[channelName] {
 			continue
 		}
-		summary := compactText(content, 120)
+		summary := compactText(content, 240)
 		if summary == "" || redundantWithSummaries(summary, summaries) {
 			continue
 		}
@@ -297,12 +297,17 @@ LIMIT 6`,
 func (s *MySQLStore) representativeSources(ctx context.Context, eventID int64) ([]events.RepresentativeSource, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT i.id, i.title, ch.name, i.source_url, COALESCE(DATE_FORMAT(i.event_time, '%Y-%m-%d %H:%i:%s'), '')
+		`SELECT i.id, i.title, ch.name, i.source_url, COALESCE(DATE_FORMAT(i.event_time, '%Y-%m-%d %H:%i:%s'), ''),
+		       COALESCE(i.content, ''), COALESCE(i.detail_fetch_status, ''), i.detail_score, i.detail_content_length
 FROM event_item_link AS link
 JOIN info AS i ON i.id = link.item_id
 JOIN channel AS ch ON ch.id = i.channel_id
 WHERE link.event_id = ?
-ORDER BY link.weight DESC
+ORDER BY
+  CASE WHEN i.detail_fetch_status = 'complete' THEN 0 WHEN i.detail_fetch_status = 'partial' THEN 1 ELSE 2 END ASC,
+  i.detail_score DESC,
+  i.detail_content_length DESC,
+  link.weight DESC
 LIMIT 6`,
 		eventID,
 	)
@@ -313,9 +318,21 @@ LIMIT 6`,
 	result := []events.RepresentativeSource{}
 	for rows.Next() {
 		var item events.RepresentativeSource
-		if err := rows.Scan(&item.InfoID, &item.Title, &item.ChannelName, &item.SourceURL, &item.EventTime); err != nil {
+		var content string
+		if err := rows.Scan(
+			&item.InfoID,
+			&item.Title,
+			&item.ChannelName,
+			&item.SourceURL,
+			&item.EventTime,
+			&content,
+			&item.DetailFetchStatus,
+			&item.DetailScore,
+			&item.DetailContentLength,
+		); err != nil {
 			return nil, err
 		}
+		item.Content = compactText(content, 6000)
 		result = append(result, item)
 	}
 	return result, rows.Err()
@@ -412,7 +429,7 @@ func compactText(value string, maxRuneCount int) string {
 	if len(runes) <= maxRuneCount {
 		return cleaned
 	}
-	return string(runes[:maxRuneCount])
+	return strings.TrimSpace(string(runes[:maxRuneCount])) + "..."
 }
 
 func redundantWithSummaries(value string, summaries map[string]string) bool {

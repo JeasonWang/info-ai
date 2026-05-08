@@ -5,6 +5,7 @@ import hashlib
 from sqlalchemy import inspect
 
 from database import Event, EventItemLink, EventSummarySnapshot, EventTimelineEntry, Info
+from services.acquisition_quality import build_acquisition_quality_profile
 
 
 TECH_TOPIC_LABELS = {
@@ -92,7 +93,7 @@ def _build_one_line(items: list[Info]) -> str:
     topic_phrase = f"{entity} 的{topic_label}" if topic_label else f"{entity} 相关"
 
     if source_count <= 1:
-        lead_content = _normalize_summary_text(items[0].content[:120])
+        lead_content = _clip_summary_text(items[0].content, 120)
         title = _normalize_summary_text(items[0].title)
         if lead_content:
             if title and lead_content.startswith(title):
@@ -107,7 +108,7 @@ def _build_one_line(items: list[Info]) -> str:
 
 def _build_what_happened(items: list[Info]) -> str:
     lead_item = items[0]
-    lead_content = _normalize_summary_text(lead_item.content[:180])
+    lead_content = _clip_summary_text(lead_item.content, 360)
     top_keywords = _collect_top_values(items, "tech_keywords", limit=2)
     if lead_content and top_keywords:
         return f"{lead_content} 当前讨论主要围绕 {'、'.join(top_keywords)} 展开。"
@@ -135,11 +136,23 @@ def _normalize_summary_text(text: str) -> str:
     return " ".join((text or "").split()).strip()
 
 
+def _clip_summary_text(text: str, max_length: int) -> str:
+    normalized = _normalize_summary_text(text)
+    if len(normalized) <= max_length:
+        return normalized
+    clipped = normalized[:max_length]
+    for delimiter in ("。", "！", "？", ".", "!", "?"):
+        index = clipped.rfind(delimiter)
+        if index >= max(40, int(max_length * 0.45)):
+            return clipped[: index + 1].strip()
+    return clipped.rstrip("，、；;：: ") + "..."
+
+
 def _build_latest_update(items: list[Info]) -> str:
     latest_item = items[-1]
     lead_item = items[0]
-    latest_content = _normalize_summary_text(latest_item.content[:180])
-    lead_content = _normalize_summary_text(lead_item.content[:180])
+    latest_content = _clip_summary_text(latest_item.content, 260)
+    lead_content = _clip_summary_text(lead_item.content, 260)
     latest_keywords = _split_csv(latest_item.tech_keywords)
 
     # 如果事件首条和最新一条内容几乎一致，说明还没有提炼出真正的增量进展，
@@ -158,6 +171,61 @@ def _build_latest_update(items: list[Info]) -> str:
         return f"{latest_content} 当前新增讨论重点集中在 {'、'.join(latest_keywords[:2])}。"
 
     return latest_content
+
+
+def _build_heat_reason(items: list[Info]) -> str:
+    source_count = len({item.channel_id for item in items})
+    topic_label = _collect_top_topic(items)
+    top_entities = _collect_top_values(items, "tech_entities", limit=2)
+    top_keywords = _collect_top_values(items, "tech_keywords", limit=2)
+
+    reason_parts: list[str] = []
+    if source_count > 1:
+        reason_parts.append(f"已出现 {source_count} 个来源跟进")
+    if topic_label:
+        reason_parts.append(f"属于{topic_label}类热点")
+    if top_entities:
+        reason_parts.append(f"核心实体集中在 {'、'.join(top_entities)}")
+    if top_keywords:
+        reason_parts.append(f"讨论关键词包括 {'、'.join(top_keywords)}")
+
+    if reason_parts:
+        return "；".join(reason_parts) + "，因此具备继续观察的热点价值。"
+    return "当前热度主要来自最新来源更新，仍需要更多来源交叉验证。"
+
+
+def _build_risk_notice(items: list[Info]) -> str:
+    profiles = [build_acquisition_quality_profile(item) for item in items]
+    weak_count = sum(1 for profile in profiles if profile.needs_attention)
+    list_only_count = sum(1 for profile in profiles if profile.status == "list_only")
+    anti_crawl_count = sum(1 for profile in profiles if "anti_crawl_or_shell_page" in profile.risk_reasons)
+    source_count = len({item.channel_id for item in items})
+
+    risks: list[str] = []
+    if weak_count:
+        risks.append(f"{weak_count} 条来源详情质量偏弱")
+    if list_only_count:
+        risks.append(f"{list_only_count} 条仍停留在列表摘要")
+    if anti_crawl_count:
+        risks.append(f"{anti_crawl_count} 条疑似受登录或反爬影响")
+    if source_count <= 1:
+        risks.append("目前只有单一来源")
+
+    if not risks:
+        return "当前来源完整度和交叉验证情况较好，暂未发现明显采集风险。"
+    return "；".join(risks) + "，分析结论需要随着后续补偿和新增来源持续校准。"
+
+
+def _build_source_compare(items: list[Info]) -> str:
+    channel_names = []
+    for item in items:
+        if item.channel and item.channel.name not in channel_names:
+            channel_names.append(item.channel.name)
+    if len(channel_names) >= 2:
+        return f"当前事件覆盖 {'、'.join(channel_names[:4])} 等来源，可用于观察不同渠道的叙事差异。"
+    if channel_names:
+        return f"当前主要来自 {channel_names[0]}，还需要更多渠道补充交叉视角。"
+    return "当前来源渠道信息不足，暂时无法形成可靠的来源对比。"
 
 
 def _load_existing_events(session) -> dict[str, Event]:
@@ -243,6 +311,24 @@ def rebuild_events(session, limit: int = 200):
                     content=_build_latest_update(group),
                     version=1,
                 ),
+                EventSummarySnapshot(
+                    event_id=event.id,
+                    summary_type="heat_reason",
+                    content=_build_heat_reason(group),
+                    version=1,
+                ),
+                EventSummarySnapshot(
+                    event_id=event.id,
+                    summary_type="risk_notice",
+                    content=_build_risk_notice(group),
+                    version=1,
+                ),
+                EventSummarySnapshot(
+                    event_id=event.id,
+                    summary_type="source_compare",
+                    content=_build_source_compare(group),
+                    version=1,
+                ),
             ]
         )
 
@@ -260,7 +346,7 @@ def rebuild_events(session, limit: int = 200):
                 EventTimelineEntry(
                     event_id=event.id,
                     occurred_at=item.event_time or item.created_at,
-                    summary=item.content[:80],
+                    summary=_clip_summary_text(item.content, 120),
                     source_item_id=item.id,
                     confidence=0.8,
                     display_order=index,

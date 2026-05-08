@@ -52,6 +52,26 @@ def test_clean_info_list_filters_title_only_low_quality_items():
     assert cleaned == []
 
 
+def test_clean_info_list_preserves_long_article_content():
+    body = "Agent 多层意图识别需要把简单请求快速分流，把复杂请求交给大模型处理。" * 80
+
+    cleaned = clean_info_list(
+        [
+            {
+                "source_id": "long-article-a",
+                "title": "agent设计系统-大模型意图识别",
+                "content": body,
+                "source_url": "https://example.com/article",
+                "event_time": datetime(2026, 5, 8, 10, 0, 0),
+            }
+        ]
+    )
+
+    assert len(cleaned) == 1
+    assert cleaned[0]["content"] == body
+    assert len(cleaned[0]["content"]) > 500
+
+
 def test_save_crawled_data_skips_existing_near_duplicate_content(session):
     category = Category(name="科技", code="tech", description="科技事件")
     session.add(category)

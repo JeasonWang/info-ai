@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
+from config import CRAWLER_MAX_CONTENT_LENGTH
 from services.data_quality import content_fingerprint, is_low_quality_list_item
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def clean_title(title: str) -> str:
 
 def clean_content(content: str) -> str:
     """
-    清洗内容：去除HTML标签、多余空白，截断至500字
+    清洗内容：去除HTML标签、多余空白，仅限制异常超长内容
     参数:
         content: 原始内容
     返回:
@@ -41,7 +42,7 @@ def clean_content(content: str) -> str:
     content = re.sub(r"<[^>]+>", "", content)
     content = content.strip()
     content = re.sub(r"\s+", " ", content)
-    return content[:500]
+    return content[:CRAWLER_MAX_CONTENT_LENGTH]
 
 
 def clean_source_url(url: str) -> str:

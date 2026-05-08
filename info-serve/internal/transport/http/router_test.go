@@ -37,11 +37,17 @@ func TestRouterServesHealthAndAuthRoutes(t *testing.T) {
 	}
 	var body struct {
 		Code int `json:"code"`
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(registerRes.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
 	if body.Code != 0 {
 		t.Fatalf("code = %d, want 0", body.Code)
+	}
+	if body.Data.Token == "" {
+		t.Fatal("register should return login token")
 	}
 }

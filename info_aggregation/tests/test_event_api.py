@@ -436,10 +436,15 @@ def test_get_event_returns_timeline_and_summaries(session):
     assert payload["event"]["id"] == event_id
     assert "timeline" in payload
     assert payload["summaries"]["why_it_matters"]
+    assert payload["summaries"]["heat_reason"]
+    assert payload["summaries"]["risk_notice"]
+    assert payload["summaries"]["source_compare"]
     assert len(payload["representative_sources"]) >= 1
     assert payload["summaries"]["what_happened"] != payload["summaries"]["latest_update"]
     assert "推理" in payload["summaries"]["what_happened"] or "API" in payload["summaries"]["what_happened"]
     assert "OpenAI" in payload["summaries"]["why_it_matters"]
+    assert "热点价值" in payload["summaries"]["heat_reason"]
+    assert "持续校准" in payload["summaries"]["risk_notice"] or "暂未发现明显采集风险" in payload["summaries"]["risk_notice"]
     assert "API" in payload["summaries"]["latest_update"] or "开发工具" in payload["summaries"]["latest_update"]
     assert payload["tech_context"]["topics"][0]["topic_type"] == "dev_tool" or payload["tech_context"]["topics"][0]["topic_type"] == "model_release"
     assert "OpenAI" in payload["tech_context"]["entities"]

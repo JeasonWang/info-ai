@@ -122,6 +122,10 @@ export interface EventRepresentativeSource {
   channel_name: string
   source_url: string
   event_time: string | null
+  content: string
+  detail_fetch_status: string
+  detail_score: number
+  detail_content_length: number
 }
 
 export interface EventTechTopic {

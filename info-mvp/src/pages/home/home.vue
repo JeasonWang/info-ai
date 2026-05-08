@@ -38,6 +38,10 @@ const activeChannelName = computed(() => {
   return channels.value.find((item) => item.code === activeChannelCode.value)?.name || '全部渠道'
 })
 const leadingEvents = computed(() => events.value.slice(0, 3))
+const userInitial = computed(() => {
+  const email = userStore.user?.email || ''
+  return (email.trim()[0] || '我').toUpperCase()
+})
 
 const {
   list: events,
@@ -359,14 +363,14 @@ function onShareTimeline() {
       </view>
       <view class="user-actions">
         <template v-if="userStore.isLoggedIn">
-          <view class="icon-btn" @click="goFavorites">
-            <text class="icon">&#xe618;</text>
+          <view class="quick-action" @click="goFavorites">
+            <text>收藏</text>
           </view>
-          <view class="icon-btn" @click="goHistory">
-            <text class="icon">&#xe60e;</text>
+          <view class="quick-action" @click="goHistory">
+            <text>足迹</text>
           </view>
-          <view class="icon-btn" @click="goLogin">
-            <text class="icon">&#xe619;</text>
+          <view class="avatar-btn" @click="goLogin">
+            <text>{{ userInitial }}</text>
           </view>
         </template>
         <view v-else class="login-btn" @click="goLogin">
@@ -538,25 +542,37 @@ function onShareTimeline() {
   flex-shrink: 0;
 }
 
-.icon-btn {
+.quick-action {
+  height: 64rpx;
+  padding: 0 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--brand-soft);
+  color: var(--brand-accent);
+  font-size: 24rpx;
+  font-weight: 700;
+  transition: background var(--transition-fast);
+}
+
+.quick-action:active,
+.avatar-btn:active {
+  background: var(--divider);
+}
+
+.avatar-btn {
   width: 64rpx;
   height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--brand-soft);
-  transition: background var(--transition-fast);
-}
-
-.icon-btn:active {
-  background: var(--divider);
-}
-
-.icon-btn .icon {
-  font-family: 'uniicons';
-  font-size: 32rpx;
-  color: var(--text-secondary);
+  background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
 }
 
 .login-btn {
@@ -730,6 +746,22 @@ function onShareTimeline() {
     padding: 0 7px;
     font-size: 12px;
     line-height: 20px;
+  }
+
+  .user-actions {
+    gap: 8px;
+  }
+
+  .quick-action {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .avatar-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
   }
 
   .filter-wrap {

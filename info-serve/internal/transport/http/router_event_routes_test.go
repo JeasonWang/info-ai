@@ -56,7 +56,17 @@ func (s stubEventStore) GetEventDetail(ctx context.Context, id int64) (events.Ev
 		},
 		SourceViews: []events.SourceView{{ChannelName: "CSDN", Summary: "开发者社区关注芯片生态。"}},
 		RepresentativeSources: []events.RepresentativeSource{
-			{InfoID: 11, Title: "国产芯片发布新进展", ChannelName: "CSDN", SourceURL: "https://example.com", EventTime: "2026-04-22 10:00:00"},
+			{
+				InfoID:              11,
+				Title:               "国产芯片发布新进展",
+				ChannelName:         "CSDN",
+				SourceURL:           "https://example.com",
+				EventTime:           "2026-04-22 10:00:00",
+				Content:             "这是来自代表来源的完整正文片段，用于详情页判断底层数据是否完整。",
+				DetailFetchStatus:   "complete",
+				DetailScore:         92,
+				DetailContentLength: 120,
+			},
 		},
 		TechContext: events.TechContext{Entities: []string{"国产芯片"}, Keywords: []string{"芯片", "半导体"}},
 	}, nil

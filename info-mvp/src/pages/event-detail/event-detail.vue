@@ -11,6 +11,7 @@ const loading = ref(true)
 const error = ref('')
 const eventId = ref(0)
 const timelineExpanded = ref(false)
+const sourceExpanded = ref(false)
 
 onLoad((options) => {
   const id = Number(options?.id)
@@ -48,6 +49,10 @@ function toggleTimeline() {
   timelineExpanded.value = !timelineExpanded.value
 }
 
+function toggleSource() {
+  sourceExpanded.value = !sourceExpanded.value
+}
+
 function shareEvent() {
   // #ifdef H5
   const url = `${window.location.origin}/#/pages/event-detail/event-detail?id=${eventId.value}`
@@ -82,8 +87,44 @@ const latestUpdate = computed(() => {
   return event.value.summaries.latest_update || event.value.summaries['最新进展'] || ''
 })
 
+const heatReason = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.heat_reason || event.value.summaries['为什么热'] || ''
+})
+
+const riskNotice = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.risk_notice || event.value.summaries['风险提示'] || ''
+})
+
+const sourceCompare = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.source_compare || event.value.summaries['来源对比'] || ''
+})
+
 const hasWhyMatters = computed(() => whyMatters.value.trim().length > 0)
 const hasLatestUpdate = computed(() => latestUpdate.value.trim().length > 0)
+const hasHeatReason = computed(() => heatReason.value.trim().length > 0)
+const hasRiskNotice = computed(() => riskNotice.value.trim().length > 0)
+const hasSourceCompare = computed(() => sourceCompare.value.trim().length > 0)
+
+const primarySource = computed(() => {
+  if (!event.value) return null
+  return event.value.representative_sources.find((source) => (source.content || '').trim().length >= 80) || null
+})
+
+const primarySourceContent = computed(() => {
+  const content = primarySource.value?.content || ''
+  if (sourceExpanded.value || content.length <= 800) return content
+  return `${content.slice(0, 800).trim()}...`
+})
+
+const sourceQualityText = computed(() => {
+  const source = primarySource.value
+  if (!source) return ''
+  const length = source.detail_content_length || source.content.length
+  return `${source.channel_name} · 评分 ${source.detail_score || 0} · ${length}字`
+})
 
 const isLatestUpdateRedundant = computed(() => {
   if (!hasLatestUpdate.value || !primarySummary.value) return false
@@ -186,6 +227,17 @@ function onShareAppMessage() {
         </view>
       </view>
 
+      <!-- ========== 为什么热 ========== -->
+      <view v-if="hasHeatReason" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-rose);" />
+          <text class="section-title">为什么热</text>
+        </view>
+        <view class="fact-card">
+          <text class="fact-text">{{ heatReason }}</text>
+        </view>
+      </view>
+
       <!-- ========== 最新进展 ========== -->
       <view v-if="hasLatestUpdate && !isLatestUpdateRedundant" class="section">
         <view class="section-header">
@@ -197,11 +249,43 @@ function onShareAppMessage() {
         </view>
       </view>
 
+      <!-- ========== 风险提示 ========== -->
+      <view v-if="hasRiskNotice" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-orange);" />
+          <text class="section-title">风险提示</text>
+        </view>
+        <view class="fact-card fact-card--warning">
+          <text class="fact-text">{{ riskNotice }}</text>
+        </view>
+      </view>
+
+      <!-- ========== 代表原文 ========== -->
+      <view v-if="primarySource" class="section">
+        <view class="section-header section-header--clickable" @click="toggleSource">
+          <view class="section-header-left">
+            <view class="section-dot" style="background: var(--cat-orange);" />
+            <text class="section-title">代表原文</text>
+          </view>
+          <text class="source-quality">{{ sourceQualityText }}</text>
+        </view>
+        <view class="article-source-card" @click="toggleSource">
+          <text class="article-source-title">{{ primarySource.title }}</text>
+          <text class="article-source-content">{{ primarySourceContent }}</text>
+          <text v-if="primarySource.content.length > 800" class="article-source-toggle">
+            {{ sourceExpanded ? '收起正文' : '展开完整正文' }}
+          </text>
+        </view>
+      </view>
+
       <!-- ========== 多源视角 ========== -->
       <view v-if="event.source_views.length > 0" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-blue);" />
           <text class="section-title">多源视角</text>
+        </view>
+        <view v-if="hasSourceCompare" class="fact-card source-compare-card">
+          <text class="fact-text">{{ sourceCompare }}</text>
         </view>
         <view class="source-view-grid">
           <view v-for="view in event.source_views" :key="view.channel_name" class="source-view-card">
@@ -475,6 +559,11 @@ function onShareAppMessage() {
   box-shadow: var(--shadow-sm);
 }
 
+.fact-card--warning {
+  background: rgba(255, 247, 237, 0.96);
+  border: 1rpx solid rgba(234, 88, 12, 0.16);
+}
+
 .fact-text {
   display: block;
   font-size: 28rpx;
@@ -533,9 +622,54 @@ function onShareAppMessage() {
   color: var(--cat-orange);
 }
 
+.source-quality {
+  font-size: 22rpx;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.article-source-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.article-source-title,
+.article-source-content,
+.article-source-toggle {
+  display: block;
+}
+
+.article-source-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 16rpx;
+}
+
+.article-source-content {
+  font-size: 27rpx;
+  color: var(--text-primary);
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+
+.article-source-toggle {
+  margin-top: 18rpx;
+  color: var(--brand-accent);
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
 .source-view-grid {
   display: grid;
   gap: 16rpx;
+}
+
+.source-compare-card {
+  margin-bottom: 16rpx;
 }
 
 .source-view-card {

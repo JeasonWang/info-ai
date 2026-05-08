@@ -55,23 +55,26 @@ docker compose version
 
 ## 4. 服务器 `.env` 配置
 
-第一次部署前，建议先在服务器创建 `/opt/info-ai/.env`。如果不创建，`deploy.sh` 会自动生成随机数据库密码、会话密钥和管理员密码。
+第一次部署前，建议先在服务器创建 `/opt/info-ai/.env`。当前 `docker-compose.yml` 不启动 MySQL 容器，四个应用容器默认连接容器主机上的 MySQL 3306，因此数据库账号密码必须和服务器本机 MySQL 保持一致。
 
 手动创建示例：
 
 ```bash
 cd /opt/info-ai
 cat > .env <<'EOF'
-MYSQL_ROOT_PASSWORD=请替换为强密码
-MYSQL_DATABASE=info-max
 DB_TYPE=mysql
+DB_HOST=host.docker.internal
+DB_PORT=3306
 DB_USER=root
-DB_PASSWORD=请替换为同一个MySQL密码
+DB_PASSWORD=请替换为主机MySQL密码
 DB_NAME=info-max
 LOG_LEVEL=INFO
+TZ=Asia/Shanghai
+APP_TIMEZONE=Asia/Shanghai
+CRAWLER_MAX_CONTENT_LENGTH=12000
 ENABLE_SEED_DATA=false
 
-INFO_SERVE_MYSQL_DSN=root:请替换为同一个MySQL密码@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
+INFO_SERVE_MYSQL_DSN=root:请替换为主机MySQL密码@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
 INFO_SERVE_SESSION_SECRET=请替换为强随机字符串
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=请替换为强密码

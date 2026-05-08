@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 
 from database import Channel, Info
+from services.acquisition_quality import build_acquisition_quality_profile
 from services.credential_provider import build_credential_report
 
 
@@ -15,35 +16,27 @@ def _is_seed(info: Info) -> bool:
 
 
 def _is_complete(info: Info) -> bool:
-    return (
-        not _is_seed(info)
-        and (info.detail_fetch_status or "").strip() == "complete"
-        and (info.detail_score or 0) >= 70
-        and (info.detail_content_length or len(info.content or "")) >= 40
-    )
+    if _is_seed(info):
+        return False
+    profile = build_acquisition_quality_profile(info)
+    return profile.status == "complete" and profile.usable
 
 
 def _is_high_value_partial(info: Info) -> bool:
-    return (
-        not _is_seed(info)
-        and (info.detail_fetch_status or "").strip() == "partial"
-        and (info.detail_score or 0) >= 60
-        and (info.detail_content_length or len(info.content or "")) >= 80
-    )
+    if _is_seed(info):
+        return False
+    profile = build_acquisition_quality_profile(info)
+    return profile.status == "partial" and profile.usable
 
 
 def _needs_attention(info: Info) -> bool:
     if _is_seed(info):
         return False
-    status = (info.detail_fetch_status or "").strip()
-    return (
-        status in {"failed", "list_only", "pending", ""}
-        or (info.detail_score or 0) < 60
-        or (info.detail_content_length or len(info.content or "")) < 40
-    )
+    return build_acquisition_quality_profile(info).needs_attention
 
 
 def _sample(info: Info) -> dict:
+    profile = build_acquisition_quality_profile(info)
     return {
         "id": info.id,
         "title": info.title,
@@ -53,6 +46,12 @@ def _sample(info: Info) -> dict:
         "detail_score": info.detail_score,
         "detail_content_length": info.detail_content_length or len(info.content or ""),
         "detail_fetch_error": info.detail_fetch_error,
+        "quality_level": profile.quality_level,
+        "completeness_score": profile.completeness_score,
+        "value_score": profile.value_score,
+        "required_length": profile.required_length,
+        "risk_reasons": profile.risk_reasons,
+        "recommended_action": profile.recommended_action,
     }
 
 

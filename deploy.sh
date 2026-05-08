@@ -56,19 +56,24 @@ create_env_file() {
 
     cat > .env <<EOF
 # 数据库配置
+# 当前 docker-compose.yml 不启动 MySQL 容器，服务默认连接容器主机上的 MySQL 3306。
+# 首次部署前请把 DB_PASSWORD / INFO_SERVE_MYSQL_DSN 改成主机 MySQL 的真实账号密码。
 MYSQL_ROOT_PASSWORD=${mysql_password}
 MYSQL_DATABASE=info-max
 DB_TYPE=mysql
+DB_HOST=host.docker.internal
+DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=${mysql_password}
 DB_NAME=info-max
 LOG_LEVEL=INFO
 TZ=Asia/Shanghai
 APP_TIMEZONE=Asia/Shanghai
+CRAWLER_MAX_CONTENT_LENGTH=12000
 ENABLE_SEED_DATA=false
 
 # info-serve 配置
-INFO_SERVE_MYSQL_DSN=root:${mysql_password}@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
+INFO_SERVE_MYSQL_DSN=root:${mysql_password}@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
 INFO_SERVE_SESSION_SECRET=${session_secret}
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=${admin_password}

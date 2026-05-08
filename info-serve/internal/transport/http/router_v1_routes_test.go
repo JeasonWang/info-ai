@@ -25,6 +25,17 @@ func TestV1AuthRoutesMirrorLegacyAuthContract(t *testing.T) {
 	if registerRes.Code != http.StatusCreated {
 		t.Fatalf("register status = %d, want %d", registerRes.Code, http.StatusCreated)
 	}
+	var registerBody struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(registerRes.Body.Bytes(), &registerBody); err != nil {
+		t.Fatalf("invalid register json: %v", err)
+	}
+	if registerBody.Data.Token == "" {
+		t.Fatal("register token should not be empty")
+	}
 
 	loginPayload := bytes.NewBufferString(`{"email":"v1-user@example.com","password":"StrongerPass123"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", loginPayload)
