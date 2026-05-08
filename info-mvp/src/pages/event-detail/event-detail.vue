@@ -119,10 +119,67 @@ const primarySource = computed(() => {
   return event.value.representative_sources.find((source) => (source.content || '').trim().length >= 80) || null
 })
 
+function normalizeForCompare(value: string) {
+  return (value || '').replace(/\s+/g, '').replace(/[，。！？；：、,.!?;:\-—_]/g, '').trim()
+}
+
+function isRedundantWithSource(value: string) {
+  const source = normalizeForCompare(primarySource.value?.content || '')
+  const current = normalizeForCompare(value)
+  if (!source || !current || current.length < 40) return false
+  return source.includes(current.slice(0, Math.min(120, current.length)))
+}
+
+const shouldShowPrimarySummary = computed(() => {
+  return primarySummary.value.trim().length > 0 && !isRedundantWithSource(primarySummary.value)
+})
+
+function cleanupArticleText(rawContent: string, title: string) {
+  let text = (rawContent || '').replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ').trim()
+  if (title && text.startsWith(title)) {
+    text = text.slice(title.length).trim()
+  }
+  text = text
+    .replace(/\s+([，。！？；：、,.!?;:])/g, '$1')
+    .replace(/([（《【])\s+/g, '$1')
+    .replace(/\s+([）》】])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/(?:^|。)\s*(?:\d{4}-\d{2}-\d{2}|阅读\d+分钟|[\d,]+ 阅读\d+分钟)\s*。?/g, '。')
+    .replace(/^([A-Za-z0-9_\-\u4e00-\u9fa5]{2,24})。(?=.{20,})/, '')
+    .replace(/^(。|\s)+/, '')
+    .trim()
+  return text
+}
+
+function buildArticleParagraphs(rawContent: string, title: string) {
+  const cleaned = cleanupArticleText(rawContent, title)
+  if (!cleaned) return []
+  const lineParts = cleaned.split(/\n{1,}/).map((part) => part.trim()).filter(Boolean)
+  if (lineParts.length >= 2) return lineParts
+
+  const sentences = cleaned.match(/[^。！？!?]+[。！？!?]?/g)?.map((part) => part.trim()).filter(Boolean) || [cleaned]
+  const paragraphs: string[] = []
+  let current = ''
+  for (const sentence of sentences) {
+    current = current ? `${current}${sentence}` : sentence
+    if (current.length >= 180 || /[：:]$/.test(sentence)) {
+      paragraphs.push(current)
+      current = ''
+    }
+  }
+  if (current) paragraphs.push(current)
+  return paragraphs.filter((part) => normalizeForCompare(part).length >= 8)
+}
+
 const primarySourceContent = computed(() => {
-  const content = primarySource.value?.content || ''
-  if (sourceExpanded.value || content.length <= 800) return content
-  return `${content.slice(0, 800).trim()}...`
+  const paragraphs = buildArticleParagraphs(primarySource.value?.content || '', primarySource.value?.title || '')
+  const visibleParagraphs = sourceExpanded.value ? paragraphs : paragraphs.slice(0, 4)
+  return visibleParagraphs
+})
+
+const primarySourceHasMore = computed(() => {
+  const paragraphs = buildArticleParagraphs(primarySource.value?.content || '', primarySource.value?.title || '')
+  return paragraphs.length > 4
 })
 
 const sourceQualityText = computed(() => {
@@ -212,7 +269,7 @@ function onShareAppMessage() {
       </view>
 
       <!-- ========== 发生了什么 ========== -->
-      <view v-if="primarySummary" class="section">
+      <view v-if="shouldShowPrimarySummary" class="section">
         <view class="section-header">
           <view class="section-dot" />
           <text class="section-title">发生了什么</text>
@@ -288,8 +345,16 @@ function onShareAppMessage() {
         </view>
         <view class="article-source-card" @click="toggleSource">
           <text class="article-source-title">{{ primarySource.title }}</text>
-          <text class="article-source-content">{{ primarySourceContent }}</text>
-          <text v-if="primarySource.content.length > 800" class="article-source-toggle">
+          <view class="article-source-body">
+            <text
+              v-for="(paragraph, index) in primarySourceContent"
+              :key="index"
+              class="article-source-paragraph"
+            >
+              {{ paragraph }}
+            </text>
+          </view>
+          <text v-if="primarySourceHasMore" class="article-source-toggle">
             {{ sourceExpanded ? '收起正文' : '展开完整正文' }}
           </text>
         </view>
@@ -687,7 +752,8 @@ function onShareAppMessage() {
 }
 
 .article-source-title,
-.article-source-content,
+.article-source-body,
+.article-source-paragraph,
 .article-source-toggle {
   display: block;
 }
@@ -700,11 +766,19 @@ function onShareAppMessage() {
   margin-bottom: 16rpx;
 }
 
-.article-source-content {
+.article-source-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.article-source-paragraph {
+  display: block;
   font-size: 27rpx;
   color: var(--text-primary);
   line-height: 1.85;
-  white-space: pre-wrap;
+  text-align: justify;
+  word-break: break-word;
 }
 
 .article-source-toggle {

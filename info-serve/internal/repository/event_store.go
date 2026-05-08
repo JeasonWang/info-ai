@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"strings"
 
 	"info-serve/internal/events"
@@ -281,7 +282,7 @@ LIMIT 6`,
 		if seen[channelName] {
 			continue
 		}
-		summary := compactText(content, 240)
+		summary := compactInlineText(content, 240)
 		if summary == "" || redundantWithSummaries(summary, summaries) {
 			continue
 		}
@@ -332,7 +333,7 @@ LIMIT 6`,
 		); err != nil {
 			return nil, err
 		}
-		item.Content = compactText(content, 6000)
+		item.Content = compactArticleText(content, 6000)
 		result = append(result, item)
 	}
 	return result, rows.Err()
@@ -423,13 +424,42 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
-func compactText(value string, maxRuneCount int) string {
+func compactInlineText(value string, maxRuneCount int) string {
 	cleaned := strings.Join(strings.Fields(value), " ")
 	runes := []rune(cleaned)
 	if len(runes) <= maxRuneCount {
 		return cleaned
 	}
 	return strings.TrimSpace(string(runes[:maxRuneCount])) + "..."
+}
+
+func compactArticleText(value string, maxRuneCount int) string {
+	cleaned := normalizeArticleText(value)
+	runes := []rune(cleaned)
+	if len(runes) <= maxRuneCount {
+		return cleaned
+	}
+	return strings.TrimSpace(string(runes[:maxRuneCount])) + "..."
+}
+
+func normalizeArticleText(value string) string {
+	text := strings.ReplaceAll(value, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	lines := []string{}
+	for _, line := range strings.Split(text, "\n") {
+		cleaned := strings.Join(strings.Fields(line), " ")
+		if cleaned != "" {
+			lines = append(lines, cleaned)
+		}
+	}
+	if len(lines) > 1 {
+		return strings.Join(lines, "\n\n")
+	}
+	cleaned := strings.Join(strings.Fields(value), " ")
+	cleaned = regexp.MustCompile(`\s+([，。！？；：、,.!?;:])`).ReplaceAllString(cleaned, "$1")
+	cleaned = regexp.MustCompile(`([。！？!?])\s+`).ReplaceAllString(cleaned, "$1\n\n")
+	cleaned = regexp.MustCompile(`\n{3,}`).ReplaceAllString(cleaned, "\n\n")
+	return strings.TrimSpace(cleaned)
 }
 
 func redundantWithSummaries(value string, summaries map[string]string) bool {
