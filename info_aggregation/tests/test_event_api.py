@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from api import app
 import api
 from crawlers.registry import crawler_registry
-from database import Category, Channel, Event, Info
+from database import Category, Channel, Event, EventItemLink, Info
 from services.event_builder import rebuild_events
 
 
@@ -258,6 +258,52 @@ def test_rebuild_events_prefers_high_quality_source_as_event_lead(session):
     assert "API 接入节奏" in item["one_line_summary"]
 
 
+def test_rebuild_events_orders_event_links_by_quality_not_time(session):
+    tech = Category(name="科技", code="tech", description="科技事件")
+    session.add(tech)
+    session.flush()
+    channel = Channel(name="36氪", code="36kr", base_url="https://36kr.com", category_id=tech.id)
+    session.add(channel)
+    session.flush()
+    older_quality = Info(
+        title="OpenAI 新模型完整分析",
+        content=(
+            "OpenAI 新模型发布后，开发者关注 API 接入节奏、推理性能、上下文窗口、部署成本和企业迁移方案。"
+            "企业团队正在评估数据隔离、权限控制、稳定性、调用价格和监控能力。"
+        ),
+        category_id=tech.id,
+        channel_id=channel.id,
+        source_id="quality-primary-old",
+        source_url="https://example.com/quality-primary-old",
+        event_time=datetime(2026, 4, 20, 9, 0, 0),
+        core_entity="OpenAI",
+        detail_fetch_status="complete",
+        detail_score=92,
+        detail_content_length=120,
+    )
+    newer_weak = Info(
+        title="OpenAI 新模型热议",
+        content="OpenAI 新模型热议，网友继续讨论。",
+        category_id=tech.id,
+        channel_id=channel.id,
+        source_id="quality-secondary-new",
+        source_url="https://example.com/quality-secondary-new",
+        event_time=datetime(2026, 4, 20, 9, 20, 0),
+        core_entity="OpenAI",
+        detail_fetch_status="partial",
+        detail_score=58,
+        detail_content_length=20,
+    )
+    session.add_all([older_quality, newer_weak])
+    session.commit()
+
+    rebuild_events(session)
+
+    event = session.query(Event).filter(Event.title == "OpenAI 新模型完整分析").one()
+    primary_link = session.query(EventItemLink).filter(EventItemLink.event_id == event.id, EventItemLink.is_primary == 1).one()
+    assert primary_link.item_id == older_quality.id
+
+
 def test_list_events_deduplicates_source_badges(session):
     tech = Category(name="科技", code="tech", description="科技事件")
     session.add(tech)
@@ -441,6 +487,10 @@ def test_get_event_returns_timeline_and_summaries(session):
     assert payload["summaries"]["source_compare"]
     assert payload["summaries"]["analysis_confidence"]
     assert len(payload["representative_sources"]) >= 1
+    assert payload["representative_sources"][0]["quality_level"]
+    assert payload["evidence_chain"]["usable_source_count"] >= 1
+    assert payload["evidence_chain"]["evidence_sources"]
+    assert payload["evidence_chain"]["platform_views"]
     assert payload["summaries"]["what_happened"] != payload["summaries"]["latest_update"]
     assert "推理" in payload["summaries"]["what_happened"] or "API" in payload["summaries"]["what_happened"]
     assert "OpenAI" in payload["summaries"]["why_it_matters"]

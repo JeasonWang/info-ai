@@ -187,6 +187,65 @@ def _build_distinct_source_views(source_rows, summaries: dict) -> list[dict]:
     return views
 
 
+def _source_quality(info: Info) -> dict:
+    profile = build_acquisition_quality_profile(info)
+    return {
+        "quality_level": profile.quality_level,
+        "usable": profile.usable,
+        "needs_attention": profile.needs_attention,
+        "completeness_score": profile.completeness_score,
+        "value_score": profile.value_score,
+        "risk_reasons": profile.risk_reasons,
+        "summary": profile.summary,
+    }
+
+
+def _is_evidence_source(quality: dict) -> bool:
+    if quality["usable"]:
+        return True
+    risk_reasons = set(quality["risk_reasons"])
+    hard_risks = {"anti_crawl_or_shell_page", "empty_content", "title_only_content", "seed_data"}
+    return quality["quality_level"] == "weak" and not risk_reasons.intersection(hard_risks)
+
+
+def _build_event_evidence_chain(source_rows) -> dict:
+    evidence_sources = []
+    weak_sources = []
+    platform_counter: dict[str, int] = {}
+
+    for link, info, channel in source_rows:
+        quality = _source_quality(info)
+        platform_counter[channel.name] = platform_counter.get(channel.name, 0) + 1
+        source = {
+            "info_id": info.id,
+            "title": info.title,
+            "channel_name": channel.name,
+            "source_url": info.source_url,
+            "weight": link.weight,
+            "detail_score": info.detail_score or 0,
+            "detail_fetch_status": info.detail_fetch_status or "",
+            "quality_level": quality["quality_level"],
+            "quality_summary": quality["summary"],
+            "risk_reasons": quality["risk_reasons"],
+        }
+        if _is_evidence_source(quality):
+            evidence_sources.append(source)
+        else:
+            weak_sources.append(source)
+
+    platform_views = [
+        {"channel_name": name, "source_count": count}
+        for name, count in sorted(platform_counter.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    return {
+        "evidence_sources": evidence_sources[:5],
+        "weak_sources": weak_sources[:5],
+        "platform_views": platform_views,
+        "usable_source_count": len(evidence_sources),
+        "weak_source_count": len(weak_sources),
+    }
+
+
 class CategoryPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     code: str = Field(..., min_length=1, max_length=50)
@@ -640,6 +699,7 @@ def get_event_detail(event_id: int):
             .all()
         )
         tech_context = _build_event_tech_context(source_rows)
+        evidence_chain = _build_event_evidence_chain(source_rows)
 
         return {
             "code": 0,
@@ -674,10 +734,14 @@ def get_event_detail(event_id: int):
                         "channel_name": channel.name,
                         "source_url": info.source_url,
                         "event_time": info.event_time.strftime("%Y-%m-%d %H:%M:%S") if info.event_time else None,
+                        "quality_level": quality["quality_level"],
+                        "quality_summary": quality["summary"],
                     }
                     for _, info, channel in source_rows[:6]
+                    for quality in [_source_quality(info)]
                 ],
                 "tech_context": tech_context,
+                "evidence_chain": evidence_chain,
             },
         }
     finally:

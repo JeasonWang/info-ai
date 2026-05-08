@@ -86,6 +86,25 @@ def _quality_score(item: Info) -> float:
     return status_bonus + completeness + value + freshness - duplicate_penalty
 
 
+def _event_item_sort_key(item: Info) -> tuple[float, object, int]:
+    return (_quality_score(item), item.event_time or item.created_at, item.id)
+
+
+def _prioritize_event_items(items: list[Info]) -> list[Info]:
+    """事件分析优先使用高质量来源，避免短正文或列表摘要污染摘要结论。"""
+
+    return sorted(items, key=_event_item_sort_key, reverse=True)
+
+
+def _analysis_ready_items(items: list[Info]) -> list[Info]:
+    ready_items = [
+        item
+        for item in _prioritize_event_items(items)
+        if build_acquisition_quality_profile(item).usable and _quality_score(item) >= 45
+    ]
+    return ready_items or _prioritize_event_items(items)
+
+
 def _split_csv(raw_value: str) -> list[str]:
     if not raw_value:
         return []
@@ -310,22 +329,22 @@ def rebuild_events(session, limit: int = 200):
     session.flush()
 
     for (category_id, anchor), group in grouped_items.items():
-        group.sort(key=lambda item: item.event_time or item.created_at)
-        lead_item = sorted(group, key=_quality_score, reverse=True)[0]
-        group = [lead_item] + [item for item in group if item.id != lead_item.id]
-        lead_item = group[0]
-        latest_item = group[-1]
+        chronological_group = sorted(group, key=lambda item: item.event_time or item.created_at)
+        prioritized_group = _prioritize_event_items(group)
+        analysis_group = _analysis_ready_items(group)
+        lead_item = analysis_group[0]
+        latest_item = chronological_group[-1]
         event_key = _build_event_key_value(category_id, anchor)
         event = existing_events.get(event_key) or Event(event_key=event_key)
         event.title = lead_item.title
-        event.one_line_summary = _build_one_line(group)
+        event.one_line_summary = _build_one_line(analysis_group)
         event.primary_category_id = lead_item.category_id
         event.status = "active"
-        event.heat_score = min(100, 60 + len(group) * 10)
+        event.heat_score = min(100, 60 + len(prioritized_group) * 10)
         event.freshness_score = 90
-        event.composite_score = min(100, 70 + len(group) * 8)
-        event.source_count = len(group)
-        event.started_at = lead_item.event_time or lead_item.created_at
+        event.composite_score = min(100, 70 + len(prioritized_group) * 8)
+        event.source_count = len(prioritized_group)
+        event.started_at = chronological_group[0].event_time or chronological_group[0].created_at
         event.last_updated_at = latest_item.event_time or latest_item.created_at
         event.event_key = event_key
         if event.id is None:
@@ -343,58 +362,59 @@ def rebuild_events(session, limit: int = 200):
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="what_happened",
-                    content=_build_what_happened(group),
+                    content=_build_what_happened(analysis_group),
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="why_it_matters",
-                    content=_build_why_it_matters(group),
+                    content=_build_why_it_matters(analysis_group),
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="latest_update",
-                    content=_build_latest_update(group),
+                    content=_build_latest_update(chronological_group),
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="heat_reason",
-                    content=_build_heat_reason(group),
+                    content=_build_heat_reason(analysis_group),
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="risk_notice",
-                    content=_build_risk_notice(group),
+                    content=_build_risk_notice(analysis_group),
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="source_compare",
-                    content=_build_source_compare(group),
+                    content=_build_source_compare(analysis_group),
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="analysis_confidence",
-                    content=_build_analysis_confidence(group),
+                    content=_build_analysis_confidence(analysis_group),
                     version=1,
                 ),
             ]
         )
 
-        for index, item in enumerate(group, start=1):
+        for index, item in enumerate(prioritized_group, start=1):
             session.add(
                 EventItemLink(
                     event_id=event.id,
                     item_id=item.id,
                     role="primary" if index == 1 else "media",
                     is_primary=1 if index == 1 else 0,
-                    weight=max(10, 100 - index * 10),
+                    weight=max(10, min(100, int(_quality_score(item)))),
                 )
             )
+        for index, item in enumerate(chronological_group, start=1):
             session.add(
                 EventTimelineEntry(
                     event_id=event.id,

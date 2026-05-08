@@ -312,6 +312,40 @@ function onShareAppMessage() {
         </view>
       </view>
 
+      <!-- ========== 证据链 ========== -->
+      <view v-if="event.evidence_chain && (event.evidence_chain.evidence_sources.length > 0 || event.evidence_chain.weak_sources.length > 0)" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-green);" />
+          <text class="section-title">证据链</text>
+        </view>
+        <view class="evidence-card">
+          <text class="evidence-summary">
+            可用来源 {{ event.evidence_chain.usable_source_count }} 条，需谨慎来源 {{ event.evidence_chain.weak_source_count }} 条
+          </text>
+          <view v-if="event.evidence_chain.platform_views.length > 0" class="evidence-platforms">
+            <text
+              v-for="platform in event.evidence_chain.platform_views.slice(0, 4)"
+              :key="platform.channel_name"
+              class="evidence-platform"
+            >
+              {{ platform.channel_name }} {{ platform.source_count }}
+            </text>
+          </view>
+          <view
+            v-for="source in event.evidence_chain.evidence_sources.slice(0, 3)"
+            :key="source.info_id"
+            class="evidence-source"
+            @click="uni.navigateTo({ url: `/pages/info-detail/info-detail?id=${source.info_id}` })"
+          >
+            <text class="evidence-source-title">{{ source.title }}</text>
+            <text class="evidence-source-meta">{{ source.channel_name }} · 质量 {{ source.detail_score }} · {{ source.quality_level }}</text>
+          </view>
+          <view v-if="event.evidence_chain.weak_sources.length > 0" class="evidence-warning">
+            <text>风险来源：{{ event.evidence_chain.weak_sources[0].quality_summary }}</text>
+          </view>
+        </view>
+      </view>
+
       <!-- ========== 关键标签 ========== -->
       <view
         v-if="event.tech_context && (event.tech_context.topics.length > 0 || event.tech_context.entities.length > 0 || event.tech_context.keywords.length > 0)"
@@ -712,6 +746,71 @@ function onShareAppMessage() {
   color: var(--text-secondary);
   font-size: 27rpx;
   line-height: 1.7;
+}
+
+/* ========== Evidence Chain ========== */
+.evidence-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.evidence-summary,
+.evidence-source-title,
+.evidence-source-meta,
+.evidence-warning {
+  display: block;
+}
+
+.evidence-summary {
+  font-size: 27rpx;
+  color: var(--text-primary);
+  font-weight: 700;
+  margin-bottom: 16rpx;
+}
+
+.evidence-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+}
+
+.evidence-platform {
+  padding: 8rpx 16rpx;
+  border-radius: var(--radius-pill);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--brand-accent);
+  font-size: 23rpx;
+}
+
+.evidence-source {
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--divider);
+}
+
+.evidence-source-title {
+  font-size: 27rpx;
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.5;
+  margin-bottom: 6rpx;
+}
+
+.evidence-source-meta {
+  font-size: 23rpx;
+  color: var(--text-muted);
+}
+
+.evidence-warning {
+  margin-top: 12rpx;
+  padding: 16rpx;
+  border-radius: var(--radius-md);
+  background: rgba(255, 247, 237, 0.96);
+  color: var(--cat-orange);
+  font-size: 24rpx;
+  line-height: 1.6;
 }
 
 /* ========== Timeline ========== */

@@ -15,6 +15,7 @@ class DetailContext:
     channel_code: str
     info_id: int | None = None
     last_failure_reason: str = ""
+    strategy_hint: str = ""
 
 
 class DetailStrategy(Protocol):

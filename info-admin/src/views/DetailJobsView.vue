@@ -38,6 +38,7 @@ const tabs = [
 ]
 const statusItems = computed(() => Object.entries(report.value?.status_counts || {}))
 const channelItems = computed(() => Object.entries(report.value?.channel_counts || {}))
+const strategyItems = computed(() => Object.entries(report.value?.strategy_counts || {}))
 const failureReasonItems = computed(() => report.value?.top_failure_reasons || [])
 const pagedPendingSamples = computed(() => pageSlice(report.value?.pending_samples || [], pendingPage.value))
 const pagedFailedSamples = computed(() => pageSlice(report.value?.failed_samples || [], failedPage.value))
@@ -62,7 +63,7 @@ function statusTone(status: string) {
 }
 
 function sampleMeta(item: DetailJobSample) {
-  return `${item.channel_code} · ${item.detail_fetch_status} · 分数 ${item.detail_score} · 尝试 ${item.attempt_count}/${item.max_attempts}`
+  return `${item.channel_code} · ${item.detail_fetch_status} · 策略 ${item.strategy_hint || 'auto'} · 分数 ${item.detail_score} · 尝试 ${item.attempt_count}/${item.max_attempts}`
 }
 
 async function runJobAction(item: DetailJobSample, action: 'retry' | 'cancel') {
@@ -240,6 +241,17 @@ onMounted(refreshData)
         </li>
       </ul>
       <EmptyState v-else title="暂无失败原因" description="失败样本出现后会在这里聚合。" />
+    </DataPanel>
+
+    <DataPanel v-if="section === 'overview'" title="补偿策略趋势" :status="`${strategyItems.length} 类`">
+      <ul v-if="strategyItems.length" class="data-list">
+        <li v-for="[strategy, count] in strategyItems" :key="strategy">
+          <strong>{{ strategy }}</strong>
+          <span>{{ count }} 个任务</span>
+          <StatusBadge label="strategy" tone="muted" />
+        </li>
+      </ul>
+      <EmptyState v-else title="暂无策略分布" description="补偿任务生成后会在这里按策略聚合。" />
     </DataPanel>
 
     <DataPanel v-if="section === 'pending'" title="待处理任务表" :status="`${report?.pending_samples.length || 0} 条`">

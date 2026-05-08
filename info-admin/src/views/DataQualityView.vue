@@ -179,7 +179,7 @@ function riskReasonText(sample: { risk_reasons?: string[] }) {
                 可用 {{ item.usable_ratio }}% · 完整 {{ item.complete_ratio }}% · 待治理 {{ item.needs_attention_ratio }}%
               </span>
               <small>
-                真实 {{ item.real_count }} · seed {{ item.seed_count }} · 平均质量 {{ item.avg_detail_score }} · 平均正文 {{ item.avg_detail_content_length }} 字
+                治理优先级 {{ item.quality_rank_score }} · 真实 {{ item.real_count }} · seed {{ item.seed_count }} · 平均质量 {{ item.avg_detail_score }} · 平均正文 {{ item.avg_detail_content_length }} 字
               </small>
             </div>
             <div class="channel-quality-badges">
@@ -189,6 +189,7 @@ function riskReasonText(sample: { risk_reasons?: string[] }) {
             <div class="channel-quality-detail">
               <span>失败原因：{{ topFailureText(item) }}</span>
               <span>详情策略：{{ topStrategyText(item) }}</span>
+              <span>治理建议：{{ item.governance_advice.join(' / ') }}</span>
             </div>
             <ul v-if="item.weak_samples.length" class="weak-sample-list">
               <li v-for="sample in item.weak_samples" :key="sample.id">

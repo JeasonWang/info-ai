@@ -26,6 +26,10 @@ def _job_priority(info: Info) -> int:
     return profile.attention_priority or (80 if (info.detail_score or 0) < 60 else 50)
 
 
+def _strategy_hint(info: Info) -> str:
+    return build_acquisition_quality_profile(info).recommended_action
+
+
 def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
     """把低分或失败详情内容放入补偿队列，避免同一内容重复创建开放任务。"""
 
@@ -65,7 +69,7 @@ def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
             reusable.max_attempts = 3
             reusable.next_run_at = datetime.now()
             reusable.last_failure_reason = _failure_reason(info)
-            reusable.strategy_hint = "auto"
+            reusable.strategy_hint = _strategy_hint(info)
             created_count += 1
             continue
 
@@ -79,7 +83,7 @@ def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
                 max_attempts=3,
                 next_run_at=datetime.now(),
                 last_failure_reason=_failure_reason(info),
-                strategy_hint="auto",
+                strategy_hint=_strategy_hint(info),
             )
         )
         created_count += 1

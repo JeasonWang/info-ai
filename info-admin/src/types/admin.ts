@@ -118,6 +118,8 @@ export interface ChannelQualityItem {
   usable_ratio: number
   needs_attention_count: number
   needs_attention_ratio: number
+  quality_rank_score: number
+  governance_advice: string[]
   avg_detail_score: number
   avg_detail_content_length: number
   top_failure_reasons: ChannelQualityFailureReason[]
@@ -195,6 +197,7 @@ export interface DetailJobSample {
   channel_code: string
   status: string
   priority: number
+  strategy_hint: string
   attempt_count: number
   max_attempts: number
   last_failure_reason: string
@@ -207,6 +210,7 @@ export interface DetailJobReport {
   total: number
   status_counts: Record<string, number>
   channel_counts: Record<string, number>
+  strategy_counts: Record<string, number>
   top_failure_reasons: DetailJobFailureReason[]
   pending_samples: DetailJobSample[]
   failed_samples: DetailJobSample[]

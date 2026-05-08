@@ -261,6 +261,7 @@ def run_detail_pipeline(
     for candidate in strategy_results:
         normalized = normalize_content(candidate.content)
         status, reason, matched_rules = validate_content(title, normalized, profile)
+        matched_rules = list(dict.fromkeys([*candidate.matched_rules, *matched_rules]))
         score = score_content(title, normalized, matched_rules, profile)
         result = DetailPipelineResult(
             content=normalized,

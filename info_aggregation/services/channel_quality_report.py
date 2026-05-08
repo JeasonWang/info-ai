@@ -57,6 +57,31 @@ def _sample(info: Info) -> dict:
     }
 
 
+def _credential_guidance(credential_health: dict) -> list[str]:
+    missing_required = credential_health.get("missing_required") or []
+    if not missing_required:
+        return []
+    return [
+        f"配置 {name} 到 .env 或容器环境变量，重启 info-aggregation 后执行重抓低完整详情。"
+        for name in missing_required
+    ]
+
+
+def _governance_advice(row: dict) -> list[str]:
+    advice: list[str] = []
+    credential_health = row.get("credential_health") or {}
+    advice.extend(_credential_guidance(credential_health))
+    if row["usable_ratio"] < 45:
+        advice.append("优先治理该渠道详情页解析和二跳补偿策略。")
+    if row["avg_detail_content_length"] < 120 and row["real_count"] > 0:
+        advice.append("平均正文偏短，建议抽样对比原站详情页并提升正文抽取规则。")
+    if row["needs_attention_ratio"] >= 40:
+        advice.append("待治理比例偏高，建议先批量重抓低完整详情。")
+    if not advice:
+        advice.append("当前质量可用，继续保持定时采集和质量监控。")
+    return advice
+
+
 def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
     """按渠道输出真实采集详情质量，明确哪些渠道还不能支撑产品展示。"""
 
@@ -85,41 +110,58 @@ def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
         ) if real_infos else 0
 
         usable_count = complete_count + high_value_partial_count
-        rows.append(
-            {
-                "channel_id": channel.id,
-                "channel_code": channel.code,
-                "channel_name": channel.name,
-                "total_count": len(infos),
-                "real_count": len(real_infos),
-                "seed_count": len(infos) - len(real_infos),
-                "complete_count": complete_count,
-                "complete_ratio": _percent(complete_count, len(real_infos)),
-                "high_value_partial_count": high_value_partial_count,
-                "usable_count": usable_count,
-                "usable_ratio": _percent(usable_count, len(real_infos)),
-                "needs_attention_count": len(attention_infos),
-                "needs_attention_ratio": _percent(len(attention_infos), len(real_infos)),
-                "avg_detail_score": avg_score,
-                "avg_detail_content_length": avg_length,
-                "top_failure_reasons": [
-                    {"reason": reason, "count": count}
-                    for reason, count in failure_counter.most_common(5)
-                ],
-                "top_detail_strategies": [
-                    {"strategy": strategy, "count": count}
-                    for strategy, count in strategy_counter.most_common(5)
-                ],
-                "credential_health": credential_report.get(channel.code, {"health": "not_required"}),
-                "weak_samples": [_sample(info) for info in sorted(
+        row = {
+            "channel_id": channel.id,
+            "channel_code": channel.code,
+            "channel_name": channel.name,
+            "total_count": len(infos),
+            "real_count": len(real_infos),
+            "seed_count": len(infos) - len(real_infos),
+            "complete_count": complete_count,
+            "complete_ratio": _percent(complete_count, len(real_infos)),
+            "high_value_partial_count": high_value_partial_count,
+            "usable_count": usable_count,
+            "usable_ratio": _percent(usable_count, len(real_infos)),
+            "needs_attention_count": len(attention_infos),
+            "needs_attention_ratio": _percent(len(attention_infos), len(real_infos)),
+            "avg_detail_score": avg_score,
+            "avg_detail_content_length": avg_length,
+            "top_failure_reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in failure_counter.most_common(5)
+            ],
+            "top_detail_strategies": [
+                {"strategy": strategy, "count": count}
+                for strategy, count in strategy_counter.most_common(5)
+            ],
+            "credential_health": credential_report.get(channel.code, {"health": "not_required"}),
+            "weak_samples": [
+                _sample(info)
+                for info in sorted(
                     attention_infos,
                     key=lambda item: (item.detail_score or 0, item.detail_content_length or len(item.content or "")),
-                )[:sample_limit]],
-            }
-        )
+                )[:sample_limit]
+            ],
+        }
+        row["quality_rank_score"] = _quality_rank_score(row)
+        row["governance_advice"] = _governance_advice(row)
+        rows.append(row)
 
     summary = _build_summary(rows)
-    return {"summary": summary, "channels": rows}
+    return {
+        "summary": summary,
+        "channels": sorted(rows, key=lambda item: (item["quality_rank_score"], item["usable_ratio"])),
+    }
+
+
+def _quality_rank_score(row: dict) -> float:
+    score = 100 - row["usable_ratio"]
+    score += row["needs_attention_ratio"] * 0.8
+    if (row.get("credential_health") or {}).get("health") == "missing_required":
+        score += 25
+    if row["avg_detail_content_length"] < 120 and row["real_count"] > 0:
+        score += 12
+    return round(score, 1)
 
 
 def _build_summary(rows: list[dict]) -> dict:

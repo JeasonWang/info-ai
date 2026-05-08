@@ -120,6 +120,32 @@ export interface EventSourceView {
   summary: string
 }
 
+export interface EventEvidenceSource {
+  info_id: number
+  title: string
+  channel_name: string
+  source_url: string
+  weight: number
+  detail_score: number
+  detail_fetch_status: string
+  quality_level: string
+  quality_summary: string
+  risk_reasons: string[]
+}
+
+export interface EventPlatformView {
+  channel_name: string
+  source_count: number
+}
+
+export interface EventEvidenceChain {
+  evidence_sources: EventEvidenceSource[]
+  weak_sources: EventEvidenceSource[]
+  platform_views: EventPlatformView[]
+  usable_source_count: number
+  weak_source_count: number
+}
+
 export interface EventRepresentativeSource {
   info_id: number
   title: string
@@ -130,6 +156,8 @@ export interface EventRepresentativeSource {
   detail_fetch_status: string
   detail_score: number
   detail_content_length: number
+  quality_level?: string
+  quality_summary?: string
 }
 
 export interface EventTechTopic {
@@ -163,6 +191,7 @@ export interface EventDetail {
   source_views: EventSourceView[]
   representative_sources: EventRepresentativeSource[]
   tech_context: EventTechContext
+  evidence_chain?: EventEvidenceChain
 }
 
 export interface StatsData {

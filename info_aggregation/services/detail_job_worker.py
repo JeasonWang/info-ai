@@ -3,28 +3,100 @@ from datetime import datetime, timedelta
 
 from database import DetailJob, Info, InfoAcquisitionLog
 from crawlers.registry import crawler_registry
+from services.credential_provider import build_credential_report
 from services.detail_pipeline import DetailPipelineResult
 from services.detail_strategy_chain import DetailContext, DetailStrategyChain
 from services.http_html_detail_strategy import HttpHtmlDetailStrategy
+from services.secondary_search_detail_strategy import (
+    SecondarySearchDetailStrategy,
+    WeiboSecondarySearchDetailStrategy,
+    XiaohongshuSecondarySearchDetailStrategy,
+    ZhihuSecondarySearchDetailStrategy,
+)
 
 
-DetailRunner = Callable[[Info], DetailPipelineResult]
+DetailRunner = Callable[..., DetailPipelineResult]
+
+STRICT_DETAIL_STRATEGY_HINTS = {
+    "retry_full_article_detail",
+    "search_secondary_detail_source",
+    "check_cookie_or_rendering_strategy",
+}
 
 
-def crawler_detail_runner(info: Info, html_fetcher=None) -> DetailPipelineResult:
+def _mark_strategy_hint(result: DetailPipelineResult, strategy_hint: str) -> DetailPipelineResult:
+    if strategy_hint and f"strategy_hint:{strategy_hint}" not in result.matched_rules:
+        result.matched_rules.append(f"strategy_hint:{strategy_hint}")
+    return result
+
+
+def _is_usable_detail_result(result: DetailPipelineResult, strategy_hint: str = "") -> bool:
+    if not result.content:
+        return False
+    if result.status == "complete":
+        return True
+    if result.status == "partial" and strategy_hint not in STRICT_DETAIL_STRATEGY_HINTS and result.score >= 60:
+        return True
+    return False
+
+
+def _credential_diagnostic_result(channel_code: str, strategy_hint: str) -> DetailPipelineResult | None:
+    if strategy_hint != "check_cookie_or_rendering_strategy":
+        return None
+    report = build_credential_report([channel_code]).get(channel_code, {})
+    missing_required = report.get("missing_required") or []
+    if missing_required:
+        return _mark_strategy_hint(
+            DetailPipelineResult(
+                content="",
+                status="failed",
+                strategy="credential_diagnostic",
+                score=0,
+                content_length=0,
+                failure_reason="missing_required_credentials",
+                matched_rules=[f"missing_credential:{name}" for name in missing_required],
+            ),
+            strategy_hint,
+        )
+    return None
+
+
+def _secondary_strategy_for_channel(channel_code: str, html_fetcher=None, search_fetcher=None):
+    strategy_map = {
+        "zhihu": ZhihuSecondarySearchDetailStrategy,
+        "xiaohongshu": XiaohongshuSecondarySearchDetailStrategy,
+        "weibo": WeiboSecondarySearchDetailStrategy,
+    }
+    strategy_cls = strategy_map.get(channel_code, SecondarySearchDetailStrategy)
+    return strategy_cls(search_fetcher=search_fetcher, article_fetcher=html_fetcher)
+
+
+def crawler_detail_runner(
+    info: Info,
+    html_fetcher=None,
+    strategy_hint: str = "",
+    search_fetcher=None,
+) -> DetailPipelineResult:
     """使用已注册渠道爬虫执行详情补偿，供 scheduler 默认调用。"""
 
     channel_code = info.channel.code if info.channel else ""
+    diagnostic_result = _credential_diagnostic_result(channel_code, strategy_hint)
+    if diagnostic_result:
+        return diagnostic_result
+
     crawler = crawler_registry.get(channel_code)
     if not crawler:
-        return DetailPipelineResult(
-            content="",
-            status="failed",
-            strategy="crawler_registry",
-            score=0,
-            content_length=0,
-            failure_reason="crawler_not_registered",
-            matched_rules=["crawler_not_registered"],
+        return _mark_strategy_hint(
+            DetailPipelineResult(
+                content="",
+                status="failed",
+                strategy="crawler_registry",
+                score=0,
+                content_length=0,
+                failure_reason="crawler_not_registered",
+                matched_rules=["crawler_not_registered"],
+            ),
+            strategy_hint,
         )
 
     with crawler_registry.get_lock(channel_code):
@@ -36,10 +108,17 @@ def crawler_detail_runner(info: Info, html_fetcher=None) -> DetailPipelineResult
     pipeline.status = status
     pipeline.failure_reason = error_msg or pipeline.failure_reason
     pipeline.content_length = len(pipeline.content or "")
-    if pipeline.status in {"complete", "partial"} and pipeline.content and pipeline.score >= 60:
+    pipeline = _mark_strategy_hint(pipeline, strategy_hint)
+    if _is_usable_detail_result(pipeline, strategy_hint):
         return pipeline
 
-    return DetailStrategyChain([HttpHtmlDetailStrategy(fetcher=html_fetcher)]).run(
+    fallback_strategies = []
+    if strategy_hint == "search_secondary_detail_source":
+        fallback_strategies.append(
+            _secondary_strategy_for_channel(channel_code, html_fetcher=html_fetcher, search_fetcher=search_fetcher)
+        )
+    fallback_strategies.append(HttpHtmlDetailStrategy(fetcher=html_fetcher))
+    fallback_result = DetailStrategyChain(fallback_strategies).run(
         DetailContext(
             title=info.title,
             list_content=info.content or "",
@@ -47,8 +126,10 @@ def crawler_detail_runner(info: Info, html_fetcher=None) -> DetailPipelineResult
             channel_code=channel_code,
             info_id=info.id,
             last_failure_reason=pipeline.failure_reason,
+            strategy_hint=strategy_hint,
         )
     )
+    return _mark_strategy_hint(fallback_result, strategy_hint)
 
 
 def _retry_delay(attempt_count: int) -> timedelta:
@@ -105,6 +186,12 @@ def _apply_failure(session, job: DetailJob, result: DetailPipelineResult):
     job.next_run_at = datetime.now() + _retry_delay(job.attempt_count)
 
 
+def _run_detail_runner(runner: DetailRunner, info: Info, job: DetailJob) -> DetailPipelineResult:
+    if runner is crawler_detail_runner:
+        return runner(info, strategy_hint=job.strategy_hint or "")
+    return runner(info)
+
+
 def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) -> dict:
     """执行待补偿详情任务，并更新任务状态、Info 详情字段和采集日志。"""
 
@@ -127,9 +214,9 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
 
         job.status = "running"
         job.attempt_count += 1
-        result = runner(info)
+        result = _run_detail_runner(runner, info, job)
 
-        if result.status in {"complete", "partial"} and result.content:
+        if _is_usable_detail_result(result, job.strategy_hint or ""):
             _apply_success(info, job, result)
             succeeded_count += 1
         else:
