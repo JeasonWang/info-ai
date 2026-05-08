@@ -1,51 +1,15 @@
--- 信息达人 Max 版本数据库迁移与初始化脚本
--- 适用数据库：MySQL 8.0+
--- 执行位置：建议在项目根目录执行
--- 执行命令：
---   mysql -uroot -p < info_aggregation/sql/mysql_migration_max.sql
---
--- 说明：
--- 1. 本脚本幂等设计，可用于空库初始化，也可用于已有 Pro/Max 库补齐字段和基础数据。
--- 2. 基础表结构复用当前已维护的 mysql_schema_pro.sql，该文件已包含 Max 当前使用的详情、调度、质量治理表。
--- 3. 初始化管理员账号：
+-- 信息达人 Max 版本 MySQL 初始化数据脚本
+-- 目标数据库：MySQL 8.x
+-- 职责边界：
+-- 1. 本文件只负责初始化必要数据，不负责创建表结构，不负责 ALTER 表结构。
+-- 2. 表结构请先执行 mysql_schema_pro.sql。
+-- 3. 本文件可重复执行，初始化数据使用幂等写法。
+-- 4. 默认管理员账号：
 --      邮箱：admin@info-daren.local
 --      默认密码：Admin123456
 --    仅供本地/首次部署初始化使用，生产环境首次登录后必须立即修改密码或使用 create-admin 工具覆盖。
 
-SOURCE info_aggregation/sql/mysql_schema_pro.sql;
-
 USE `info-max`;
-
--- ------------------------------------------------------------
--- Max 字段补齐：渠道采集间隔、调度版本、语义解析、逻辑删除等
--- ------------------------------------------------------------
-
-ALTER TABLE `channel`
-  ADD COLUMN IF NOT EXISTS `base_interval_minutes` INT NOT NULL DEFAULT 60 COMMENT '基础采集间隔，单位分钟，由管理后台配置' AFTER `crawl_interval`,
-  ADD COLUMN IF NOT EXISTS `hot_interval_minutes` INT NOT NULL DEFAULT 10 COMMENT '热点加速采集间隔，单位分钟' AFTER `base_interval_minutes`,
-  ADD COLUMN IF NOT EXISTS `min_interval_minutes` INT NOT NULL DEFAULT 3 COMMENT '允许的最小采集间隔，单位分钟' AFTER `hot_interval_minutes`,
-  ADD COLUMN IF NOT EXISTS `max_interval_minutes` INT NOT NULL DEFAULT 240 COMMENT '失败退避后的最大采集间隔，单位分钟' AFTER `min_interval_minutes`,
-  ADD COLUMN IF NOT EXISTS `manual_interval_enabled` TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用人工配置间隔：1启用，0禁用' AFTER `max_interval_minutes`,
-  ADD COLUMN IF NOT EXISTS `effective_interval_minutes` INT NOT NULL DEFAULT 60 COMMENT '当前实际生效采集间隔，单位分钟' AFTER `manual_interval_enabled`,
-  ADD COLUMN IF NOT EXISTS `schedule_version` INT NOT NULL DEFAULT 1 COMMENT '调度配置版本，用于调度器热更新' AFTER `effective_interval_minutes`;
-
-ALTER TABLE `info`
-  ADD COLUMN IF NOT EXISTS `detail_fetch_status` VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT '详情采集状态：pending/list_only/partial/complete/failed' AFTER `indicator_value`,
-  ADD COLUMN IF NOT EXISTS `detail_fetch_error` VARCHAR(500) NOT NULL DEFAULT '' COMMENT '详情采集失败原因' AFTER `detail_fetch_status`,
-  ADD COLUMN IF NOT EXISTS `detail_strategy` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '详情采集策略' AFTER `detail_fetch_error`,
-  ADD COLUMN IF NOT EXISTS `detail_score` INT NOT NULL DEFAULT 0 COMMENT '详情完整度评分，0-100' AFTER `detail_strategy`,
-  ADD COLUMN IF NOT EXISTS `detail_content_length` INT NOT NULL DEFAULT 0 COMMENT '详情正文长度' AFTER `detail_score`,
-  ADD COLUMN IF NOT EXISTS `detail_fetched_at` DATETIME NULL COMMENT '详情采集完成时间' AFTER `detail_content_length`,
-  ADD COLUMN IF NOT EXISTS `tech_topic_type` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '科技主题类型，例如编程、大模型、芯片' AFTER `detail_fetched_at`,
-  ADD COLUMN IF NOT EXISTS `tech_entities` VARCHAR(500) NOT NULL DEFAULT '' COMMENT '科技核心实体，使用逗号分隔' AFTER `tech_topic_type`,
-  ADD COLUMN IF NOT EXISTS `tech_keywords` VARCHAR(500) NOT NULL DEFAULT '' COMMENT '科技关键词，使用逗号分隔' AFTER `tech_entities`,
-  ADD COLUMN IF NOT EXISTS `is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常，1删除' AFTER `tech_keywords`;
-
-ALTER TABLE `event`
-  ADD COLUMN IF NOT EXISTS `event_key` VARCHAR(120) NULL COMMENT '事件稳定键：用于重建时识别同一热点事件' AFTER `id`;
-
-ALTER TABLE `crawl_task`
-  ADD COLUMN IF NOT EXISTS `schedule_version` INT NOT NULL DEFAULT 0 COMMENT '已同步的调度配置版本' AFTER `schedule_value`;
 
 -- ------------------------------------------------------------
 -- 基础分类初始化
@@ -138,7 +102,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `user_account` (`email`, `password_hash`, `display_name`, `role`, `status`, `email_verified_at`)
 VALUES (
   'admin@info-daren.local',
-  'pbkdf2_sha256$210000$AQ-7MQjxNsXn5LilKt-j9g$5lH1Ta5LSrAkValy-uN4HOoERhCpuQKfeKryaI80-f4',
+  'pbkdf2_sha256$210000$NXiTL/HJ37ndl7tJUadNUQ$HXhBu0gh3QNYIwlAwq/dYEmvJrTcu8aa4oArWZJZS9Y',
   '系统管理员',
   'admin',
   'active',
@@ -171,9 +135,9 @@ SELECT
 FROM (
   SELECT
     COUNT(*) AS `total_count`,
-    SUM(CASE WHEN COALESCE(`content`, '') = '' THEN 1 ELSE 0 END) AS `empty_content_count`,
-    SUM(CASE WHEN `detail_score` < 60 THEN 1 ELSE 0 END) AS `low_detail_score_count`,
-    SUM(CASE WHEN COALESCE(`core_entity`, '') = '' THEN 1 ELSE 0 END) AS `missing_entity_count`
+    COALESCE(SUM(CASE WHEN COALESCE(`content`, '') = '' THEN 1 ELSE 0 END), 0) AS `empty_content_count`,
+    COALESCE(SUM(CASE WHEN `detail_score` < 60 THEN 1 ELSE 0 END), 0) AS `low_detail_score_count`,
+    COALESCE(SUM(CASE WHEN COALESCE(`core_entity`, '') = '' THEN 1 ELSE 0 END), 0) AS `missing_entity_count`
   FROM `info`
 ) AS stats
 WHERE NOT EXISTS (
@@ -202,7 +166,7 @@ WHERE NOT EXISTS (
 );
 
 -- ------------------------------------------------------------
--- 迁移完成检查
+-- 初始化完成检查
 -- ------------------------------------------------------------
 
 SELECT 'category' AS `table_name`, COUNT(*) AS `row_count` FROM `category`

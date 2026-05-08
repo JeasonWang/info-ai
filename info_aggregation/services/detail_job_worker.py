@@ -67,9 +67,38 @@ def _apply_success(info: Info, job: DetailJob, result: DetailPipelineResult):
     job.last_failure_reason = ""
 
 
-def _apply_failure(job: DetailJob, result: DetailPipelineResult):
+def _merge_into_existing_failed_job(session, job: DetailJob, result: DetailPipelineResult) -> bool:
+    existing_failed = (
+        session.query(DetailJob)
+        .filter(
+            DetailJob.info_id == job.info_id,
+            DetailJob.status == "failed",
+            DetailJob.id != job.id,
+        )
+        .order_by(DetailJob.updated_at.desc(), DetailJob.id.desc())
+        .first()
+    )
+    if not existing_failed:
+        return False
+
+    existing_failed.channel_code = job.channel_code or existing_failed.channel_code
+    existing_failed.attempt_count = max(existing_failed.attempt_count or 0, job.attempt_count or 0)
+    existing_failed.max_attempts = max(existing_failed.max_attempts or 0, job.max_attempts or 0)
+    existing_failed.last_failure_reason = result.failure_reason or "detail_unavailable"
+    existing_failed.strategy_hint = job.strategy_hint or existing_failed.strategy_hint
+    existing_failed.next_run_at = job.next_run_at
+    existing_failed.updated_at = datetime.now()
+    job.status = f"merged_{job.id}"
+    job.last_failure_reason = "merged_into_existing_failed_job"
+    job.updated_at = datetime.now()
+    return True
+
+
+def _apply_failure(session, job: DetailJob, result: DetailPipelineResult):
     job.last_failure_reason = result.failure_reason or "detail_unavailable"
     if job.attempt_count >= job.max_attempts:
+        if _merge_into_existing_failed_job(session, job, result):
+            return
         job.status = "failed"
         return
     job.status = "pending"
@@ -104,7 +133,7 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
             _apply_success(info, job, result)
             succeeded_count += 1
         else:
-            _apply_failure(job, result)
+            _apply_failure(session, job, result)
             failed_count += 1
 
         session.add(

@@ -20,6 +20,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-root1234}
       DB_NAME: ${DB_NAME:-info-max}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: ${TZ:-Asia/Shanghai}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       ENABLE_SEED_DATA: ${ENABLE_SEED_DATA:-false}
       ZHIHU_COOKIE: ${ZHIHU_COOKIE:-}
       ZHIHU_ZSE_93: ${ZHIHU_ZSE_93:-}
@@ -47,6 +49,7 @@ services:
       INFO_AGGREGATION_BASE_URL: http://info-aggregation:8000
       INFO_ADMIN_EMAIL: ${INFO_ADMIN_EMAIL:-admin@info-daren.local}
       INFO_ADMIN_PASSWORD: ${INFO_ADMIN_PASSWORD:-Admin123456}
+      TZ: ${TZ:-Asia/Shanghai}
     depends_on:
       - info-aggregation
     extra_hosts:
@@ -61,6 +64,8 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     container_name: info-mvp
     restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "8082:80"
     depends_on:
@@ -75,6 +80,8 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     container_name: info-admin
     restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "8081:80"
     depends_on:

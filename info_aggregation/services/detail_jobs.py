@@ -4,6 +4,7 @@ from database import DetailJob, Info
 
 
 OPEN_DETAIL_JOB_STATUSES = {"pending", "running"}
+REUSABLE_DETAIL_JOB_STATUSES = {"failed", "cancelled"}
 
 
 def _needs_detail_job(info: Info) -> bool:
@@ -41,14 +42,33 @@ def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
     for info in candidates:
         if not _needs_detail_job(info):
             continue
-        existing = (
+        existing_open = (
             session.query(DetailJob)
             .filter(DetailJob.info_id == info.id, DetailJob.status.in_(OPEN_DETAIL_JOB_STATUSES))
             .first()
         )
-        if existing:
+        if existing_open:
             skipped_count += 1
             continue
+
+        reusable = (
+            session.query(DetailJob)
+            .filter(DetailJob.info_id == info.id, DetailJob.status.in_(REUSABLE_DETAIL_JOB_STATUSES))
+            .order_by(DetailJob.updated_at.desc(), DetailJob.id.desc())
+            .first()
+        )
+        if reusable:
+            reusable.status = "pending"
+            reusable.channel_code = info.channel.code if info.channel else reusable.channel_code
+            reusable.priority = 80 if (info.detail_score or 0) < 60 else 50
+            reusable.attempt_count = 0
+            reusable.max_attempts = 3
+            reusable.next_run_at = datetime.now()
+            reusable.last_failure_reason = _failure_reason(info)
+            reusable.strategy_hint = "auto"
+            created_count += 1
+            continue
+
         session.add(
             DetailJob(
                 info_id=info.id,

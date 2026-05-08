@@ -6,6 +6,7 @@ import logging
 import time
 import random
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -17,6 +18,7 @@ from config import (
     SCHEDULER_INTERNATIONAL_INTERVAL,
     SCHEDULER_TECH_INTERVAL,
     SCHEDULER_AI_INTERVAL,
+    APP_TIMEZONE,
     CATEGORY_HOT,
     CATEGORY_ECONOMY,
     CATEGORY_INTERNATIONAL,
@@ -35,6 +37,18 @@ from services.detail_job_worker import crawler_detail_runner, process_pending_de
 from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _scheduler_timezone() -> ZoneInfo:
+    try:
+        return ZoneInfo(APP_TIMEZONE)
+    except ZoneInfoNotFoundError:
+        logger.warning("无效时区配置 APP_TIMEZONE=%s，已回退到 Asia/Shanghai", APP_TIMEZONE)
+        return ZoneInfo("Asia/Shanghai")
+
+
+def _interval_trigger(**kwargs) -> IntervalTrigger:
+    return IntervalTrigger(timezone=_scheduler_timezone(), **kwargs)
 
 
 def _apply_info_semantics(info: Info, content: str):
@@ -631,7 +645,7 @@ def setup_scheduler() -> BackgroundScheduler:
     初始化并配置定时任务调度器
     返回: 配置好的BackgroundScheduler实例
     """
-    scheduler = BackgroundScheduler()
+    scheduler = BackgroundScheduler(timezone=_scheduler_timezone())
     session = get_session()
     try:
         _sync_crawl_tasks(session)
@@ -640,7 +654,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         crawl_hot,
-        trigger=IntervalTrigger(minutes=SCHEDULER_HOT_INTERVAL),
+        trigger=_interval_trigger(minutes=SCHEDULER_HOT_INTERVAL),
         id="crawl_hot",
         name="热点事件爬取",
         max_instances=1,
@@ -649,7 +663,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         crawl_economy,
-        trigger=IntervalTrigger(minutes=SCHEDULER_ECONOMY_INTERVAL),
+        trigger=_interval_trigger(minutes=SCHEDULER_ECONOMY_INTERVAL),
         id="crawl_economy",
         name="经济数据爬取",
         max_instances=1,
@@ -658,7 +672,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         crawl_international,
-        trigger=IntervalTrigger(minutes=SCHEDULER_INTERNATIONAL_INTERVAL),
+        trigger=_interval_trigger(minutes=SCHEDULER_INTERNATIONAL_INTERVAL),
         id="crawl_international",
         name="国际大事爬取",
         max_instances=1,
@@ -667,7 +681,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         crawl_tech,
-        trigger=IntervalTrigger(minutes=SCHEDULER_TECH_INTERVAL),
+        trigger=_interval_trigger(minutes=SCHEDULER_TECH_INTERVAL),
         id="crawl_tech",
         name="科技动向爬取",
         max_instances=1,
@@ -676,7 +690,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         crawl_ai,
-        trigger=IntervalTrigger(minutes=SCHEDULER_AI_INTERVAL),
+        trigger=_interval_trigger(minutes=SCHEDULER_AI_INTERVAL),
         id="crawl_ai",
         name="AI大模型动向爬取",
         max_instances=1,
@@ -685,7 +699,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         crawl_sports,
-        trigger=IntervalTrigger(minutes=60),
+        trigger=_interval_trigger(minutes=60),
         id="crawl_sports",
         name="体育新闻爬取",
         max_instances=1,
@@ -694,7 +708,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         cleanup_expired_infos,
-        trigger=IntervalTrigger(hours=24),
+        trigger=_interval_trigger(hours=24),
         id="cleanup_expired_infos",
         name="清理两周前历史数据",
         max_instances=1,
@@ -703,7 +717,7 @@ def setup_scheduler() -> BackgroundScheduler:
 
     scheduler.add_job(
         process_detail_jobs,
-        trigger=IntervalTrigger(minutes=10),
+        trigger=_interval_trigger(minutes=10),
         id="process_detail_jobs",
         name="详情补偿队列处理",
         max_instances=1,

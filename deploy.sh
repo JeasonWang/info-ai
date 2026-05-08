@@ -63,6 +63,8 @@ DB_USER=root
 DB_PASSWORD=${mysql_password}
 DB_NAME=info-max
 LOG_LEVEL=INFO
+TZ=Asia/Shanghai
+APP_TIMEZONE=Asia/Shanghai
 ENABLE_SEED_DATA=false
 
 # info-serve 配置
@@ -134,24 +136,8 @@ deploy_services() {
     ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d --remove-orphans --no-build
 }
 
-bootstrap_admin() {
-    echo "[5/6] 初始化管理员账号..."
-    local retries=12
-    local attempt=1
-    while [ "${attempt}" -le "${retries}" ]; do
-        if ${COMPOSE_CMD} -f "${COMPOSE_FILE}" exec -T info-serve sh -c './create-admin -email "$INFO_ADMIN_EMAIL" -password "$INFO_ADMIN_PASSWORD"'; then
-            return
-        fi
-        echo "  等待 info-serve 可用后重试管理员初始化 (${attempt}/${retries})..."
-        attempt=$((attempt + 1))
-        sleep 3
-    done
-
-    echo "错误: 管理员账号初始化失败，请查看日志: ${COMPOSE_CMD} -f ${COMPOSE_FILE} logs info-serve"
-}
-
 check_services() {
-    echo "[6/6] 检查服务状态..."
+    echo "[5/5] 检查服务状态..."
     sleep 8
 
     local failed=0
@@ -178,7 +164,6 @@ check_services() {
 check_runtime
 prepare_env
 deploy_services
-bootstrap_admin
 check_services
 
 PUBLIC_SITE_URL_VALUE=$(read_env_value "PUBLIC_SITE_URL")

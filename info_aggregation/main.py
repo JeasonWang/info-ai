@@ -5,10 +5,33 @@
 import os
 import sys
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import LOG_DIR, LOG_LEVEL, LOG_FORMAT, LOG_DATE_FORMAT, API_HOST, API_PORT
+from config import APP_TIMEZONE, LOG_DIR, LOG_LEVEL, LOG_FORMAT, LOG_DATE_FORMAT, API_HOST, API_PORT
+
+
+def _load_log_timezone() -> ZoneInfo:
+    try:
+        return ZoneInfo(APP_TIMEZONE)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("Asia/Shanghai")
+
+
+class TimezoneFormatter(logging.Formatter):
+    """按应用配置时区格式化日志时间，避免容器默认 UTC 影响日志可读性。"""
+
+    def __init__(self, fmt=None, datefmt=None):
+        super().__init__(fmt, datefmt)
+        self.timezone = _load_log_timezone()
+
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, self.timezone)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.isoformat(timespec="seconds")
 
 
 def setup_logging():
@@ -22,7 +45,7 @@ def setup_logging():
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
+    console_handler.setFormatter(TimezoneFormatter(LOG_FORMAT, LOG_DATE_FORMAT))
     root_logger.addHandler(console_handler)
 
     file_handler = logging.FileHandler(
@@ -30,7 +53,7 @@ def setup_logging():
         encoding="utf-8",
     )
     file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
+    file_handler.setFormatter(TimezoneFormatter(LOG_FORMAT, LOG_DATE_FORMAT))
     root_logger.addHandler(file_handler)
 
 
