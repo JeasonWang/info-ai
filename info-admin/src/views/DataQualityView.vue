@@ -16,13 +16,21 @@ import {
   refreshQuality,
   retryLowQualityDetails,
 } from '@/services/adminApi'
-import type { ChannelQualityItem, ChannelQualityReport, LowQualityInfo, QualitySnapshot } from '@/types/admin'
+import type {
+  AdminActionResult,
+  ChannelQualityItem,
+  ChannelQualityReport,
+  LowQualityInfo,
+  QualitySnapshot,
+  RetryLowQualitySelectedSample,
+} from '@/types/admin'
 
 const route = useRoute()
 const snapshots = ref<QualitySnapshot[]>([])
 const lowQualityInfos = ref<LowQualityInfo[]>([])
 const channelQuality = ref<ChannelQualityReport | null>(null)
 const actionMessage = ref('')
+const retrySamples = ref<RetryLowQualitySelectedSample[]>([])
 const isRunning = ref(false)
 const loadError = ref('')
 const channelPage = ref(1)
@@ -58,12 +66,14 @@ function pageSlice<T>(items: T[], page: number) {
   return items.slice(start, start + pageSize)
 }
 
-async function runAction(action: () => Promise<{ message: string }>) {
+async function runAction(action: () => Promise<AdminActionResult>) {
   isRunning.value = true
   actionMessage.value = '正在执行，请稍候...'
+  retrySamples.value = []
   try {
     const result = await action()
     actionMessage.value = result.message || '操作已提交'
+    retrySamples.value = result.data?.selected_samples || []
     await loadData()
   } catch (error) {
     actionMessage.value = error instanceof Error ? error.message : '操作失败'
@@ -109,6 +119,10 @@ function topStrategyText(item: ChannelQualityItem) {
   if (!item.top_detail_strategies.length) return '暂无详情策略'
   return item.top_detail_strategies.map((strategy) => `${strategy.strategy} ${strategy.count}`).join(' / ')
 }
+
+function riskReasonText(sample: { risk_reasons?: string[] }) {
+  return sample.risk_reasons?.length ? sample.risk_reasons.join(' / ') : '暂无风险原因'
+}
 </script>
 
 <template>
@@ -144,6 +158,16 @@ function topStrategyText(item: ChannelQualityItem) {
           <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(archiveDuplicateTitles)">归档重复标题</button>
         </div>
         <p class="action-message">{{ actionMessage || '操作顺序建议：先刷新质量，再重抓低完整详情，最后归档明显低质或重复内容。' }}</p>
+        <ul v-if="retrySamples.length" class="retry-sample-list">
+          <li v-for="sample in retrySamples" :key="sample.info_id">
+            <div>
+              <strong>{{ sample.title }}</strong>
+              <span>{{ sample.channel_code }} · 优先级 {{ sample.attention_priority }} · {{ sample.quality_level }}</span>
+            </div>
+            <small>{{ sample.quality_summary }}</small>
+            <small>动作：{{ sample.recommended_action }} · 原因：{{ riskReasonText(sample) }}</small>
+          </li>
+        </ul>
       </DataPanel>
 
       <DataPanel v-if="section === 'report'" title="渠道质量报告" :status="`${channelQuality?.channels.length ?? 0} 个渠道`">
@@ -169,8 +193,13 @@ function topStrategyText(item: ChannelQualityItem) {
             <ul v-if="item.weak_samples.length" class="weak-sample-list">
               <li v-for="sample in item.weak_samples" :key="sample.id">
                 <strong>{{ sample.title }}</strong>
-                <span>{{ sample.detail_fetch_status }} · {{ sample.detail_strategy || '无策略' }} · 质量 {{ sample.detail_score }} · {{ sample.detail_content_length }} 字</span>
-                <small>{{ sample.detail_fetch_error || '暂无失败原因' }}</small>
+                <span>
+                  {{ sample.detail_fetch_status }} · {{ sample.detail_strategy || '无策略' }} ·
+                  质量 {{ sample.detail_score }} · {{ sample.detail_content_length }} 字 ·
+                  优先级 {{ sample.attention_priority ?? '-' }}
+                </span>
+                <small>{{ sample.quality_summary || sample.detail_fetch_error || '暂无失败原因' }}</small>
+                <small>建议：{{ sample.recommended_action || '继续观察' }} · {{ riskReasonText(sample) }}</small>
               </li>
             </ul>
           </li>

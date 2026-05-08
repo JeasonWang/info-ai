@@ -40,6 +40,8 @@ def test_quality_profile_marks_complete_article_as_usable(session):
     assert profile.needs_attention is False
     assert profile.should_enqueue_detail_job is False
     assert profile.required_length >= 600
+    assert profile.attention_priority == 0
+    assert "核心来源" in profile.summary
 
 
 def test_quality_profile_requeues_short_article_even_with_medium_score(session):
@@ -57,6 +59,8 @@ def test_quality_profile_requeues_short_article_even_with_medium_score(session):
     assert profile.should_enqueue_detail_job is True
     assert "below_channel_required_length" in profile.risk_reasons
     assert profile.recommended_action == "retry_full_article_detail"
+    assert profile.attention_priority == 76
+    assert "完整文章" in profile.summary
 
 
 def test_quality_profile_identifies_anti_crawl_shell(session):
@@ -75,3 +79,4 @@ def test_quality_profile_identifies_anti_crawl_shell(session):
     assert profile.quality_level == "unusable"
     assert profile.should_enqueue_detail_job is True
     assert profile.recommended_action == "check_cookie_or_rendering_strategy"
+    assert profile.attention_priority == 95

@@ -102,11 +102,17 @@ const sourceCompare = computed(() => {
   return event.value.summaries.source_compare || event.value.summaries['来源对比'] || ''
 })
 
+const analysisConfidence = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.analysis_confidence || event.value.summaries['分析可信度'] || ''
+})
+
 const hasWhyMatters = computed(() => whyMatters.value.trim().length > 0)
 const hasLatestUpdate = computed(() => latestUpdate.value.trim().length > 0)
 const hasHeatReason = computed(() => heatReason.value.trim().length > 0)
 const hasRiskNotice = computed(() => riskNotice.value.trim().length > 0)
 const hasSourceCompare = computed(() => sourceCompare.value.trim().length > 0)
+const hasAnalysisConfidence = computed(() => analysisConfidence.value.trim().length > 0)
 
 const primarySource = computed(() => {
   if (!event.value) return null
@@ -257,6 +263,17 @@ function onShareAppMessage() {
         </view>
         <view class="fact-card fact-card--warning">
           <text class="fact-text">{{ riskNotice }}</text>
+        </view>
+      </view>
+
+      <!-- ========== 分析可信度 ========== -->
+      <view v-if="hasAnalysisConfidence" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-purple);" />
+          <text class="section-title">分析可信度</text>
+        </view>
+        <view class="fact-card">
+          <text class="fact-text">{{ analysisConfidence }}</text>
         </view>
       </view>
 

@@ -41,7 +41,7 @@ def test_enqueue_low_quality_detail_jobs_creates_pending_jobs(session):
     assert result == {"created_count": 1, "skipped_count": 0}
     job = session.query(DetailJob).one()
     assert job.status == "pending"
-    assert job.priority == 80
+    assert job.priority == 84
     assert job.attempt_count == 0
     assert job.channel_code == "36kr"
     assert job.last_failure_reason == "detail_list_only"
@@ -103,7 +103,7 @@ def test_enqueue_low_quality_detail_jobs_reuses_existing_failed_job(session):
     assert session.query(DetailJob).count() == 1
     job = session.get(DetailJob, failed_job.id)
     assert job.status == "pending"
-    assert job.priority == 80
+    assert job.priority == 88
     assert job.attempt_count == 0
     assert job.last_failure_reason == "detail_failed"
 
@@ -131,4 +131,4 @@ def test_enqueue_low_quality_detail_jobs_requeues_short_article_even_with_medium
     assert result == {"created_count": 1, "skipped_count": 0}
     job = session.query(DetailJob).one()
     assert job.last_failure_reason == "below_channel_required_length"
-    assert job.priority == 50
+    assert job.priority == 76

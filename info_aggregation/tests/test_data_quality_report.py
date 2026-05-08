@@ -293,6 +293,9 @@ def test_admin_retry_low_quality_details_api_groups_records_by_channel(session, 
     assert response.status_code == 200
     payload = response.json()["data"]
     assert payload["selected_count"] == 1
+    assert payload["selected_samples"][0]["info_id"] == weak_info.id
+    assert payload["selected_samples"][0]["attention_priority"] == 84
+    assert payload["selected_samples"][0]["recommended_action"]
     assert payload["detail_success_count"] == 1
     assert payload["detail_failed_count"] == 0
     assert calls == [("weibo", [weak_info.id])]

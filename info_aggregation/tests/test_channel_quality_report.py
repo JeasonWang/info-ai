@@ -66,4 +66,6 @@ def test_channel_quality_report_excludes_seed_and_surfaces_weak_samples(session)
     assert row["weak_samples"][0]["title"] == "弱事件"
     assert row["weak_samples"][0]["quality_level"] == "unusable"
     assert row["weak_samples"][0]["recommended_action"] == "check_cookie_or_rendering_strategy"
+    assert row["weak_samples"][0]["attention_priority"] == 95
+    assert "Cookie" in row["weak_samples"][0]["quality_summary"]
     assert row["top_failure_reasons"][0] == {"reason": "anti_crawl_blocked", "count": 1}

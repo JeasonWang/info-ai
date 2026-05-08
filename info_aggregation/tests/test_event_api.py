@@ -439,12 +439,14 @@ def test_get_event_returns_timeline_and_summaries(session):
     assert payload["summaries"]["heat_reason"]
     assert payload["summaries"]["risk_notice"]
     assert payload["summaries"]["source_compare"]
+    assert payload["summaries"]["analysis_confidence"]
     assert len(payload["representative_sources"]) >= 1
     assert payload["summaries"]["what_happened"] != payload["summaries"]["latest_update"]
     assert "推理" in payload["summaries"]["what_happened"] or "API" in payload["summaries"]["what_happened"]
     assert "OpenAI" in payload["summaries"]["why_it_matters"]
     assert "热点价值" in payload["summaries"]["heat_reason"]
     assert "持续校准" in payload["summaries"]["risk_notice"] or "暂未发现明显采集风险" in payload["summaries"]["risk_notice"]
+    assert "分析可信度" in payload["summaries"]["analysis_confidence"]
     assert "API" in payload["summaries"]["latest_update"] or "开发工具" in payload["summaries"]["latest_update"]
     assert payload["tech_context"]["topics"][0]["topic_type"] == "dev_tool" or payload["tech_context"]["topics"][0]["topic_type"] == "model_release"
     assert "OpenAI" in payload["tech_context"]["entities"]
@@ -462,6 +464,71 @@ def test_list_events_supports_keyword_filtering(session):
     payload = response.json()["data"]
     assert len(payload["items"]) == 1
     assert "OpenAI" in payload["items"][0]["title"]
+
+
+def test_rebuild_events_groups_related_titles_by_semantic_entity(session):
+    tech = Category(name="科技", code="tech", description="科技事件")
+    session.add(tech)
+    session.flush()
+
+    juejin = Channel(
+        name="掘金",
+        code="juejin",
+        base_url="https://juejin.cn",
+        category_id=tech.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    csdn = Channel(
+        name="CSDN",
+        code="csdn",
+        base_url="https://csdn.net",
+        category_id=tech.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add_all([juejin, csdn])
+    session.flush()
+
+    session.add_all(
+        [
+            Info(
+                title="OpenAI 发布新模型能力",
+                content="OpenAI 发布新模型后，开发者重点关注 API 接入节奏、推理性能和部署成本。" * 12,
+                category_id=tech.id,
+                channel_id=juejin.id,
+                source_id="semantic-event-1",
+                source_url="https://example.com/semantic-event-1",
+                event_time=datetime(2026, 5, 8, 9, 0, 0),
+                tech_entities="OpenAI,GPT-5",
+                tech_keywords="API,推理",
+                detail_fetch_status="complete",
+                detail_score=90,
+                detail_content_length=720,
+            ),
+            Info(
+                title="OpenAI 新模型价格方案曝光",
+                content="围绕 OpenAI 新模型价格方案，社区开始讨论调用成本、企业接入和模型推理效率。" * 12,
+                category_id=tech.id,
+                channel_id=csdn.id,
+                source_id="semantic-event-2",
+                source_url="https://example.com/semantic-event-2",
+                event_time=datetime(2026, 5, 8, 9, 30, 0),
+                tech_entities="OpenAI,GPT-5",
+                tech_keywords="价格,推理",
+                detail_fetch_status="complete",
+                detail_score=88,
+                detail_content_length=680,
+            ),
+        ]
+    )
+    session.commit()
+
+    rebuild_events(session)
+
+    event = session.query(Event).filter(Event.status == "active").one()
+    assert event.source_count == 2
+    assert "OpenAI" in event.title
 
 
 def test_list_events_supports_latest_sort(session):
@@ -522,6 +589,8 @@ def test_list_infos_returns_acquisition_quality_fields(session):
     assert target["detail_score"] == 86
     assert target["detail_content_length"] == 188
     assert target["detail_fetched_at"] == "2026-04-20 08:30:00"
+    assert target["acquisition_quality"]["quality_level"]
+    assert target["acquisition_quality"]["completeness_score"] > 0
     assert target["tech_topic_type"] == "model_release"
     assert target["tech_keywords"] == ["推理", "API"]
 
@@ -540,5 +609,6 @@ def test_get_info_returns_tech_semantic_fields(session):
 
     payload = response.json()["data"]
     assert payload["tech_topic_type"] == "dev_tool"
+    assert payload["acquisition_quality"]["summary"]
     assert payload["tech_entities"] == ["OpenAI", "MCP"]
     assert payload["tech_keywords"] == ["API", "开发工具"]

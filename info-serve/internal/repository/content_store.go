@@ -126,6 +126,7 @@ LIMIT ? OFFSET ?`,
 		if err != nil {
 			return content.InfoPage{}, err
 		}
+		content.ApplyInfoQuality(&item)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -161,6 +162,7 @@ LIMIT 1`,
 	if err != nil {
 		return content.InfoItem{}, err
 	}
+	content.ApplyInfoQuality(&item)
 	return item, nil
 }
 

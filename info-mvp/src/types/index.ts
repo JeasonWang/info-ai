@@ -59,6 +59,10 @@ export interface InfoItem {
   detail_score: number
   detail_content_length: number
   detail_fetched_at: string | null
+  quality_level?: string
+  quality_summary?: string
+  needs_attention?: boolean
+  attention_priority?: number
   tech_topic_type?: string | null
   tech_entities?: string[] | null
   tech_keywords?: string[] | null

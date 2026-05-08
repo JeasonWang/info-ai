@@ -75,6 +75,14 @@ export interface ChannelQualityWeakSample {
   detail_score: number
   detail_content_length: number
   detail_fetch_error: string
+  quality_level?: string
+  completeness_score?: number
+  value_score?: number
+  required_length?: number
+  attention_priority?: number
+  risk_reasons?: string[]
+  recommended_action?: string
+  quality_summary?: string
 }
 
 export interface ChannelQualityWeakChannel {
@@ -155,6 +163,24 @@ export interface LowQualityInfo {
   detail_content_length: number
   issue_reason: string
   updated_at: string
+}
+
+export interface RetryLowQualitySelectedSample {
+  info_id: number
+  title: string
+  channel_code: string
+  attention_priority: number
+  quality_level: string
+  risk_reasons: string[]
+  recommended_action: string
+  quality_summary: string
+}
+
+export interface RetryLowQualityActionData {
+  selected_count?: number
+  selected_samples?: RetryLowQualitySelectedSample[]
+  detail_success_count?: number
+  detail_failed_count?: number
 }
 
 export interface DetailJobFailureReason {
@@ -270,5 +296,5 @@ export interface AuditLog {
 export interface AdminActionResult {
   action: string
   message: string
-  data: Record<string, unknown>
+  data: RetryLowQualityActionData & Record<string, unknown>
 }

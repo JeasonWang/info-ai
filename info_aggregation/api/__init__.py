@@ -35,8 +35,15 @@ from services import (
 from services.data_quality import text_similarity
 from services.data_quality_report import save_data_quality_snapshot
 from services.detail_job_report import build_detail_job_report
+from services.acquisition_quality import build_acquisition_quality_profile, quality_profile_to_dict
 
 logger = logging.getLogger(__name__)
+
+
+def _info_with_quality(info: Info) -> dict:
+    data = info.to_dict()
+    data["acquisition_quality"] = quality_profile_to_dict(build_acquisition_quality_profile(info))
+    return data
 
 
 def _run_manual_crawl(channel_code: str):
@@ -484,7 +491,7 @@ def list_infos(
                 "total": total,
                 "page": page,
                 "page_size": page_size,
-                "items": [item.to_dict() for item in items],
+                "items": [_info_with_quality(item) for item in items],
             },
         }
     finally:
@@ -593,7 +600,7 @@ def get_info(info_id: int):
         return {
             "code": 0,
             "message": "success",
-            "data": info.to_dict(),
+            "data": _info_with_quality(info),
         }
     finally:
         session.close()
@@ -753,21 +760,37 @@ def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, descript
 
     session = get_session()
     try:
-        infos = (
+        candidates = (
             session.query(Info)
             .join(Channel, Channel.id == Info.channel_id)
             .filter(Info.is_deleted == 0)
-            .filter(
-                (Info.detail_fetch_status != "complete")
-                | (Info.detail_score < 80)
-                | (Info.detail_content_length < 120)
-                | (Info.content == None)
-                | (Info.content == "")
-            )
-            .order_by(Info.detail_score.asc(), Info.detail_content_length.asc(), Info.updated_at.desc())
-            .limit(limit)
+            .order_by(Info.updated_at.desc(), Info.id.desc())
+            .limit(limit * 5)
             .all()
         )
+        selected = []
+        for info in candidates:
+            profile = build_acquisition_quality_profile(info)
+            if not profile.should_enqueue_detail_job:
+                continue
+            selected.append((info, profile))
+
+        selected.sort(key=lambda item: (-item[1].attention_priority, item[1].completeness_score, item[0].id))
+        selected = selected[:limit]
+        infos = [info for info, _ in selected]
+        selected_samples = [
+            {
+                "info_id": info.id,
+                "title": info.title,
+                "channel_code": info.channel.code if info.channel else "",
+                "attention_priority": profile.attention_priority,
+                "quality_level": profile.quality_level,
+                "risk_reasons": profile.risk_reasons,
+                "recommended_action": profile.recommended_action,
+                "quality_summary": profile.summary,
+            }
+            for info, profile in selected
+        ]
         grouped_ids = {}
         for info in infos:
             channel_code = info.channel.code if info.channel else ""
@@ -803,6 +826,7 @@ def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, descript
             "message": "success",
             "data": {
                 "selected_count": len(infos),
+                "selected_samples": selected_samples,
                 "detail_success_count": total_success,
                 "detail_failed_count": total_failed,
                 "channel_results": channel_results,

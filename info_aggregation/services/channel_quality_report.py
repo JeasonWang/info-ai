@@ -50,8 +50,10 @@ def _sample(info: Info) -> dict:
         "completeness_score": profile.completeness_score,
         "value_score": profile.value_score,
         "required_length": profile.required_length,
+        "attention_priority": profile.attention_priority,
         "risk_reasons": profile.risk_reasons,
         "recommended_action": profile.recommended_action,
+        "quality_summary": profile.summary,
     }
 
 

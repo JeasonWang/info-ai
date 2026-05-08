@@ -6,6 +6,7 @@ from sqlalchemy import inspect
 
 from database import Event, EventItemLink, EventSummarySnapshot, EventTimelineEntry, Info
 from services.acquisition_quality import build_acquisition_quality_profile
+from services.data_quality import is_title_content_duplicate, normalize_text
 
 
 TECH_TOPIC_LABELS = {
@@ -16,8 +17,34 @@ TECH_TOPIC_LABELS = {
 
 
 def _build_event_key(item: Info) -> tuple[int, str]:
-    anchor = (item.core_entity or item.title[:16]).strip().lower()
+    anchor = _event_anchor(item)
     return item.category_id, anchor
+
+
+def _event_anchor(item: Info) -> str:
+    """为事件聚合选择稳定锚点，优先使用实体字段，弱化标题措辞差异。"""
+
+    for value in [item.core_entity, *_split_csv(item.tech_entities), *_split_csv(item.tech_keywords)]:
+        normalized = _normalize_anchor(value)
+        if normalized:
+            return normalized
+
+    title = normalize_text(item.title or "")
+    title = _remove_event_action_words(title)
+    return (title[:16] or normalize_text(item.title or "")[:16]).strip()
+
+
+def _normalize_anchor(value: str) -> str:
+    normalized = normalize_text(value)
+    if len(normalized) < 2:
+        return ""
+    return normalized[:24]
+
+
+def _remove_event_action_words(value: str) -> str:
+    for word in ("发布", "宣布", "回应", "通报", "曝光", "上线", "热搜", "价格", "方案", "能力", "新进展", "新版本"):
+        value = value.replace(word, "")
+    return value.strip(" ，。:：-—_")
 
 
 def _build_event_key_value(category_id: int, anchor: str) -> str:
@@ -36,15 +63,14 @@ def _text_similarity(left: str, right: str) -> float:
 
 
 def _is_low_quality_item(item: Info) -> bool:
-    content = _normalize_summary_text(item.content)
-    if item.detail_fetch_status in {"failed", "list_only"} and len(content) < 30:
+    profile = build_acquisition_quality_profile(item)
+    if profile.quality_level == "unusable":
         return True
-    if len(content) < 12:
-        return True
-    return _text_similarity(item.title, content) >= 0.94 and len(content) <= len(item.title) + 8
+    return is_title_content_duplicate(item.title or "", item.content or "")
 
 
 def _quality_score(item: Info) -> float:
+    profile = build_acquisition_quality_profile(item)
     content = _normalize_summary_text(item.content)
     status_bonus = {
         "complete": 45,
@@ -52,11 +78,12 @@ def _quality_score(item: Info) -> float:
         "list_only": 5,
         "failed": -40,
         "pending": 0,
-    }.get(item.detail_fetch_status or "", 0)
-    length_bonus = min(len(content) / 4, 35)
-    detail_score = (item.detail_score or 0) / 4
+    }.get(profile.status, 0)
+    completeness = profile.completeness_score * 0.45
+    value = profile.value_score * 0.35
+    freshness = profile.freshness_score * 0.1
     duplicate_penalty = 35 if _text_similarity(item.title, content) >= 0.9 else 0
-    return status_bonus + length_bonus + detail_score - duplicate_penalty
+    return status_bonus + completeness + value + freshness - duplicate_penalty
 
 
 def _split_csv(raw_value: str) -> list[str]:
@@ -228,6 +255,26 @@ def _build_source_compare(items: list[Info]) -> str:
     return "当前来源渠道信息不足，暂时无法形成可靠的来源对比。"
 
 
+def _build_analysis_confidence(items: list[Info]) -> str:
+    profiles = [build_acquisition_quality_profile(item) for item in items]
+    source_count = len({item.channel_id for item in items})
+    usable_count = sum(1 for profile in profiles if profile.usable)
+    complete_count = sum(1 for profile in profiles if profile.status == "complete" and profile.usable)
+    avg_completeness = round(sum(profile.completeness_score for profile in profiles) / max(len(profiles), 1))
+
+    if source_count >= 3 and complete_count >= 2 and avg_completeness >= 70:
+        level = "高"
+        reason = "多来源交叉验证较充分，代表来源正文完整度较好"
+    elif source_count >= 2 and usable_count >= 1:
+        level = "中"
+        reason = "已有可用来源支撑，但仍需要继续观察后续补充"
+    else:
+        level = "低"
+        reason = "来源数量或详情完整度不足，当前更适合作为线索跟踪"
+
+    return f"分析可信度：{level}。{reason}；当前平均完整度分为 {avg_completeness}。"
+
+
 def _load_existing_events(session) -> dict[str, Event]:
     """按稳定键加载已有事件，用于重建时复用原事件ID。"""
 
@@ -327,6 +374,12 @@ def rebuild_events(session, limit: int = 200):
                     event_id=event.id,
                     summary_type="source_compare",
                     content=_build_source_compare(group),
+                    version=1,
+                ),
+                EventSummarySnapshot(
+                    event_id=event.id,
+                    summary_type="analysis_confidence",
+                    content=_build_analysis_confidence(group),
                     version=1,
                 ),
             ]

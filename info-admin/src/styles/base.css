@@ -512,6 +512,28 @@ p {
   font-size: 13px;
 }
 
+.retry-sample-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.retry-sample-list li {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: #fffaf5;
+}
+
+.retry-sample-list span,
+.retry-sample-list small {
+  color: var(--muted);
+}
+
 .inline-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr)) 120px;

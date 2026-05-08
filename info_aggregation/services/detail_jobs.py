@@ -21,6 +21,11 @@ def _failure_reason(info: Info) -> str:
     return profile.recommended_action[:255]
 
 
+def _job_priority(info: Info) -> int:
+    profile = build_acquisition_quality_profile(info)
+    return profile.attention_priority or (80 if (info.detail_score or 0) < 60 else 50)
+
+
 def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
     """把低分或失败详情内容放入补偿队列，避免同一内容重复创建开放任务。"""
 
@@ -55,7 +60,7 @@ def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
         if reusable:
             reusable.status = "pending"
             reusable.channel_code = info.channel.code if info.channel else reusable.channel_code
-            reusable.priority = 80 if (info.detail_score or 0) < 60 else 50
+            reusable.priority = _job_priority(info)
             reusable.attempt_count = 0
             reusable.max_attempts = 3
             reusable.next_run_at = datetime.now()
@@ -69,7 +74,7 @@ def enqueue_low_quality_detail_jobs(session, limit: int = 100) -> dict:
                 info_id=info.id,
                 channel_code=info.channel.code if info.channel else "",
                 status="pending",
-                priority=80 if (info.detail_score or 0) < 60 else 50,
+                priority=_job_priority(info),
                 attempt_count=0,
                 max_attempts=3,
                 next_run_at=datetime.now(),

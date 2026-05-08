@@ -62,6 +62,10 @@ type InfoItem struct {
 	DetailScore         int      `json:"detail_score"`
 	DetailContentLength int      `json:"detail_content_length"`
 	DetailFetchedAt     string   `json:"detail_fetched_at"`
+	QualityLevel        string   `json:"quality_level"`
+	QualitySummary      string   `json:"quality_summary"`
+	NeedsAttention      bool     `json:"needs_attention"`
+	AttentionPriority   int      `json:"attention_priority"`
 	TechTopicType       string   `json:"tech_topic_type"`
 	TechEntities        []string `json:"tech_entities"`
 	TechKeywords        []string `json:"tech_keywords"`
@@ -131,6 +135,56 @@ func (s *Service) ListInfos(ctx context.Context, params ListInfoParams) (InfoPag
 
 func (s *Service) GetInfoDetail(ctx context.Context, id int64) (InfoItem, error) {
 	return s.store.GetInfoDetail(ctx, id)
+}
+
+func ApplyInfoQuality(item *InfoItem) {
+	contentLength := item.DetailContentLength
+	if contentLength == 0 {
+		contentLength = len([]rune(strings.TrimSpace(item.Content)))
+	}
+	status := strings.TrimSpace(item.DetailFetchStatus)
+
+	switch {
+	case status == "complete" && item.DetailScore >= 80 && contentLength >= 120:
+		item.QualityLevel = "excellent"
+		item.QualitySummary = "详情完整度高，可作为事件分析的核心来源。"
+		item.NeedsAttention = false
+		item.AttentionPriority = 0
+	case status == "complete" && item.DetailScore >= 60 && contentLength >= 80:
+		item.QualityLevel = "usable"
+		item.QualitySummary = "详情可用，但仍建议继续观察更多来源。"
+		item.NeedsAttention = false
+		item.AttentionPriority = 0
+	case status == "failed" || status == "list_only" || status == "pending" || item.DetailScore < 60 || contentLength < 80:
+		item.QualityLevel = "weak"
+		item.QualitySummary = "详情质量偏弱，系统需要继续补偿抓取。"
+		item.NeedsAttention = true
+		item.AttentionPriority = infoAttentionPriority(status, item.DetailScore, contentLength)
+	default:
+		item.QualityLevel = "usable"
+		item.QualitySummary = "详情基本可用，后续会随新增来源继续校准。"
+		item.NeedsAttention = false
+		item.AttentionPriority = 0
+	}
+}
+
+func infoAttentionPriority(status string, detailScore int, contentLength int) int {
+	switch {
+	case status == "failed":
+		return 88
+	case status == "list_only":
+		return 84
+	case status == "pending":
+		return 70
+	case contentLength == 0:
+		return 90
+	case contentLength < 80:
+		return 76
+	case detailScore < 60:
+		return 68
+	default:
+		return 50
+	}
 }
 
 func (s *Service) GetStats(ctx context.Context) (Stats, error) {

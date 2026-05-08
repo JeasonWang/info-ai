@@ -24,8 +24,10 @@ class AcquisitionQualityProfile:
     completeness_score: int
     value_score: int
     freshness_score: int
+    attention_priority: int
     risk_reasons: list[str]
     recommended_action: str
+    summary: str
 
 
 def build_acquisition_quality_profile(info: Info) -> AcquisitionQualityProfile:
@@ -47,6 +49,7 @@ def build_acquisition_quality_profile(info: Info) -> AcquisitionQualityProfile:
     usable = quality_level in {"excellent", "usable"}
     needs_attention = quality_level in {"weak", "unusable"}
     should_enqueue = needs_attention and "seed_data" not in risk_reasons
+    recommended_action = _recommended_action(risk_reasons, detail_profile.content_type)
 
     return AcquisitionQualityProfile(
         channel_code=channel_code,
@@ -62,9 +65,33 @@ def build_acquisition_quality_profile(info: Info) -> AcquisitionQualityProfile:
         completeness_score=completeness_score,
         value_score=value_score,
         freshness_score=freshness_score,
+        attention_priority=_attention_priority(risk_reasons, recommended_action, quality_level),
         risk_reasons=risk_reasons,
-        recommended_action=_recommended_action(risk_reasons, detail_profile.content_type),
+        recommended_action=recommended_action,
+        summary=_quality_summary(quality_level, risk_reasons, recommended_action),
     )
+
+
+def quality_profile_to_dict(profile: AcquisitionQualityProfile) -> dict:
+    return {
+        "channel_code": profile.channel_code,
+        "content_type": profile.content_type,
+        "status": profile.status,
+        "quality_level": profile.quality_level,
+        "usable": profile.usable,
+        "needs_attention": profile.needs_attention,
+        "should_enqueue_detail_job": profile.should_enqueue_detail_job,
+        "detail_score": profile.detail_score,
+        "content_length": profile.content_length,
+        "required_length": profile.required_length,
+        "completeness_score": profile.completeness_score,
+        "value_score": profile.value_score,
+        "freshness_score": profile.freshness_score,
+        "attention_priority": profile.attention_priority,
+        "risk_reasons": profile.risk_reasons,
+        "recommended_action": profile.recommended_action,
+        "summary": profile.summary,
+    }
 
 
 def _risk_reasons(info: Info, normalized_content: str, content_length: int, required_length: int) -> list[str]:
@@ -162,3 +189,39 @@ def _recommended_action(risk_reasons: list[str], content_type: str) -> str:
     if "low_detail_score" in risk_reasons:
         return "retry_detail_quality_pipeline"
     return "keep_monitoring"
+
+
+def _attention_priority(risk_reasons: list[str], recommended_action: str, quality_level: str) -> int:
+    if "seed_data" in risk_reasons or quality_level in {"excellent", "usable"}:
+        return 0
+    if "anti_crawl_or_shell_page" in risk_reasons:
+        return 95
+    if "empty_content" in risk_reasons:
+        return 90
+    if "detail_failed" in risk_reasons:
+        return 88
+    if "detail_list_only" in risk_reasons:
+        return 84
+    if recommended_action == "retry_full_article_detail":
+        return 76
+    if recommended_action == "search_secondary_detail_source":
+        return 72
+    if "low_detail_score" in risk_reasons:
+        return 68
+    return 50
+
+
+def _quality_summary(quality_level: str, risk_reasons: list[str], recommended_action: str) -> str:
+    if quality_level == "excellent":
+        return "详情完整度高，可作为事件分析的核心来源。"
+    if quality_level == "usable":
+        return "详情可用，但仍建议继续观察更多来源。"
+    if "anti_crawl_or_shell_page" in risk_reasons:
+        return "疑似登录、反爬或壳页面，需要检查 Cookie 或渲染策略。"
+    if "empty_content" in risk_reasons:
+        return "正文为空，需要重新抓取详情。"
+    if "detail_list_only" in risk_reasons:
+        return "当前仍是列表摘要，需要二次抓取详情页。"
+    if recommended_action == "retry_full_article_detail":
+        return "正文短于渠道完整标准，需要重抓完整文章。"
+    return "详情质量偏弱，需要进入补偿队列继续提升。"
