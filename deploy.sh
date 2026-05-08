@@ -63,6 +63,8 @@ DB_USER=root
 DB_PASSWORD=${mysql_password}
 DB_NAME=info-max
 LOG_LEVEL=INFO
+TZ=Asia/Shanghai
+APP_TIMEZONE=Asia/Shanghai
 ENABLE_SEED_DATA=false
 
 # info-serve 配置

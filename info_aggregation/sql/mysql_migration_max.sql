@@ -102,7 +102,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `user_account` (`email`, `password_hash`, `display_name`, `role`, `status`, `email_verified_at`)
 VALUES (
   'admin@info-daren.local',
-  'pbkdf2_sha256$210000$AQ-7MQjxNsXn5LilKt-j9g$5lH1Ta5LSrAkValy-uN4HOoERhCpuQKfeKryaI80-f4',
+  'pbkdf2_sha256$210000$NXiTL/HJ37ndl7tJUadNUQ$HXhBu0gh3QNYIwlAwq/dYEmvJrTcu8aa4oArWZJZS9Y',
   '系统管理员',
   'admin',
   'active',

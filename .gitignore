@@ -1,6 +1,7 @@
 .worktrees/
 .superpowers/
 .idea/
+.claude/
 
 # Python
 __pycache__/

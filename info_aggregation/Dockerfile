@@ -3,6 +3,8 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    TZ=Asia/Shanghai \
+    APP_TIMEZONE=Asia/Shanghai \
     DATA_DIR=/app/data \
     LOG_DIR=/app/data/logs \
     API_HOST=0.0.0.0 \
@@ -11,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

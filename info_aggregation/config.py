@@ -7,6 +7,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_ENV = os.getenv("APP_ENV", "local")
 DATA_DIR = os.getenv("DATA_DIR", BASE_DIR)
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", os.getenv("TZ", "Asia/Shanghai"))
 
 # ==================== 数据库配置 ====================
 DEFAULT_DB_TYPE = "sqlite" if APP_ENV == "test" else "mysql"

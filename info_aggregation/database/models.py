@@ -219,7 +219,7 @@ class DetailJob(Base):
     info = relationship("Info", lazy="joined")
 
     __table_args__ = (
-        UniqueConstraint("info_id", "status", name="uq_detail_job_info_status"),
+        Index("idx_detail_job_info_status", "info_id", "status"),
         Index("idx_detail_job_status_priority", "status", "priority", "next_run_at"),
         Index("idx_detail_job_channel_status", "channel_code", "status"),
     )

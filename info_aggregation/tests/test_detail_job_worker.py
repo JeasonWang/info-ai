@@ -80,6 +80,45 @@ def test_process_pending_detail_jobs_retries_failed_job(session):
     assert job.next_run_at is not None
 
 
+def test_process_pending_detail_jobs_merges_when_failed_job_already_exists(session):
+    info_id, pending_job_id = _seed_detail_job(session)
+    existing_failed = DetailJob(
+        info_id=info_id,
+        channel_code="36kr",
+        status="failed",
+        priority=80,
+        attempt_count=3,
+        max_attempts=3,
+        last_failure_reason="previous_failure",
+    )
+    session.add(existing_failed)
+    pending_job = session.get(DetailJob, pending_job_id)
+    pending_job.max_attempts = 1
+    session.commit()
+
+    def runner(info):
+        return DetailPipelineResult(
+            content="",
+            status="failed",
+            strategy="html_article",
+            score=0,
+            content_length=0,
+            failure_reason="empty_content",
+            matched_rules=["empty_content"],
+        )
+
+    result = process_pending_detail_jobs(session, runner=runner, limit=5)
+
+    assert result == {"succeeded_count": 0, "failed_count": 1}
+    pending_job = session.get(DetailJob, pending_job_id)
+    failed_job = session.get(DetailJob, existing_failed.id)
+    assert pending_job.status == f"merged_{pending_job_id}"
+    assert pending_job.last_failure_reason == "merged_into_existing_failed_job"
+    assert failed_job.status == "failed"
+    assert failed_job.last_failure_reason == "empty_content"
+    assert failed_job.attempt_count == 3
+
+
 class FakeCrawler:
     def safe_fetch_detail(self, source_url, item):
         pipeline = DetailPipelineResult(
