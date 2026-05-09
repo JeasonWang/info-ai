@@ -58,8 +58,10 @@ def natural_clip(text: str, max_length: int, min_length: int = 28) -> str:
     for sentence in sentences:
         if total + len(sentence) > max_length and total >= min_length:
             break
-        selected.append(sentence)
-        total += len(sentence)
+            # 修复字段过长超过数据库限制问题
+        if len(sentence) < max_length:
+            selected.append(sentence)
+            total += len(sentence)
     if selected:
         return ensure_sentence_end("".join(selected))
     return ensure_sentence_end(value[:max_length].rstrip("，,;；:：、"))
