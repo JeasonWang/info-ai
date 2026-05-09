@@ -29,13 +29,13 @@ from config import (
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
 from database import get_session, Channel, CrawlRunLog, CrawlTask, Info, InfoAcquisitionLog
-from services.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
+from services.quality.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
 from services import parse_tech_content, rebuild_events
-from services.data_quality_report import save_data_quality_snapshot
-from services.detail_jobs import enqueue_low_quality_detail_jobs
-from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
-from services.event_analysis_reanalysis import rebuild_stale_event_analysis
+from services.quality.data_quality_report import save_data_quality_snapshot
+from services.collection.detail_jobs import enqueue_low_quality_detail_jobs
+from services.collection.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
+from services.collection.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.analysis.event_analysis_reanalysis import rebuild_stale_event_analysis
 
 logger = logging.getLogger(__name__)
 

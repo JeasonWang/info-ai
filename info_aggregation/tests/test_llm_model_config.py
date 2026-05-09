@@ -1,7 +1,7 @@
 from datetime import date
 
 from database import LLMModelConfig
-from services.llm_model_config import (
+from services.analysis.llm_model_config import (
     create_llm_model_config,
     list_llm_model_configs,
     select_available_llm_config,

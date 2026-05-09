@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from database import DetailJob, Info
-from services.acquisition_quality import build_acquisition_quality_profile
+from services.collection.acquisition_quality import build_acquisition_quality_profile
 
 
 OPEN_DETAIL_JOB_STATUSES = {"pending", "running"}

@@ -1,5 +1,5 @@
 from database import Category, Channel, DetailJob, Info
-from services.detail_jobs import enqueue_low_quality_detail_jobs
+from services.collection.detail_jobs import enqueue_low_quality_detail_jobs
 
 
 def _seed_channel(session):

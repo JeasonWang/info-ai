@@ -17,7 +17,7 @@ from .sports_utils import (
     normalize_url,
     stable_source_id,
 )
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.collection.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class CctvSportsCrawler(BaseCrawler):

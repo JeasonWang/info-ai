@@ -1,7 +1,7 @@
 import re
 from html import unescape
 
-from services.detail_pipeline import DetailStrategyResult
+from services.collection.detail_pipeline import DetailStrategyResult
 
 
 class HtmlArticleExtractor:

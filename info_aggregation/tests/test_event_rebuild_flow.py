@@ -7,7 +7,7 @@ from api import app
 from crawlers.registry import crawler_registry
 from database import Category, Channel, Event, Info, InfoAcquisitionLog
 from scheduler import _fetch_details_for_items
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def test_admin_rebuild_events_refreshes_event_tables(session):

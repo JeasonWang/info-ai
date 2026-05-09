@@ -8,7 +8,7 @@ from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
 from config import CRAWLER_MAX_CONTENT_LENGTH
-from services.data_quality import content_fingerprint, is_low_quality_list_item
+from services.quality.data_quality import content_fingerprint, is_low_quality_list_item
 
 logger = logging.getLogger(__name__)
 

@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 
 from crawlers.registry import crawler_registry  # noqa: E402
 from main import register_all_crawlers, setup_logging  # noqa: E402
-from services.credential_provider import build_credential_report  # noqa: E402
+from services.collection.credential_provider import build_credential_report  # noqa: E402
 
 
 def audit_channels(channel_codes: list[str], limit: int = 3, fetch_detail: bool = True) -> dict:

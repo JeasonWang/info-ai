@@ -19,7 +19,7 @@ from config import (
     CATEGORY_SPORTS,
 )
 from services import rebuild_events
-from services.tech_content_parser import parse_tech_content
+from services.enrichment.tech_content_parser import parse_tech_content
 
 logger = logging.getLogger(__name__)
 

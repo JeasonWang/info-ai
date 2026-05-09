@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import time
 from typing import Protocol
 
-from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
+from services.collection.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
 
 
 @dataclass

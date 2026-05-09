@@ -1,8 +1,8 @@
 from collections import Counter, defaultdict
 
 from database import Channel, Info
-from services.acquisition_quality import build_acquisition_quality_profile
-from services.credential_provider import build_credential_report
+from services.collection.acquisition_quality import build_acquisition_quality_profile
+from services.collection.credential_provider import build_credential_report
 
 
 def _percent(count: int, total: int) -> float:

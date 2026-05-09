@@ -5,8 +5,8 @@
 继续影响事件构建和前端展示。
 """
 from database import Info
-from services.data_quality import is_low_quality_list_item, is_title_content_duplicate, is_unusable_detail_content
-from services.tech_content_parser import parse_tech_content
+from services.quality.data_quality import is_low_quality_list_item, is_title_content_duplicate, is_unusable_detail_content
+from services.enrichment.tech_content_parser import parse_tech_content
 
 
 def _normalize_dedupe_key(value: str) -> str:

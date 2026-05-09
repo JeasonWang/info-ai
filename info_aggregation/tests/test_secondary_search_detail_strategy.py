@@ -1,5 +1,5 @@
-from services.detail_strategy_chain import DetailContext, DetailStrategyChain
-from services.secondary_search_detail_strategy import (
+from services.collection.detail_strategy_chain import DetailContext, DetailStrategyChain
+from services.collection.secondary_search_detail_strategy import (
     SecondarySearchDetailStrategy,
     WeiboSecondarySearchDetailStrategy,
     XiaohongshuSecondarySearchDetailStrategy,

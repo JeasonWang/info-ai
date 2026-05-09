@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from api import app
 from database import Category, Channel, DetailJob, Info
-from services.detail_job_report import build_detail_job_report
+from services.quality.detail_job_report import build_detail_job_report
 
 
 def _seed_detail_job_report_data(session):

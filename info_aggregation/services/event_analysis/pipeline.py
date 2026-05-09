@@ -13,7 +13,7 @@ from .providers import build_llm_provider_from_config
 from .rule_provider import RuleEventAnalysisProvider
 from .schemas import EventAnalysisResult
 from .validator import normalize_result, validate_result
-from services.llm_model_config import (
+from services.analysis.llm_model_config import (
     record_llm_call_failure,
     record_llm_call_success,
     select_available_llm_config,

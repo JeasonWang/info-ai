@@ -2,8 +2,8 @@ from collections.abc import Callable
 
 import httpx
 
-from services.detail_pipeline import DetailStrategyResult
-from services.html_article_extractor import HtmlArticleExtractor
+from services.collection.detail_pipeline import DetailStrategyResult
+from services.collection.html_article_extractor import HtmlArticleExtractor
 
 
 HtmlFetcher = Callable[[str], str]

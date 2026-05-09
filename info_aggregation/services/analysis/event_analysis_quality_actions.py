@@ -1,8 +1,8 @@
 from datetime import datetime
 
 from database import DetailJob, Event, EventAnalysisRun, EventItemLink, Info
-from services.acquisition_quality import build_acquisition_quality_profile
-from services.detail_jobs import OPEN_DETAIL_JOB_STATUSES, REUSABLE_DETAIL_JOB_STATUSES
+from services.collection.acquisition_quality import build_acquisition_quality_profile
+from services.collection.detail_jobs import OPEN_DETAIL_JOB_STATUSES, REUSABLE_DETAIL_JOB_STATUSES
 
 
 def _latest_runs_by_event(session) -> dict[int, EventAnalysisRun]:

@@ -6,7 +6,7 @@ from api import app
 import api
 from crawlers.registry import crawler_registry
 from database import Category, Channel, Event, EventItemLink, Info
-from services.event_builder import rebuild_events
+from services.analysis.event_builder import rebuild_events
 
 
 def seed_event_data(session):

@@ -4,8 +4,8 @@ from fastapi.testclient import TestClient
 
 from api import app
 from database import Category, Channel, Event, Info
-from services.data_maintenance import archive_duplicate_title_infos, archive_low_quality_infos
-from services.data_quality_report import build_data_quality_report
+from services.quality.data_maintenance import archive_duplicate_title_infos, archive_low_quality_infos
+from services.quality.data_quality_report import build_data_quality_report
 
 
 def _seed_category_and_channel(session):

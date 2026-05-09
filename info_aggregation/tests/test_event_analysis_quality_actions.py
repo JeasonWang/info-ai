@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from database import Category, Channel, DetailJob, Event, EventAnalysisRun, EventItemLink, Info
-from services.event_analysis_quality_actions import enqueue_event_analysis_detail_jobs
+from services.analysis.event_analysis_quality_actions import enqueue_event_analysis_detail_jobs
 
 
 def test_enqueue_event_analysis_detail_jobs_targets_weak_sources_from_risk_events(session):

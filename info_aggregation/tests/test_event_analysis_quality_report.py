@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from database import Category, Channel, Event, EventAnalysisRun, EventItemLink, Info
-from services.event_analysis_quality_report import build_event_analysis_quality_report
+from services.analysis.event_analysis_quality_report import build_event_analysis_quality_report
 
 
 def test_event_analysis_quality_report_surfaces_low_confidence_and_weak_sources(session):

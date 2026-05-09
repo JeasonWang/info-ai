@@ -5,8 +5,8 @@ from urllib.parse import quote_plus, unquote, urlparse
 
 import httpx
 
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content
-from services.http_html_detail_strategy import HtmlFetcher, TrafilaturaArticleExtractor, default_httpx_fetcher
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content
+from services.collection.http_html_detail_strategy import HtmlFetcher, TrafilaturaArticleExtractor, default_httpx_fetcher
 
 
 SearchFetcher = Callable[[str], str]

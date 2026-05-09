@@ -12,7 +12,7 @@ from datetime import datetime
 import requests
 
 from config import CRAWLER_USER_AGENTS, CRAWLER_REQUEST_TIMEOUT, CRAWLER_RETRY_TIMES, CRAWLER_RETRY_INTERVAL
-from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.detail_pipeline import DetailPipelineResult, DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class BaseCrawler(ABC):

@@ -10,8 +10,8 @@ from datetime import datetime
 from xml.etree import ElementTree
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
-from services.html_article_extractor import HtmlArticleExtractor
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.html_article_extractor import HtmlArticleExtractor
 
 
 class ReutersCrawler(BaseCrawler):

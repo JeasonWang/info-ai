@@ -10,7 +10,7 @@ from database import (
     Info,
 )
 from services.event_analysis import analyze_event_sources
-from services.event_builder import rebuild_events
+from services.analysis.event_builder import rebuild_events
 
 
 def _seed_channel(session):
@@ -60,6 +60,32 @@ def test_rule_analysis_removes_page_metadata_and_generates_natural_summary(sessi
     assert "多层意图识别" in result.what_happened
     assert result.provider == "rule"
     assert result.timeline_points[0].summary.endswith(("。", "！", "？"))
+
+
+def test_rule_analysis_caps_long_unpunctuated_one_line_summary(session):
+    category, channel = _seed_channel(session)
+    long_content = (
+        "不少家长带未成年人观看景区展现海滨文化适不适合带娃观看是个人选择近日一段三亚千古情演出现场"
+        "舞者身着比基尼表演的画面引热议视频中台下可清晰听到未成年人声音不少网友质疑作为面向全年龄段的"
+        "商业演出存在争议记者搜索发现关于该段表演的争议并非近期才出现从2023年开始就有网友发布避雷帖"
+        "称带孩子观看时感到尴尬作为三亚标志性的旅游演艺项目目前表演服装已调整"
+    )
+    item = Info(
+        title="三亚千古情演出争议",
+        content=long_content,
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="long-one-line",
+        source_url="https://example.com/long-one-line",
+        event_time=datetime(2026, 5, 9, 10, 0, 0),
+        detail_fetch_status="complete",
+        detail_score=80,
+    )
+
+    result = analyze_event_sources([item])
+
+    assert len(result.one_line_summary) <= 220
+    assert result.one_line_summary.endswith(("。", "！", "？"))
 
 
 def test_rebuild_events_persists_analysis_runs_snapshots_and_timeline(session):

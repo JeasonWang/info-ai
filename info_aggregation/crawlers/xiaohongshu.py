@@ -9,8 +9,8 @@ from http.cookies import SimpleCookie
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.credential_provider import get_credential
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.credential_provider import get_credential
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class XiaohongshuCrawler(BaseCrawler):

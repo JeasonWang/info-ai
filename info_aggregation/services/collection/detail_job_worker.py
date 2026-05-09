@@ -3,17 +3,17 @@ from datetime import datetime, timedelta
 
 from database import DetailJob, Info, InfoAcquisitionLog
 from crawlers.registry import crawler_registry
-from services.credential_provider import build_credential_report
-from services.detail_pipeline import DetailPipelineResult
-from services.detail_strategy_chain import DetailContext, DetailStrategyChain
-from services.http_html_detail_strategy import HttpHtmlDetailStrategy
-from services.secondary_search_detail_strategy import (
+from services.collection.credential_provider import build_credential_report
+from services.collection.detail_pipeline import DetailPipelineResult
+from services.collection.detail_strategy_chain import DetailContext, DetailStrategyChain
+from services.collection.http_html_detail_strategy import HttpHtmlDetailStrategy
+from services.collection.secondary_search_detail_strategy import (
     SecondarySearchDetailStrategy,
     WeiboSecondarySearchDetailStrategy,
     XiaohongshuSecondarySearchDetailStrategy,
     ZhihuSecondarySearchDetailStrategy,
 )
-from services.event_analysis_reanalysis import mark_event_analysis_stale_for_info
+from services.analysis.event_analysis_reanalysis import mark_event_analysis_stale_for_info
 
 
 DetailRunner = Callable[..., DetailPipelineResult]

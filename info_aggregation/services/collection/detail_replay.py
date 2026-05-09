@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from services.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
-from services.html_article_extractor import HtmlArticleExtractor
+from services.collection.detail_pipeline import DetailPipelineResult, DetailStrategyResult, run_detail_pipeline
+from services.collection.html_article_extractor import HtmlArticleExtractor
 
 
 @dataclass

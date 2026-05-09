@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from services.detail_replay import load_replay_cases, run_replay_case
+from services.collection.detail_replay import load_replay_cases, run_replay_case
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "detail_replay"

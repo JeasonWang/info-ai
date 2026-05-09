@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
 from database import Info
-from services.data_quality import is_title_content_duplicate, is_unusable_detail_content, normalize_text
-from services.detail_pipeline import get_channel_detail_profile
+from services.quality.data_quality import is_title_content_duplicate, is_unusable_detail_content, normalize_text
+from services.collection.detail_pipeline import get_channel_detail_profile
 
 
 ARTICLE_CONTENT_TYPES = {"article", "qa", "sports_news", "finance_indicator"}

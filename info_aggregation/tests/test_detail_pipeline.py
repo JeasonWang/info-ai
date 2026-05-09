@@ -1,4 +1,4 @@
-from services.detail_pipeline import DetailStrategyResult, get_channel_detail_profile, run_detail_pipeline
+from services.collection.detail_pipeline import DetailStrategyResult, get_channel_detail_profile, run_detail_pipeline
 from crawlers.base import BaseCrawler
 
 

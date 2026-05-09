@@ -1,6 +1,6 @@
 from collections import Counter
 
-from services.acquisition_quality import build_acquisition_quality_profile
+from services.collection.acquisition_quality import build_acquisition_quality_profile
 
 from .schemas import EventAnalysisResult, EventFact, TimelinePoint
 from .text_utils import clean_source_text, ensure_sentence_end, natural_clip, remove_title_prefix, split_sentences, text_similarity

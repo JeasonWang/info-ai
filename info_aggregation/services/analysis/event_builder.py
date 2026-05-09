@@ -16,8 +16,8 @@ from database import (
     EventTimelineEntry,
     Info,
 )
-from services.acquisition_quality import build_acquisition_quality_profile
-from services.data_quality import is_title_content_duplicate, normalize_text
+from services.collection.acquisition_quality import build_acquisition_quality_profile
+from services.quality.data_quality import is_title_content_duplicate, normalize_text
 from services.event_analysis import analyze_event_sources
 
 

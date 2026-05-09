@@ -107,8 +107,6 @@ info_aggregation/
     enrichment/                   # 数据增强与语义解析
       tech_content_parser.py
 
-    *.py                          # 历史兼容入口，转发到上面的新目录
-
   scheduler/                      # APScheduler 调度
     __init__.py                   # due task 扫描、采集、详情补偿、分析重建
 
@@ -361,9 +359,17 @@ sequenceDiagram
 
 ---
 
-## 8. 兼容策略
+## 8. 导入规范
 
-本次架构整理移动了服务层文件，但保留了历史导入路径。例如：
+服务层已经按业务域拆分完成，旧的平铺兼容入口已删除。新代码必须直接引用新的分层路径：
+
+```python
+from services.collection.detail_pipeline import run_detail_pipeline
+from services.analysis.event_builder import rebuild_events
+from services.analysis.llm_model_config import list_llm_model_configs
+```
+
+不要再新增下面这类旧路径导入：
 
 ```python
 from services.detail_pipeline import run_detail_pipeline
@@ -371,19 +377,7 @@ from services.event_builder import rebuild_events
 from services.llm_model_config import list_llm_model_configs
 ```
 
-这些旧路径会转发到新的分层目录。这样做的目的：
-
-- 不破坏现有爬虫、调度器、测试和工具脚本。
-- 允许后续按模块逐步改成新路径。
-- 让新开发优先看新目录，不继续扩大旧的平铺结构。
-
-新代码建议直接使用新路径，例如：
-
-```python
-from services.collection.detail_pipeline import run_detail_pipeline
-from services.analysis.event_builder import rebuild_events
-from services.quality.data_quality import normalize_text
-```
+如果新增业务模块，优先判断它属于 `collection`、`quality`、`analysis`、`event_analysis` 还是 `enrichment`，不要继续在 `services/` 根目录新增业务文件。
 
 ---
 

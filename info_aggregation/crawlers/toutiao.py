@@ -9,7 +9,7 @@ from typing import Callable
 from urllib.parse import quote
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 RenderedFetcher = Callable[[str], str]

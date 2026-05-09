@@ -7,7 +7,7 @@
 from collections import Counter
 
 from database import DataQualitySnapshot, Event, Info
-from services.data_quality import is_low_quality_list_item, is_title_content_duplicate, normalize_text, text_similarity
+from services.quality.data_quality import is_low_quality_list_item, is_title_content_duplicate, normalize_text, text_similarity
 
 
 def _percent(count: int, total: int) -> float:

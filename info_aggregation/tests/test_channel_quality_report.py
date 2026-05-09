@@ -1,12 +1,12 @@
 from datetime import datetime
 
 from database import Category, Channel, Info
-from services.channel_quality_report import build_channel_quality_report
+from services.quality.channel_quality_report import build_channel_quality_report
 
 
 def test_channel_quality_report_excludes_seed_and_surfaces_weak_samples(session, monkeypatch):
     monkeypatch.setattr(
-        "services.channel_quality_report.build_credential_report",
+        "services.quality.channel_quality_report.build_credential_report",
         lambda channel_codes: {
             "weibo": {
                 "channel_code": "weibo",

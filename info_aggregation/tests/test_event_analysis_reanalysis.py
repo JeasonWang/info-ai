@@ -1,8 +1,8 @@
 from datetime import datetime
 
 from database import Category, Channel, DetailJob, Event, EventAnalysisRun, EventItemLink, Info
-from services.detail_job_worker import process_pending_detail_jobs
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_job_worker import process_pending_detail_jobs
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def test_detail_job_success_marks_linked_event_analysis_stale(session):

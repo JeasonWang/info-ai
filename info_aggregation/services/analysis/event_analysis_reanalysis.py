@@ -37,7 +37,7 @@ def rebuild_stale_event_analysis(session, limit: int = 200) -> dict:
     if stale_count <= 0:
         return {"stale_count": 0, "rebuilt": False, "event_count": 0}
 
-    from services.event_builder import rebuild_events
+    from services.analysis.event_builder import rebuild_events
     from database import Event
 
     rebuild_events(session, limit=limit)

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from crawlers.registry import crawler_registry
 from database import Category, Channel, CrawlRunLog, CrawlTask, DetailJob, Event, EventAnalysisRun, EventItemLink, Info, InfoAcquisitionLog
 from scheduler import _fetch_details_for_items, _save_crawled_data, crawl_by_category, process_detail_jobs
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def test_process_detail_jobs_enqueues_and_processes_low_quality_infos(session):

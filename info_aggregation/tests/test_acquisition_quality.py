@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from database import Category, Channel, Info
-from services.acquisition_quality import build_acquisition_quality_profile
+from services.collection.acquisition_quality import build_acquisition_quality_profile
 
 
 def _info(session, channel_code: str, **kwargs) -> Info:

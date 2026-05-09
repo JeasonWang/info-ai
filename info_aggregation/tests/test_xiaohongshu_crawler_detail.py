@@ -1,5 +1,5 @@
 from crawlers.xiaohongshu import XiaohongshuCrawler
-from services.detail_pipeline import DetailStrategyResult
+from services.collection.detail_pipeline import DetailStrategyResult
 
 
 def test_xiaohongshu_resolve_detail_uses_initial_state_note_content():

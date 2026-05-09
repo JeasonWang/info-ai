@@ -2,7 +2,7 @@ from datetime import datetime
 
 from database import Category, Channel, LLMCallLog, LLMModelConfig, Info
 from services.event_analysis import analyze_event_sources
-from services.llm_model_config import select_available_llm_config
+from services.analysis.llm_model_config import select_available_llm_config
 
 
 def _seed_info_and_config(session):
@@ -104,7 +104,7 @@ def test_event_analysis_opens_llm_circuit_after_repeated_failures(session, monke
             raise RuntimeError("qwen timeout")
 
     monkeypatch.setattr("services.event_analysis.pipeline.build_llm_provider_from_config", lambda selected: FailingProvider())
-    monkeypatch.setattr("services.llm_model_config.EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD", 2)
+    monkeypatch.setattr("services.analysis.llm_model_config.EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD", 2)
 
     analyze_event_sources([info], session=session)
     analyze_event_sources([info], session=session)

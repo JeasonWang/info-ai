@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class CSDNCrawler(BaseCrawler):

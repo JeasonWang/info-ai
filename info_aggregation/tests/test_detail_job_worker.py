@@ -1,7 +1,7 @@
 from database import Category, Channel, DetailJob, Info
 from crawlers.registry import crawler_registry
-from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def _seed_detail_job(session):
@@ -285,7 +285,7 @@ def test_crawler_detail_runner_uses_secondary_search_for_title_only_strategy(ses
 
 def test_crawler_detail_runner_reports_missing_cookie_for_cookie_strategy(session, monkeypatch):
     monkeypatch.setattr(
-        "services.detail_job_worker.build_credential_report",
+        "services.collection.detail_job_worker.build_credential_report",
         lambda channel_codes: {
             "weibo": {
                 "channel_code": "weibo",

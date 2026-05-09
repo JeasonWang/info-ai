@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from services.credential_provider import CredentialProvider, CredentialSpec, build_credential_report
+from services.collection.credential_provider import CredentialProvider, CredentialSpec, build_credential_report
 
 
 def test_credential_provider_prefers_environment_value(monkeypatch, tmp_path):

@@ -5,9 +5,9 @@ from database import Category, Channel, Info
 from scheduler import _save_crawled_data
 from scheduler import _fetch_details_for_items
 from crawlers.registry import crawler_registry
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 from sql.init_data import init_all_data, init_mock_data
-from services.data_maintenance import refresh_info_semantics
+from services.quality.data_maintenance import refresh_info_semantics
 from crawlers.sports_utils import extract_article_text
 
 

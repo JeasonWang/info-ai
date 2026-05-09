@@ -38,10 +38,10 @@ from services import (
 	refresh_info_semantics,
 	update_llm_model_config,
 )
-from services.data_quality import text_similarity
-from services.data_quality_report import save_data_quality_snapshot
-from services.detail_job_report import build_detail_job_report
-from services.acquisition_quality import build_acquisition_quality_profile, quality_profile_to_dict
+from services.quality.data_quality import text_similarity
+from services.quality.data_quality_report import save_data_quality_snapshot
+from services.quality.detail_job_report import build_detail_job_report
+from services.collection.acquisition_quality import build_acquisition_quality_profile, quality_profile_to_dict
 
 logger = logging.getLogger(__name__)
 
