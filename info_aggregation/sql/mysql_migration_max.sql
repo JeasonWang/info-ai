@@ -166,6 +166,28 @@ WHERE NOT EXISTS (
 );
 
 -- ------------------------------------------------------------
+-- 默认大模型配置：默认关闭，管理端填写 API Key 后启用
+-- ------------------------------------------------------------
+
+INSERT INTO `llm_model_config` (
+  `provider_name`, `provider_code`, `base_url`, `api_key`, `model_name`,
+  `is_enabled`, `daily_call_limit`, `daily_call_count`, `last_call_date`, `priority`,
+  `consecutive_failure_count`, `circuit_open_until`, `last_failure_reason`
+)
+VALUES
+  ('千问', 'qwen', 'http://127.0.0.1:8001/v1', '', 'qwen2.5-14b-instruct', 0, 1000, 0, CURRENT_DATE, 10, 0, NULL, ''),
+  ('DeepSeek', 'deepseek', 'https://api.deepseek.com/v1', '', 'deepseek-chat', 0, 1000, 0, CURRENT_DATE, 20, 0, NULL, '')
+ON DUPLICATE KEY UPDATE
+  `provider_name` = VALUES(`provider_name`),
+  `base_url` = VALUES(`base_url`),
+  `daily_call_limit` = VALUES(`daily_call_limit`),
+  `consecutive_failure_count` = 0,
+  `circuit_open_until` = NULL,
+  `last_failure_reason` = '',
+  `priority` = VALUES(`priority`),
+  `updated_at` = CURRENT_TIMESTAMP;
+
+-- ------------------------------------------------------------
 -- 初始化完成检查
 -- ------------------------------------------------------------
 
@@ -175,4 +197,6 @@ SELECT 'channel', COUNT(*) FROM `channel`
 UNION ALL
 SELECT 'crawl_task', COUNT(*) FROM `crawl_task`
 UNION ALL
-SELECT 'user_account', COUNT(*) FROM `user_account`;
+SELECT 'user_account', COUNT(*) FROM `user_account`
+UNION ALL
+SELECT 'llm_model_config', COUNT(*) FROM `llm_model_config`;

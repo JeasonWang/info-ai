@@ -5,6 +5,10 @@ from .data_maintenance import archive_duplicate_title_infos, archive_low_quality
 from .data_quality_report import build_data_quality_report
 from .channel_quality_report import build_channel_quality_report
 from .credential_provider import build_credential_report
+from .event_analysis_quality_report import build_event_analysis_quality_report
+from .event_analysis_quality_actions import enqueue_event_analysis_detail_jobs
+from .event_analysis_reanalysis import rebuild_stale_event_analysis
+from .llm_model_config import create_llm_model_config, list_llm_model_configs, update_llm_model_config
 
 __all__ = [
     "DetailPipelineResult",
@@ -15,6 +19,12 @@ __all__ = [
     "build_data_quality_report",
     "build_channel_quality_report",
     "build_credential_report",
+    "build_event_analysis_quality_report",
+    "enqueue_event_analysis_detail_jobs",
+    "rebuild_stale_event_analysis",
+    "create_llm_model_config",
+    "list_llm_model_configs",
+    "update_llm_model_config",
     "parse_tech_content",
     "refresh_info_semantics",
     "rebuild_events",

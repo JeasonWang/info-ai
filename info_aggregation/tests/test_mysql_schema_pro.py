@@ -17,6 +17,12 @@ def test_pro_mysql_schema_contains_core_tables_and_comments():
         "event_item_link",
         "event_timeline_entry",
         "event_summary_snapshot",
+        "event_analysis_run",
+        "event_fact_snapshot",
+        "event_analysis_snapshot",
+        "event_timeline_analysis",
+        "llm_model_config",
+        "llm_call_log",
         "user_account",
         "user_session",
         "user_favorite_event",
@@ -57,12 +63,16 @@ def test_pro_mysql_schema_uses_utf8mb4_and_innodb():
 def test_max_mysql_migration_contains_initial_data_and_tasks():
     migration = MAX_MIGRATION_PATH.read_text(encoding="utf-8")
 
-    assert "SOURCE info_aggregation/sql/mysql_schema_pro.sql;" in migration
+    assert "表结构请先执行 mysql_schema_pro.sql" in migration
+    assert "CREATE TABLE" not in migration
     assert "INSERT INTO `category`" in migration
     assert "INSERT INTO `channel`" in migration
     assert "INSERT INTO `crawl_task`" in migration
     assert "admin@info-daren.local" in migration
     assert "Admin123456" in migration
+    assert "llm_model_config" in migration
+    assert "qwen2.5-14b-instruct" in migration
+    assert "deepseek-chat" in migration
     assert "ON DUPLICATE KEY UPDATE" in migration
 
     for channel_code in [

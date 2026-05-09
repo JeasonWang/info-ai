@@ -41,6 +41,45 @@ func (r *fakeActionRunner) GetChannelQualityReport(ctx context.Context, sampleLi
 	}, nil
 }
 
+func (r *fakeActionRunner) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
+	r.action = "event_analysis_quality_report"
+	r.limit = limit
+	return map[string]any{
+		"summary": map[string]any{"low_confidence_count": 1},
+		"risk_events": []any{
+			map[string]any{"event_id": 1, "issue_reasons": []any{"low_confidence"}},
+		},
+	}, nil
+}
+
+func (r *fakeActionRunner) ListLLMModelConfigs(ctx context.Context) (any, error) {
+	r.action = "list_llm_model_configs"
+	return []any{map[string]any{"provider_code": "qwen"}}, nil
+}
+
+func (r *fakeActionRunner) CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error) {
+	r.action = "create_llm_model_config"
+	return payload, nil
+}
+
+func (r *fakeActionRunner) UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error) {
+	r.action = "update_llm_model_config"
+	payload["id"] = id
+	return payload, nil
+}
+
+func (r *fakeActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "event_analysis_detail_jobs"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已入队事件分析弱来源", Data: map[string]any{"limit": limit}}, nil
+}
+
+func (r *fakeActionRunner) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "rebuild_stale_event_analysis"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已处理过期事件分析", Data: map[string]any{"limit": limit}}, nil
+}
+
 func (r *fakeActionRunner) RebuildEvents(ctx context.Context) (ActionResult, error) {
 	r.action = "rebuild_events"
 	return ActionResult{Action: r.action, Message: "已重建事件"}, nil
@@ -360,6 +399,60 @@ func TestServiceRunsAdminActions(t *testing.T) {
 	}
 	if runner.limit != 50 {
 		t.Fatalf("retry limit = %d, want 50", runner.limit)
+	}
+
+	report, err := service.GetEventAnalysisQualityReport(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("GetEventAnalysisQualityReport returned error: %v", err)
+	}
+	if runner.action != "event_analysis_quality_report" {
+		t.Fatalf("action = %q, want event_analysis_quality_report", runner.action)
+	}
+	if runner.limit != 100 {
+		t.Fatalf("event analysis report limit = %d, want 100", runner.limit)
+	}
+	if report["summary"] == nil {
+		t.Fatalf("event analysis report missing summary: %+v", report)
+	}
+
+	configs, err := service.ListLLMModelConfigs(context.Background())
+	if err != nil {
+		t.Fatalf("ListLLMModelConfigs returned error: %v", err)
+	}
+	if runner.action != "list_llm_model_configs" || configs == nil {
+		t.Fatalf("llm configs action=%q configs=%+v", runner.action, configs)
+	}
+
+	created, err := service.CreateLLMModelConfig(context.Background(), LLMModelConfigPayload{
+		ProviderName: "千问", ProviderCode: "qwen", BaseURL: "http://127.0.0.1:8001/v1", ModelName: "qwen-local", IsEnabled: 1, DailyCallLimit: 10, Priority: 10,
+	})
+	if err != nil {
+		t.Fatalf("CreateLLMModelConfig returned error: %v", err)
+	}
+	if runner.action != "create_llm_model_config" || created == nil {
+		t.Fatalf("created llm config action=%q created=%+v", runner.action, created)
+	}
+
+	result, err = service.EnqueueEventAnalysisDetailJobs(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("EnqueueEventAnalysisDetailJobs returned error: %v", err)
+	}
+	if result.Action != "event_analysis_detail_jobs" {
+		t.Fatalf("action = %q, want event_analysis_detail_jobs", result.Action)
+	}
+	if runner.limit != 100 {
+		t.Fatalf("event analysis enqueue limit = %d, want 100", runner.limit)
+	}
+
+	result, err = service.RebuildStaleEventAnalysis(context.Background(), 2000)
+	if err != nil {
+		t.Fatalf("RebuildStaleEventAnalysis returned error: %v", err)
+	}
+	if result.Action != "rebuild_stale_event_analysis" {
+		t.Fatalf("action = %q, want rebuild_stale_event_analysis", result.Action)
+	}
+	if runner.limit != 1000 {
+		t.Fatalf("stale event analysis limit = %d, want 1000", runner.limit)
 	}
 }
 

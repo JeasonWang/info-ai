@@ -13,6 +13,7 @@ from services.secondary_search_detail_strategy import (
     XiaohongshuSecondarySearchDetailStrategy,
     ZhihuSecondarySearchDetailStrategy,
 )
+from services.event_analysis_reanalysis import mark_event_analysis_stale_for_info
 
 
 DetailRunner = Callable[..., DetailPipelineResult]
@@ -218,6 +219,7 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
 
         if _is_usable_detail_result(result, job.strategy_hint or ""):
             _apply_success(info, job, result)
+            mark_event_analysis_stale_for_info(session, info.id)
             succeeded_count += 1
         else:
             _apply_failure(session, job, result)

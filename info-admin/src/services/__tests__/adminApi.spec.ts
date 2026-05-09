@@ -6,18 +6,24 @@ import {
   batchCancelDetailJobs,
   cancelDetailJob,
   createChannel,
+  enqueueEventAnalysisDetailJobs,
   getAdminOverview,
   getAuditLogs,
   getChannelHealth,
   getChannelQualityReport,
+  getLLMModelConfigs,
   getDetailJob,
   getDetailJobReport,
+  getEventAnalysisQualityReport,
   getLowQualityInfos,
   rebuildEvents,
+  rebuildStaleEventAnalysis,
   retryDetailJob,
   refreshQuality,
   retryLowQualityDetails,
   triggerCrawlTask,
+  createLLMModelConfig,
+  updateLLMModelConfig,
 } from '@/services/adminApi'
 import { loginAdmin } from '@/services/authApi'
 
@@ -58,6 +64,40 @@ describe('admin API versioned paths', () => {
       expect.any(Object),
     )
 
+    await getLLMModelConfigs()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/llm-model-configs',
+      expect.any(Object),
+    )
+
+    const modelPayload = {
+      provider_name: '千问',
+      provider_code: 'qwen',
+      base_url: 'http://127.0.0.1:8001/v1',
+      api_key: '',
+      model_name: 'qwen-local',
+      is_enabled: 1,
+      daily_call_limit: 100,
+      daily_call_count: 0,
+      priority: 10,
+    }
+    await createLLMModelConfig(modelPayload)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/llm-model-configs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    await updateLLMModelConfig(3, modelPayload)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/llm-model-configs/3',
+      expect.objectContaining({ method: 'PUT' }),
+    )
+
+    await getEventAnalysisQualityReport(18)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/event-analysis-quality-report?limit=18',
+      expect.any(Object),
+    )
+
     await getLowQualityInfos(12)
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -92,6 +132,18 @@ describe('admin API versioned paths', () => {
     await retryLowQualityDetails(15)
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/admin/retry-low-quality-details?limit=15',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await enqueueEventAnalysisDetailJobs(16)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/event-analysis-detail-jobs?limit=16',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await rebuildStaleEventAnalysis(300)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/rebuild-stale-event-analysis?limit=300',
       expect.objectContaining({ method: 'POST' }),
     )
 

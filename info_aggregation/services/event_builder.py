@@ -1,12 +1,24 @@
 from collections import defaultdict
+from datetime import datetime
 from difflib import SequenceMatcher
 import hashlib
 
 from sqlalchemy import inspect
 
-from database import Event, EventItemLink, EventSummarySnapshot, EventTimelineEntry, Info
+from database import (
+    Event,
+    EventAnalysisRun,
+    EventAnalysisSnapshot,
+    EventFactSnapshot,
+    EventItemLink,
+    EventSummarySnapshot,
+    EventTimelineAnalysis,
+    EventTimelineEntry,
+    Info,
+)
 from services.acquisition_quality import build_acquisition_quality_profile
 from services.data_quality import is_title_content_duplicate, normalize_text
+from services.event_analysis import analyze_event_sources
 
 
 TECH_TOPIC_LABELS = {
@@ -325,6 +337,10 @@ def rebuild_events(session, limit: int = 200):
     session.query(EventItemLink).delete()
     session.query(EventTimelineEntry).delete()
     session.query(EventSummarySnapshot).delete()
+    session.query(EventTimelineAnalysis).delete()
+    session.query(EventAnalysisSnapshot).delete()
+    session.query(EventFactSnapshot).delete()
+    session.query(EventAnalysisRun).delete()
     session.query(Event).update({Event.status: "archived"}, synchronize_session="fetch")
     session.flush()
 
@@ -334,10 +350,11 @@ def rebuild_events(session, limit: int = 200):
         analysis_group = _analysis_ready_items(group)
         lead_item = analysis_group[0]
         latest_item = chronological_group[-1]
+        analysis = analyze_event_sources(analysis_group, chronological_group, session=session)
         event_key = _build_event_key_value(category_id, anchor)
         event = existing_events.get(event_key) or Event(event_key=event_key)
         event.title = lead_item.title
-        event.one_line_summary = _build_one_line(analysis_group)
+        event.one_line_summary = analysis.one_line_summary
         event.primary_category_id = lead_item.category_id
         event.status = "active"
         event.heat_score = min(100, 60 + len(prioritized_group) * 10)
@@ -351,6 +368,24 @@ def rebuild_events(session, limit: int = 200):
             session.add(event)
         session.flush()
 
+        analysis_run = EventAnalysisRun(
+            event_id=event.id,
+            analysis_version="v1",
+            mode=analysis.mode,
+            provider=analysis.provider,
+            model_name=analysis.model_name,
+            status="succeeded" if not analysis.failure_reason else "fallback",
+            input_item_count=len(analysis_group),
+            quality_score=analysis.quality_score,
+            confidence=analysis.confidence,
+            fallback_used=1 if analysis.fallback_used else 0,
+            failure_reason=analysis.failure_reason,
+            started_at=datetime.now(),
+            finished_at=datetime.now(),
+        )
+        session.add(analysis_run)
+        session.flush()
+
         session.add_all(
             [
                 EventSummarySnapshot(
@@ -362,47 +397,82 @@ def rebuild_events(session, limit: int = 200):
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="what_happened",
-                    content=_build_what_happened(analysis_group),
+                    content=analysis.what_happened,
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="why_it_matters",
-                    content=_build_why_it_matters(analysis_group),
+                    content=analysis.why_it_matters,
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="latest_update",
-                    content=_build_latest_update(chronological_group),
+                    content=analysis.latest_update,
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="heat_reason",
-                    content=_build_heat_reason(analysis_group),
+                    content=analysis.heat_reason,
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="risk_notice",
-                    content=_build_risk_notice(analysis_group),
+                    content=analysis.risk_notice,
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="source_compare",
-                    content=_build_source_compare(analysis_group),
+                    content=analysis.source_compare,
                     version=1,
                 ),
                 EventSummarySnapshot(
                     event_id=event.id,
                     summary_type="analysis_confidence",
-                    content=_build_analysis_confidence(analysis_group),
+                    content=analysis.analysis_confidence,
                     version=1,
                 ),
             ]
         )
+        for analysis_type, content in [
+            ("one_line", analysis.one_line_summary),
+            ("what_happened", analysis.what_happened),
+            ("why_it_matters", analysis.why_it_matters),
+            ("latest_update", analysis.latest_update),
+            ("heat_reason", analysis.heat_reason),
+            ("risk_notice", analysis.risk_notice),
+            ("source_compare", analysis.source_compare),
+            ("analysis_confidence", analysis.analysis_confidence),
+        ]:
+            session.add(
+                EventAnalysisSnapshot(
+                    event_id=event.id,
+                    run_id=analysis_run.id,
+                    analysis_type=analysis_type,
+                    content=content,
+                    provider=analysis.provider,
+                    model_name=analysis.model_name,
+                    quality_score=analysis.quality_score,
+                    confidence=analysis.confidence,
+                    version=1,
+                )
+            )
+        for fact in analysis.facts:
+            session.add(
+                EventFactSnapshot(
+                    event_id=event.id,
+                    run_id=analysis_run.id,
+                    fact_type=fact.fact_type,
+                    content=fact.content,
+                    source_item_id=fact.source_item_id,
+                    confidence=fact.confidence,
+                    evidence=fact.evidence,
+                )
+            )
 
         for index, item in enumerate(prioritized_group, start=1):
             session.add(
@@ -414,14 +484,26 @@ def rebuild_events(session, limit: int = 200):
                     weight=max(10, min(100, int(_quality_score(item)))),
                 )
             )
-        for index, item in enumerate(chronological_group, start=1):
+        for index, point in enumerate(analysis.timeline_points, start=1):
             session.add(
                 EventTimelineEntry(
                     event_id=event.id,
-                    occurred_at=item.event_time or item.created_at,
-                    summary=_clip_summary_text(item.content, 120),
-                    source_item_id=item.id,
-                    confidence=0.8,
+                    occurred_at=point.occurred_at,
+                    summary=point.summary,
+                    source_item_id=point.source_item_id,
+                    confidence=point.confidence,
+                    display_order=index,
+                )
+            )
+            session.add(
+                EventTimelineAnalysis(
+                    event_id=event.id,
+                    run_id=analysis_run.id,
+                    occurred_at=point.occurred_at,
+                    summary=point.summary,
+                    source_item_id=point.source_item_id,
+                    confidence=point.confidence,
+                    evidence=point.evidence,
                     display_order=index,
                 )
             )

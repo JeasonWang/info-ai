@@ -35,6 +35,7 @@ from services.data_quality_report import save_data_quality_snapshot
 from services.detail_jobs import enqueue_low_quality_detail_jobs
 from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
 from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.event_analysis_reanalysis import rebuild_stale_event_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -634,7 +635,12 @@ def process_detail_jobs(session=None, runner=None, enqueue_limit: int = 100, pro
             runner=runner or crawler_detail_runner,
             limit=process_limit,
         )
-        return {"enqueue": enqueue_result, "process": process_result}
+        reanalyze_result = (
+            rebuild_stale_event_analysis(session)
+            if process_result.get("succeeded_count", 0) > 0
+            else {"stale_count": 0, "rebuilt": False, "event_count": 0}
+        )
+        return {"enqueue": enqueue_result, "process": process_result, "reanalyze": reanalyze_result}
     finally:
         if owns_session:
             session.close()

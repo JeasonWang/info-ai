@@ -232,6 +232,18 @@ type ChannelPayload struct {
 	IsActive                 int    `json:"is_active"`
 }
 
+type LLMModelConfigPayload struct {
+	ProviderName   string `json:"provider_name"`
+	ProviderCode   string `json:"provider_code"`
+	BaseURL        string `json:"base_url"`
+	APIKey         string `json:"api_key"`
+	ModelName      string `json:"model_name"`
+	IsEnabled      int    `json:"is_enabled"`
+	DailyCallLimit int    `json:"daily_call_limit"`
+	DailyCallCount int    `json:"daily_call_count"`
+	Priority       int    `json:"priority"`
+}
+
 type AuditLog struct {
 	ID          int64  `json:"id"`
 	AdminUserID int64  `json:"admin_user_id"`
@@ -280,6 +292,59 @@ func (s *Service) GetChannelQualityReport(ctx context.Context, sampleLimit int) 
 		sampleLimit = 20
 	}
 	return s.runner.GetChannelQualityReport(ctx, sampleLimit)
+}
+
+func (s *Service) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.runner.GetEventAnalysisQualityReport(ctx, limit)
+}
+
+func (s *Service) ListLLMModelConfigs(ctx context.Context) (any, error) {
+	return s.runner.ListLLMModelConfigs(ctx)
+}
+
+func (s *Service) CreateLLMModelConfig(ctx context.Context, payload LLMModelConfigPayload) (any, error) {
+	normalized, err := normalizeLLMModelConfigPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	return s.runner.CreateLLMModelConfig(ctx, normalized)
+}
+
+func (s *Service) UpdateLLMModelConfig(ctx context.Context, id int64, payload LLMModelConfigPayload) (any, error) {
+	if id <= 0 {
+		return nil, ErrInvalidInput
+	}
+	normalized, err := normalizeLLMModelConfigPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	return s.runner.UpdateLLMModelConfig(ctx, id, normalized)
+}
+
+func (s *Service) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.runner.EnqueueEventAnalysisDetailJobs(ctx, limit)
+}
+
+func (s *Service) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	return s.runner.RebuildStaleEventAnalysis(ctx, limit)
 }
 
 func (s *Service) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
@@ -501,4 +566,34 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 		return ChannelPayload{}, ErrInvalidInput
 	}
 	return payload, nil
+}
+
+func normalizeLLMModelConfigPayload(payload LLMModelConfigPayload) (map[string]any, error) {
+	payload.ProviderName = strings.TrimSpace(payload.ProviderName)
+	payload.ProviderCode = strings.TrimSpace(payload.ProviderCode)
+	payload.BaseURL = strings.TrimSpace(payload.BaseURL)
+	payload.ModelName = strings.TrimSpace(payload.ModelName)
+	if payload.ProviderName == "" || payload.ProviderCode == "" || payload.ModelName == "" {
+		return nil, ErrInvalidInput
+	}
+	if payload.IsEnabled != 0 && payload.IsEnabled != 1 {
+		return nil, ErrInvalidInput
+	}
+	if payload.DailyCallLimit < 0 || payload.DailyCallCount < 0 || payload.Priority < 1 {
+		return nil, ErrInvalidInput
+	}
+	if len([]rune(payload.ProviderName)) > 50 || len([]rune(payload.ProviderCode)) > 50 || len([]rune(payload.BaseURL)) > 255 || len([]rune(payload.ModelName)) > 100 || len([]rune(payload.APIKey)) > 500 {
+		return nil, ErrInvalidInput
+	}
+	return map[string]any{
+		"provider_name":    payload.ProviderName,
+		"provider_code":    payload.ProviderCode,
+		"base_url":         payload.BaseURL,
+		"api_key":          payload.APIKey,
+		"model_name":       payload.ModelName,
+		"is_enabled":       payload.IsEnabled,
+		"daily_call_limit": payload.DailyCallLimit,
+		"daily_call_count": payload.DailyCallCount,
+		"priority":         payload.Priority,
+	}, nil
 }

@@ -173,6 +173,113 @@ CREATE TABLE IF NOT EXISTS `event_summary_snapshot` (
   KEY `idx_event_summary_lookup` (`event_id`, `summary_type`, `version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件摘要快照表：保存不同类型的事件摘要';
 
+CREATE TABLE IF NOT EXISTS `event_analysis_run` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件分析运行ID',
+  `event_id` BIGINT UNSIGNED NOT NULL COMMENT '事件ID，由代码约束关联event.id',
+  `analysis_version` VARCHAR(30) NOT NULL DEFAULT 'v1' COMMENT '分析版本',
+  `mode` VARCHAR(30) NOT NULL DEFAULT 'rule' COMMENT '分析模式：rule/hybrid/llm',
+  `provider` VARCHAR(50) NOT NULL DEFAULT 'rule' COMMENT '分析提供方',
+  `model_name` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '模型名称',
+  `status` VARCHAR(20) NOT NULL DEFAULT 'succeeded' COMMENT '运行状态：succeeded/fallback/failed',
+  `input_item_count` INT NOT NULL DEFAULT 0 COMMENT '输入来源数量',
+  `quality_score` DECIMAL(6,2) NOT NULL DEFAULT 0.00 COMMENT '分析质量分',
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '分析置信度',
+  `fallback_used` TINYINT NOT NULL DEFAULT 0 COMMENT '是否使用规则回退：1是，0否',
+  `failure_reason` VARCHAR(500) NOT NULL DEFAULT '' COMMENT '失败原因',
+  `started_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+  `finished_at` DATETIME NULL COMMENT '结束时间',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_event_analysis_run_event_time` (`event_id`, `created_at`),
+  KEY `idx_event_analysis_run_status` (`status`, `provider`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件分析运行表：记录规则或大模型分析的一次完整执行';
+
+CREATE TABLE IF NOT EXISTS `event_fact_snapshot` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件事实ID',
+  `event_id` BIGINT UNSIGNED NOT NULL COMMENT '事件ID，由代码约束关联event.id',
+  `run_id` BIGINT UNSIGNED NOT NULL COMMENT '分析运行ID，由代码约束关联event_analysis_run.id',
+  `fact_type` VARCHAR(50) NOT NULL COMMENT '事实类型',
+  `content` TEXT NULL COMMENT '事实内容',
+  `source_item_id` BIGINT UNSIGNED NULL COMMENT '来源内容ID，由代码约束关联info.id',
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '事实置信度',
+  `evidence` JSON NULL COMMENT '证据JSON',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_event_fact_event_type` (`event_id`, `fact_type`),
+  KEY `idx_event_fact_run` (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件事实快照表：保存从来源中抽取的关键事实和证据';
+
+CREATE TABLE IF NOT EXISTS `event_analysis_snapshot` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件分析快照ID',
+  `event_id` BIGINT UNSIGNED NOT NULL COMMENT '事件ID，由代码约束关联event.id',
+  `run_id` BIGINT UNSIGNED NOT NULL COMMENT '分析运行ID，由代码约束关联event_analysis_run.id',
+  `analysis_type` VARCHAR(50) NOT NULL COMMENT '分析类型',
+  `content` TEXT NULL COMMENT '分析内容',
+  `provider` VARCHAR(50) NOT NULL DEFAULT 'rule' COMMENT '分析提供方',
+  `model_name` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '模型名称',
+  `quality_score` DECIMAL(6,2) NOT NULL DEFAULT 0.00 COMMENT '质量分',
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '置信度',
+  `version` INT NOT NULL DEFAULT 1 COMMENT '版本号',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_event_analysis_snapshot_lookup` (`event_id`, `analysis_type`, `version`),
+  KEY `idx_event_analysis_snapshot_run` (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件分析快照表：保存结构化分析输出';
+
+CREATE TABLE IF NOT EXISTS `event_timeline_analysis` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件时间线分析ID',
+  `event_id` BIGINT UNSIGNED NOT NULL COMMENT '事件ID，由代码约束关联event.id',
+  `run_id` BIGINT UNSIGNED NOT NULL COMMENT '分析运行ID，由代码约束关联event_analysis_run.id',
+  `occurred_at` DATETIME NOT NULL COMMENT '节点发生时间',
+  `summary` VARCHAR(255) NOT NULL COMMENT '节点摘要',
+  `source_item_id` BIGINT UNSIGNED NULL COMMENT '来源内容ID，由代码约束关联info.id',
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '节点置信度',
+  `evidence` JSON NULL COMMENT '证据JSON',
+  `display_order` INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_event_timeline_analysis_event_time` (`event_id`, `occurred_at`),
+  KEY `idx_event_timeline_analysis_run` (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件时间线分析表：保存升级后的时间线节点';
+
+CREATE TABLE IF NOT EXISTS `llm_model_config` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '大模型配置ID',
+  `provider_name` VARCHAR(50) NOT NULL COMMENT '模型供应商名称，如千问、DeepSeek',
+  `provider_code` VARCHAR(50) NOT NULL COMMENT '模型供应商编码，如qwen、deepseek',
+  `base_url` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'OpenAI兼容接口地址',
+  `api_key` VARCHAR(500) NOT NULL DEFAULT '' COMMENT 'API密钥，由管理端维护，列表展示时必须脱敏',
+  `model_name` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '模型名称',
+  `is_enabled` TINYINT NOT NULL DEFAULT 0 COMMENT '是否启用：1启用，0停用',
+  `daily_call_limit` INT NOT NULL DEFAULT 0 COMMENT '每日调用上限，0表示不限',
+  `daily_call_count` INT NOT NULL DEFAULT 0 COMMENT '当日已调用次数',
+  `last_call_date` DATE NULL COMMENT '最近调用日期，用于每日计数重置',
+  `priority` INT NOT NULL DEFAULT 100 COMMENT '选择优先级，数值越小越优先',
+  `consecutive_failure_count` INT NOT NULL DEFAULT 0 COMMENT '连续失败次数，用于自动熔断',
+  `circuit_open_until` DATETIME NULL COMMENT '熔断结束时间，未到期前跳过该模型',
+  `last_failure_reason` VARCHAR(500) NOT NULL DEFAULT '' COMMENT '最近失败原因',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_llm_provider_model` (`provider_code`, `model_name`),
+  KEY `idx_llm_enabled_priority` (`is_enabled`, `priority`, `id`),
+  KEY `idx_llm_circuit_open_until` (`circuit_open_until`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型配置表：支持管理端维护多个事件分析模型';
+
+CREATE TABLE IF NOT EXISTS `llm_call_log` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '大模型调用日志ID',
+  `config_id` BIGINT UNSIGNED NOT NULL COMMENT '大模型配置ID，由代码约束关联llm_model_config.id',
+  `provider_code` VARCHAR(50) NOT NULL COMMENT '供应商编码',
+  `model_name` VARCHAR(100) NOT NULL COMMENT '模型名称',
+  `status` VARCHAR(20) NOT NULL COMMENT '调用状态：succeeded/failed',
+  `latency_ms` INT NOT NULL DEFAULT 0 COMMENT '调用耗时毫秒',
+  `input_item_count` INT NOT NULL DEFAULT 0 COMMENT '输入来源数量',
+  `error_message` VARCHAR(500) NOT NULL DEFAULT '' COMMENT '错误信息',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_llm_call_config_time` (`config_id`, `created_at`),
+  KEY `idx_llm_call_status_time` (`status`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型调用日志表：记录事件分析模型调用的成功、失败和耗时';
+
 CREATE TABLE IF NOT EXISTS `user_account` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户ID',
   `email` VARCHAR(255) NOT NULL COMMENT '邮箱地址，作为当前阶段的注册和登录账号',

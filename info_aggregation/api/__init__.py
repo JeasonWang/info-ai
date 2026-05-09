@@ -29,8 +29,14 @@ from services import (
 	build_channel_quality_report,
 	build_credential_report,
 	build_data_quality_report,
+	build_event_analysis_quality_report,
+	enqueue_event_analysis_detail_jobs,
+	rebuild_stale_event_analysis,
+	create_llm_model_config,
+	list_llm_model_configs,
 	rebuild_events,
 	refresh_info_semantics,
+	update_llm_model_config,
 )
 from services.data_quality import text_similarity
 from services.data_quality_report import save_data_quality_snapshot
@@ -265,6 +271,18 @@ class ChannelPayload(BaseModel):
     manual_interval_enabled: int = Field(default=1, ge=0, le=1)
     effective_interval_minutes: int = Field(default=60, ge=1)
     is_active: int = Field(default=1, ge=0, le=1)
+
+
+class LLMModelConfigPayload(BaseModel):
+    provider_name: str = Field(..., min_length=1, max_length=50)
+    provider_code: str = Field(..., min_length=1, max_length=50)
+    base_url: str = Field(default="", max_length=255)
+    api_key: str = Field(default="", max_length=500)
+    model_name: str = Field(..., min_length=1, max_length=100)
+    is_enabled: int = Field(default=0, ge=0, le=1)
+    daily_call_limit: int = Field(default=0, ge=0)
+    daily_call_count: int = Field(default=0, ge=0)
+    priority: int = Field(default=100, ge=1)
 
 
 def _apply_channel_schedule_config(channel: Channel, payload: ChannelPayload):
@@ -504,6 +522,52 @@ def admin_update_channel(channel_id: int, payload: ChannelPayload):
             "code": 0,
             "message": "success",
             "data": channel.to_dict(),
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/llm-model-configs")
+def admin_list_llm_model_configs():
+    """返回大模型配置列表，API Key 脱敏展示。"""
+    session = get_session()
+    try:
+        return {
+            "code": 0,
+            "message": "success",
+            "data": list_llm_model_configs(session),
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/llm-model-configs")
+def admin_create_llm_model_config(payload: LLMModelConfigPayload):
+    """新增大模型配置。"""
+    session = get_session()
+    try:
+        config = create_llm_model_config(session, payload.model_dump())
+        return {
+            "code": 0,
+            "message": "success",
+            "data": next(item for item in list_llm_model_configs(session) if item["id"] == config.id),
+        }
+    finally:
+        session.close()
+
+
+@app.put("/api/admin/llm-model-configs/{config_id}")
+def admin_update_llm_model_config(config_id: int, payload: LLMModelConfigPayload):
+    """更新大模型配置；api_key 为空时保留原密钥。"""
+    session = get_session()
+    try:
+        config = update_llm_model_config(session, config_id, payload.model_dump())
+        if not config:
+            raise HTTPException(status_code=404, detail="大模型配置不存在")
+        return {
+            "code": 0,
+            "message": "success",
+            "data": next(item for item in list_llm_model_configs(session) if item["id"] == config.id),
         }
     finally:
         session.close()
@@ -928,6 +992,56 @@ def admin_channel_quality_report(
             "code": 0,
             "message": "success",
             "data": build_channel_quality_report(session, sample_limit=sample_limit),
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/event-analysis-quality-report")
+def admin_event_analysis_quality_report(
+    limit: int = Query(20, ge=1, le=100, description="返回的风险事件数量"),
+):
+    """返回事件分析质量报告，帮助运营发现低置信度、回退和弱来源事件。"""
+    session = get_session()
+    try:
+        return {
+            "code": 0,
+            "message": "success",
+            "data": build_event_analysis_quality_report(session, limit=limit),
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/event-analysis-detail-jobs")
+def admin_enqueue_event_analysis_detail_jobs(
+    limit: int = Query(20, ge=1, le=100, description="本次最多入队的弱来源数量"),
+):
+    """将事件分析质量风险中的弱来源加入详情补偿队列。"""
+    session = get_session()
+    try:
+        result = enqueue_event_analysis_detail_jobs(session, limit=limit)
+        return {
+            "code": 0,
+            "message": "事件分析弱来源已加入详情补偿队列",
+            "data": result,
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/rebuild-stale-event-analysis")
+def admin_rebuild_stale_event_analysis(
+    limit: int = Query(200, ge=1, le=1000, description="事件重建最多读取的信息数量"),
+):
+    """手动处理过期事件分析，供运营在详情补偿后立即刷新事件摘要。"""
+    session = get_session()
+    try:
+        result = rebuild_stale_event_analysis(session, limit=limit)
+        return {
+            "code": 0,
+            "message": "过期事件分析已处理",
+            "data": result,
         }
     finally:
         session.close()

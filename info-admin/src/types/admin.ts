@@ -133,6 +133,44 @@ export interface ChannelQualityReport {
   channels: ChannelQualityItem[]
 }
 
+export interface EventAnalysisQualitySummary {
+  active_event_count: number
+  analyzed_count: number
+  missing_analysis_count: number
+  low_confidence_count: number
+  fallback_count: number
+  weak_source_event_count: number
+  avg_confidence: number
+  avg_quality_score: number
+  risk_event_count: number
+}
+
+export interface EventAnalysisRiskEvent {
+  event_id: number
+  title: string
+  one_line_summary: string
+  source_count: number
+  weak_source_count: number
+  issue_reasons: string[]
+  governance_advice: string[]
+  risk_score: number
+  run_id: number | null
+  mode: string
+  provider: string
+  model_name: string
+  status: string
+  quality_score: number
+  confidence: number
+  fallback_used: boolean
+  failure_reason: string
+  last_analyzed_at: string
+}
+
+export interface EventAnalysisQualityReport {
+  summary: EventAnalysisQualitySummary
+  risk_events: EventAnalysisRiskEvent[]
+}
+
 export interface AdminOverview {
   channel_count: number
   event_count: number
@@ -284,6 +322,41 @@ export interface ChannelPayload {
   manual_interval_enabled: number
   effective_interval_minutes: number
   is_active: number
+}
+
+export interface LLMModelConfig {
+  id: number
+  provider_name: string
+  provider_code: string
+  base_url: string
+  api_key: string
+  model_name: string
+  is_enabled: number
+  daily_call_limit: number
+  daily_call_count: number
+  last_call_date: string
+  priority: number
+  consecutive_failure_count: number
+  circuit_open_until: string
+  last_failure_reason: string
+  success_count: number
+  failure_count: number
+  avg_latency_ms: number
+  last_error_message: string
+  created_at: string
+  updated_at: string
+}
+
+export interface LLMModelConfigPayload {
+  provider_name: string
+  provider_code: string
+  base_url: string
+  api_key: string
+  model_name: string
+  is_enabled: number
+  daily_call_limit: number
+  daily_call_count: number
+  priority: number
 }
 
 export interface AuditLog {

@@ -63,6 +63,33 @@ func (h *AdminHandler) ChannelQualityReport(w http.ResponseWriter, r *http.Reque
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) EventAnalysisQualityReport(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.GetEventAnalysisQualityReport(r.Context(), queryLimit(r))
+	if err != nil {
+		response.InternalServerError(w, "事件分析质量报告查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) EnqueueEventAnalysisDetailJobs(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.EnqueueEventAnalysisDetailJobs(r.Context(), queryLimit(r))
+	if err != nil {
+		writeAdminActionError(w, err, "事件分析弱来源入队失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) RebuildStaleEventAnalysis(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.RebuildStaleEventAnalysis(r.Context(), queryLimit(r))
+	if err != nil {
+		writeAdminActionError(w, err, "过期事件分析处理失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListQualitySnapshots(r.Context(), queryLimit(r))
 	if err != nil {
@@ -159,6 +186,48 @@ func (h *AdminHandler) Channels(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListChannels(r.Context())
 	if err != nil {
 		response.InternalServerError(w, "渠道配置查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) LLMModelConfigs(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ListLLMModelConfigs(r.Context())
+	if err != nil {
+		response.InternalServerError(w, "大模型配置查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) CreateLLMModelConfig(w http.ResponseWriter, r *http.Request) {
+	var payload admin.LLMModelConfigPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.BadRequest(w, "请求参数格式错误")
+		return
+	}
+	result, err := h.service.CreateLLMModelConfig(r.Context(), payload)
+	if err != nil {
+		writeAdminConfigError(w, err, "大模型配置创建失败")
+		return
+	}
+	response.Created(w, result)
+}
+
+func (h *AdminHandler) UpdateLLMModelConfig(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(w, "配置ID不合法")
+		return
+	}
+	var payload admin.LLMModelConfigPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.BadRequest(w, "请求参数格式错误")
+		return
+	}
+	result, err := h.service.UpdateLLMModelConfig(r.Context(), id, payload)
+	if err != nil {
+		writeAdminConfigError(w, err, "大模型配置更新失败")
 		return
 	}
 	response.OK(w, result)

@@ -2,8 +2,8 @@
 信息聚合系统 - 数据库模型定义
 使用SQLAlchemy ORM定义渠道表、分类表、信息主表
 """
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint, JSON
+from datetime import date, datetime
+from sqlalchemy import Boolean, Column, Date, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -306,6 +306,149 @@ class EventSummarySnapshot(Base):
 
     __table_args__ = (
         Index("idx_event_summary_lookup", "event_id", "summary_type", "version"),
+    )
+
+
+class EventAnalysisRun(Base):
+    """事件分析运行表：记录规则或大模型分析的一次完整执行。"""
+
+    __tablename__ = "event_analysis_run"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件分析运行ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    analysis_version = Column(String(30), default="v1", nullable=False, comment="分析版本")
+    mode = Column(String(30), default="rule", nullable=False, comment="分析模式: rule/hybrid/llm")
+    provider = Column(String(50), default="rule", nullable=False, comment="分析提供方")
+    model_name = Column(String(100), default="", comment="模型名称")
+    status = Column(String(20), default="succeeded", nullable=False, comment="运行状态")
+    input_item_count = Column(Integer, default=0, comment="输入来源数量")
+    quality_score = Column(Float, default=0.0, comment="分析质量分")
+    confidence = Column(Float, default=0.0, comment="分析置信度")
+    fallback_used = Column(Integer, default=0, comment="是否使用规则回退")
+    failure_reason = Column(String(500), default="", comment="失败原因")
+    started_at = Column(DateTime, default=datetime.now, comment="开始时间")
+    finished_at = Column(DateTime, comment="结束时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_analysis_run_event_time", "event_id", "created_at"),
+        Index("idx_event_analysis_run_status", "status", "provider"),
+    )
+
+
+class EventFactSnapshot(Base):
+    """事件事实快照表：保存从来源中抽取的关键事实和证据。"""
+
+    __tablename__ = "event_fact_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件事实ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，由代码约束关联event_analysis_run.id")
+    fact_type = Column(String(50), nullable=False, comment="事实类型")
+    content = Column(Text, default="", comment="事实内容")
+    source_item_id = Column(Integer, comment="来源内容ID，由代码约束关联info.id")
+    confidence = Column(Float, default=0.0, comment="事实置信度")
+    evidence = Column(JSON, comment="证据JSON")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_fact_event_type", "event_id", "fact_type"),
+        Index("idx_event_fact_run", "run_id"),
+    )
+
+
+class EventAnalysisSnapshot(Base):
+    """事件分析快照表：保存结构化分析输出。"""
+
+    __tablename__ = "event_analysis_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件分析快照ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，由代码约束关联event_analysis_run.id")
+    analysis_type = Column(String(50), nullable=False, comment="分析类型")
+    content = Column(Text, default="", comment="分析内容")
+    provider = Column(String(50), default="rule", nullable=False, comment="分析提供方")
+    model_name = Column(String(100), default="", comment="模型名称")
+    quality_score = Column(Float, default=0.0, comment="质量分")
+    confidence = Column(Float, default=0.0, comment="置信度")
+    version = Column(Integer, default=1, comment="版本号")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_analysis_snapshot_lookup", "event_id", "analysis_type", "version"),
+        Index("idx_event_analysis_snapshot_run", "run_id"),
+    )
+
+
+class EventTimelineAnalysis(Base):
+    """事件时间线分析表：保存升级后的时间线节点。"""
+
+    __tablename__ = "event_timeline_analysis"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件时间线分析ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，由代码约束关联event_analysis_run.id")
+    occurred_at = Column(DateTime, nullable=False, comment="节点发生时间")
+    summary = Column(String(255), nullable=False, comment="节点摘要")
+    source_item_id = Column(Integer, comment="来源内容ID，由代码约束关联info.id")
+    confidence = Column(Float, default=0.0, comment="节点置信度")
+    evidence = Column(JSON, comment="证据JSON")
+    display_order = Column(Integer, default=0, comment="展示顺序")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_timeline_analysis_event_time", "event_id", "occurred_at"),
+        Index("idx_event_timeline_analysis_run", "run_id"),
+    )
+
+
+class LLMModelConfig(Base):
+    """大模型配置表：支持管理端维护多个事件分析模型。"""
+
+    __tablename__ = "llm_model_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="大模型配置ID")
+    provider_name = Column(String(50), nullable=False, comment="模型供应商名称")
+    provider_code = Column(String(50), nullable=False, comment="模型供应商编码")
+    base_url = Column(String(255), default="", nullable=False, comment="OpenAI兼容接口地址")
+    api_key = Column(String(500), default="", comment="API密钥")
+    model_name = Column(String(100), default="", nullable=False, comment="模型名称")
+    is_enabled = Column(Integer, default=0, nullable=False, comment="是否启用: 1启用 0停用")
+    daily_call_limit = Column(Integer, default=0, nullable=False, comment="每日调用上限，0表示不限")
+    daily_call_count = Column(Integer, default=0, nullable=False, comment="当日已调用次数")
+    last_call_date = Column(Date, default=date.today, comment="最近调用日期")
+    priority = Column(Integer, default=100, nullable=False, comment="选择优先级，数值越小越优先")
+    consecutive_failure_count = Column(Integer, default=0, nullable=False, comment="连续失败次数，用于自动熔断")
+    circuit_open_until = Column(DateTime, comment="熔断结束时间，未到期前跳过该模型")
+    last_failure_reason = Column(String(500), default="", comment="最近失败原因")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        UniqueConstraint("provider_code", "model_name", name="uq_llm_provider_model"),
+        Index("idx_llm_enabled_priority", "is_enabled", "priority", "id"),
+        Index("idx_llm_circuit_open_until", "circuit_open_until"),
+    )
+
+
+class LLMCallLog(Base):
+    """大模型调用日志表：记录事件分析模型调用的成功、失败和耗时。"""
+
+    __tablename__ = "llm_call_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="大模型调用日志ID")
+    config_id = Column(Integer, nullable=False, comment="大模型配置ID，由代码约束关联llm_model_config.id")
+    provider_code = Column(String(50), nullable=False, comment="供应商编码")
+    model_name = Column(String(100), nullable=False, comment="模型名称")
+    status = Column(String(20), nullable=False, comment="调用状态: succeeded/failed")
+    latency_ms = Column(Integer, default=0, nullable=False, comment="调用耗时毫秒")
+    input_item_count = Column(Integer, default=0, nullable=False, comment="输入来源数量")
+    error_message = Column(String(500), default="", comment="错误信息")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_llm_call_config_time", "config_id", "created_at"),
+        Index("idx_llm_call_status_time", "status", "created_at"),
     )
 
 

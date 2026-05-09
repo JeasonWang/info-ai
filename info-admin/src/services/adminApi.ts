@@ -14,6 +14,9 @@ import type {
   CrawlTask,
   DetailJobDetail,
   DetailJobReport,
+  EventAnalysisQualityReport,
+  LLMModelConfig,
+  LLMModelConfigPayload,
   LowQualityInfo,
   QualitySnapshot,
 } from '@/types/admin'
@@ -32,6 +35,10 @@ export function getChannelHealth() {
 
 export function getChannelQualityReport(sampleLimit = 5) {
   return apiRequest<ChannelQualityReport>(apiV1(`/admin/channel-quality-report?sample_limit=${sampleLimit}`))
+}
+
+export function getEventAnalysisQualityReport(limit = 20) {
+  return apiRequest<EventAnalysisQualityReport>(apiV1(`/admin/event-analysis-quality-report?limit=${limit}`))
 }
 
 export function getQualitySnapshots(limit = 20) {
@@ -109,6 +116,24 @@ export function updateChannel(id: number, payload: ChannelPayload) {
   })
 }
 
+export function getLLMModelConfigs() {
+  return apiRequest<LLMModelConfig[]>(apiV1('/admin/llm-model-configs'))
+}
+
+export function createLLMModelConfig(payload: LLMModelConfigPayload) {
+  return apiRequest<LLMModelConfig>(apiV1('/admin/llm-model-configs'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateLLMModelConfig(id: number, payload: LLMModelConfigPayload) {
+  return apiRequest<LLMModelConfig>(apiV1(`/admin/llm-model-configs/${id}`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function triggerCrawlTask(channelCode: string) {
   return apiRequest<AdminActionResult>(apiV1(`/admin/crawl-tasks/${encodeURIComponent(channelCode)}/trigger`), {
     method: 'POST',
@@ -129,6 +154,18 @@ export function refreshQuality() {
 
 export function retryLowQualityDetails(limit = 20) {
   return apiRequest<AdminActionResult>(apiV1(`/admin/retry-low-quality-details?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
+export function enqueueEventAnalysisDetailJobs(limit = 20) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/event-analysis-detail-jobs?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
+export function rebuildStaleEventAnalysis(limit = 200) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/rebuild-stale-event-analysis?limit=${limit}`), {
     method: 'POST',
   })
 }

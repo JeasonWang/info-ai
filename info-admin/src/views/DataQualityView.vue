@@ -10,9 +10,12 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import {
   archiveDuplicateTitles,
   archiveLowQualityInfos,
+  enqueueEventAnalysisDetailJobs,
   getChannelQualityReport,
+  getEventAnalysisQualityReport,
   getLowQualityInfos,
   getQualitySnapshots,
+  rebuildStaleEventAnalysis,
   refreshQuality,
   retryLowQualityDetails,
 } from '@/services/adminApi'
@@ -20,6 +23,8 @@ import type {
   AdminActionResult,
   ChannelQualityItem,
   ChannelQualityReport,
+  EventAnalysisQualityReport,
+  EventAnalysisRiskEvent,
   LowQualityInfo,
   QualitySnapshot,
   RetryLowQualitySelectedSample,
@@ -29,6 +34,7 @@ const route = useRoute()
 const snapshots = ref<QualitySnapshot[]>([])
 const lowQualityInfos = ref<LowQualityInfo[]>([])
 const channelQuality = ref<ChannelQualityReport | null>(null)
+const eventAnalysisQuality = ref<EventAnalysisQualityReport | null>(null)
 const actionMessage = ref('')
 const retrySamples = ref<RetryLowQualitySelectedSample[]>([])
 const isRunning = ref(false)
@@ -42,23 +48,27 @@ const section = computed(() => String(route.meta.section || 'report'))
 const tabs = [
   { to: '/data-quality/report', label: '渠道质量', description: '完整率、可用率、凭证' },
   { to: '/data-quality/snapshots', label: '质量快照', description: '分类维度趋势' },
+  { to: '/data-quality/event-analysis', label: '事件分析质量', description: '置信度、回退、弱来源' },
   { to: '/data-quality/low-quality', label: '低质量内容', description: '待重抓样本' },
   { to: '/data-quality/actions', label: '治理工具', description: '刷新、重抓、归档' },
 ]
 const pagedChannels = computed(() => pageSlice(channelQuality.value?.channels || [], channelPage.value))
+const riskEvents = computed(() => eventAnalysisQuality.value?.risk_events || [])
 const pagedSnapshots = computed(() => pageSlice(snapshots.value, snapshotPage.value))
 const pagedLowQualityInfos = computed(() => pageSlice(lowQualityInfos.value, lowQualityPage.value))
 
 async function loadData() {
   loadError.value = ''
-  const [snapshotItems, lowQualityItems, channelQualityReport] = await Promise.all([
+  const [snapshotItems, lowQualityItems, channelQualityReport, eventAnalysisReport] = await Promise.all([
     getQualitySnapshots(50),
     getLowQualityInfos(50),
     getChannelQualityReport(5),
+    getEventAnalysisQualityReport(50),
   ])
   snapshots.value = snapshotItems
   lowQualityInfos.value = lowQualityItems
   channelQuality.value = channelQualityReport
+  eventAnalysisQuality.value = eventAnalysisReport
 }
 
 function pageSlice<T>(items: T[], page: number) {
@@ -123,6 +133,25 @@ function topStrategyText(item: ChannelQualityItem) {
 function riskReasonText(sample: { risk_reasons?: string[] }) {
   return sample.risk_reasons?.length ? sample.risk_reasons.join(' / ') : '暂无风险原因'
 }
+
+function eventIssueText(item: EventAnalysisRiskEvent) {
+  const labels: Record<string, string> = {
+    missing_analysis: '缺少分析',
+    llm_or_analysis_fallback: '模型回退',
+    low_confidence: '置信度低',
+    low_quality_score: '质量分低',
+    fallback_used: '已使用兜底',
+    weak_sources: '弱来源',
+    empty_one_line_summary: '摘要为空',
+  }
+  return item.issue_reasons.map((reason) => labels[reason] || reason).join(' / ')
+}
+
+function eventRiskTone(item: EventAnalysisRiskEvent) {
+  if (item.risk_score >= 80) return 'warning'
+  if (item.risk_score >= 45) return 'muted'
+  return 'success'
+}
 </script>
 
 <template>
@@ -147,6 +176,11 @@ function riskReasonText(sample: { risk_reasons?: string[] }) {
         :value="channelQuality?.summary.needs_attention_count ?? 0"
         hint="失败、列表态、短正文或低评分内容"
       />
+      <MetricCard
+        label="分析风险"
+        :value="eventAnalysisQuality?.summary.risk_event_count ?? 0"
+        hint="低置信度、模型回退、弱来源或缺失分析事件"
+      />
     </section>
 
     <section class="panel-grid">
@@ -154,6 +188,7 @@ function riskReasonText(sample: { risk_reasons?: string[] }) {
         <div class="action-strip">
           <button type="button" :disabled="isRunning" @click="runAction(refreshQuality)">刷新质量</button>
           <button type="button" :disabled="isRunning" @click="runAction(() => retryLowQualityDetails(20))">重抓低完整详情</button>
+          <button type="button" :disabled="isRunning" @click="runAction(() => enqueueEventAnalysisDetailJobs(20))">补偿分析弱来源</button>
           <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(archiveLowQualityInfos)">归档低质量</button>
           <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(archiveDuplicateTitles)">归档重复标题</button>
         </div>
@@ -227,6 +262,59 @@ function riskReasonText(sample: { risk_reasons?: string[] }) {
         </ul>
         <PaginationControl v-model:page="snapshotPage" :page-size="pageSize" :total="snapshots.length" />
         <EmptyState v-if="!pagedSnapshots.length" title="暂无质量快照" description="质量任务写入后会展示质量变化。" />
+      </DataPanel>
+
+      <DataPanel
+        v-if="section === 'event-analysis'"
+        title="事件分析质量"
+        :status="`${eventAnalysisQuality?.summary.risk_event_count ?? 0} 个风险事件`"
+      >
+        <div class="action-strip action-strip--compact">
+          <button type="button" :disabled="isRunning" @click="runAction(() => enqueueEventAnalysisDetailJobs(20))">
+            入队弱来源补偿
+          </button>
+          <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(refreshQuality)">
+            重建分析质量
+          </button>
+          <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(() => rebuildStaleEventAnalysis(200))">
+            处理过期分析
+          </button>
+        </div>
+        <div class="quality-summary-strip">
+          <span>活跃事件 {{ eventAnalysisQuality?.summary.active_event_count ?? 0 }}</span>
+          <span>已分析 {{ eventAnalysisQuality?.summary.analyzed_count ?? 0 }}</span>
+          <span>缺失分析 {{ eventAnalysisQuality?.summary.missing_analysis_count ?? 0 }}</span>
+          <span>低置信度 {{ eventAnalysisQuality?.summary.low_confidence_count ?? 0 }}</span>
+          <span>模型回退 {{ eventAnalysisQuality?.summary.fallback_count ?? 0 }}</span>
+          <span>平均质量 {{ eventAnalysisQuality?.summary.avg_quality_score ?? 0 }}</span>
+        </div>
+        <ul v-if="riskEvents.length" class="data-list event-analysis-list">
+          <li v-for="item in riskEvents" :key="item.event_id">
+            <div class="event-analysis-main">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.one_line_summary || '暂无一句话摘要' }}</span>
+              <small>
+                来源 {{ item.source_count }} · 弱来源 {{ item.weak_source_count }} ·
+                质量 {{ item.quality_score }} · 置信度 {{ item.confidence }} ·
+                {{ item.provider || '未分析' }} {{ item.model_name }}
+              </small>
+            </div>
+            <div class="channel-quality-badges">
+              <StatusBadge :label="eventIssueText(item)" :tone="eventRiskTone(item)" />
+              <StatusBadge :label="item.status" :tone="item.fallback_used ? 'warning' : 'success'" />
+            </div>
+            <div class="channel-quality-detail">
+              <span>治理建议：{{ item.governance_advice.join(' / ') }}</span>
+              <span v-if="item.failure_reason">失败原因：{{ item.failure_reason }}</span>
+              <span v-if="item.last_analyzed_at">分析时间：{{ item.last_analyzed_at }}</span>
+            </div>
+          </li>
+        </ul>
+        <EmptyState
+          v-if="!riskEvents.length"
+          title="事件分析质量稳定"
+          description="当前没有命中低置信度、模型回退、弱来源或缺失分析的事件。"
+        />
       </DataPanel>
 
       <DataPanel v-if="section === 'low-quality'" title="低质量内容" :status="`${lowQualityInfos.length} 条`">
