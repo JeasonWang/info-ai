@@ -21,6 +21,9 @@ def run_application():
     logger.info("[1/4] 初始化数据库和基础数据...")
     from sql.init_data import init_all_data
     init_all_data()
+    from database import get_session
+    from services.collection.credential_provider import CredentialProvider
+    CredentialProvider.get_instance(session_factory=get_session)
 
     logger.info("[2/4] 注册爬虫模块...")
     register_all_crawlers()
@@ -36,4 +39,3 @@ def run_application():
     logger.info("API服务启动于 http://%s:%s", API_HOST, API_PORT)
     logger.info("API文档地址 http://%s:%s/docs", API_HOST, API_PORT)
     uvicorn.run(app, host=API_HOST, port=API_PORT, log_level="info")
-

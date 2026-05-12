@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class LLMEventAnalysisProvider:
     provider = "llm"
 
-    def analyze(self, items, chronological_items=None) -> EventAnalysisResult:
+    def analyze(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisResult:
         raise NotImplementedError
 
 
@@ -42,9 +42,9 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
         self.model_name = model_name
         self.timeout = timeout
 
-    def analyze(self, items, chronological_items=None) -> EventAnalysisResult:
+    def analyze(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisResult:
         chronological_items = chronological_items or items
-        prompt = self._build_prompt(items, chronological_items)
+        prompt = self._build_prompt(items, chronological_items, history_context)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -68,7 +68,7 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
         data = json.loads(content)
         return self._parse_result(data, chronological_items)
 
-    def _build_prompt(self, items, chronological_items) -> str:
+    def _build_prompt(self, items, chronological_items, history_context: str | None = None) -> str:
         source_blocks: list[str] = []
         consumed = 0
         for index, item in enumerate(items[:8], start=1):
@@ -84,13 +84,20 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
                 break
             source_blocks.append(block)
             consumed += len(block)
-        return (
+
+        prompt = (
             "请基于真实来源生成事件分析，不要简单截取原文，不要编造没有证据的事实。\n"
             "输出JSON字段：one_line_summary, what_happened, why_it_matters, latest_update, "
-            "heat_reason, risk_notice, source_compare, analysis_confidence。\n"
+            "heat_reason, risk_notice, source_compare, analysis_confidence, evolution_summary, history_context。\n"
             "每个字段必须是通顺中文完整句子。\n\n"
-            + "\n".join(source_blocks)
         )
+
+        # 加入历史背景（如果有）
+        if history_context:
+            prompt += f"【历史背景】\n{history_context}\n\n"
+
+        prompt += "【当前来源】\n" + "\n".join(source_blocks)
+        return prompt
 
     def _parse_result(self, data: dict, chronological_items) -> EventAnalysisResult:
         timeline_points = [
@@ -103,6 +110,10 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
             )
             for item in chronological_items
         ]
+
+        # 收集使用的 Info ID 用于溯源
+        used_info_ids = [item.id for item in chronological_items if item.id]
+
         return EventAnalysisResult(
             one_line_summary=str(data.get("one_line_summary", "")),
             what_happened=str(data.get("what_happened", "")),
@@ -112,7 +123,10 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
             risk_notice=str(data.get("risk_notice", "")),
             source_compare=str(data.get("source_compare", "")),
             analysis_confidence=str(data.get("analysis_confidence", "")),
+            evolution_summary=str(data.get("evolution_summary", "")),
+            history_context=str(data.get("history_context", "")),
             timeline_points=timeline_points,
+            used_info_ids=used_info_ids,
             provider=self.provider,
             model_name=self.model_name,
             mode="llm",

@@ -99,6 +99,19 @@ func (s stubAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]admin.A
 	return []admin.AuditLog{{ID: 1, AdminEmail: "admin@example.com", Action: "GET /api/v1/admin/overview"}}, nil
 }
 
+func (s stubAdminStore) GetEventAnalysisRuns(ctx context.Context, eventID int64) (admin.EventAnalysisRunsResult, error) {
+	return admin.EventAnalysisRunsResult{EventID: eventID, EventTitle: "测试事件", Runs: []admin.AnalysisRun{}}, nil
+}
+
+func (s stubAdminStore) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (admin.EventAnalysisSourcesResult, error) {
+	return admin.EventAnalysisSourcesResult{
+		EventID:    eventID,
+		EventTitle: "测试事件",
+		Run:        admin.AnalysisRun{RunID: runID, Status: "succeeded"},
+		Sources:    []admin.AnalysisSource{},
+	}, nil
+}
+
 func (s notFoundAdminStore) UpdateCategory(ctx context.Context, id int64, payload admin.CategoryPayload) (admin.Category, error) {
 	return admin.Category{}, admin.ErrNotFound
 }

@@ -52,7 +52,7 @@ func (s *ContentMySQLStore) ListChannels(ctx context.Context, categoryID int64) 
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
-		       ch.crawl_interval, ch.is_active,
+		       ch.base_interval_minutes, ch.is_active,
 		       DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'),
 		       DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s')
 FROM channel AS ch

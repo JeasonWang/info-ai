@@ -311,8 +311,7 @@ sequenceDiagram
 - `category`：内容分类。
 - `channel`：渠道配置、采集间隔和启停状态。
 - `crawl_task`：可调度采集任务。
-- `crawl_run_log`：采集运行日志。
-- `crawl_health_snapshot`：渠道采集健康快照。
+- `crawl_run_log`：采集运行日志；管理后台渠道健康指标由该表实时聚合。
 - `info`：采集内容主表。
 - `info_acquisition_log`：详情抓取过程日志。
 - `detail_job`：详情补偿队列。

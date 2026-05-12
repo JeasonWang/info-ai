@@ -291,7 +291,9 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
         <ul v-if="riskEvents.length" class="data-list event-analysis-list">
           <li v-for="item in riskEvents" :key="item.event_id">
             <div class="event-analysis-main">
-              <strong>{{ item.title }}</strong>
+              <router-link :to="`/data-quality/event-analysis/${item.event_id}`" class="event-link">
+                <strong>{{ item.title }}</strong>
+              </router-link>
               <span>{{ item.one_line_summary || '暂无一句话摘要' }}</span>
               <small>
                 来源 {{ item.source_count }} · 弱来源 {{ item.weak_source_count }} ·

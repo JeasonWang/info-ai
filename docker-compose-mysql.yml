@@ -39,11 +39,6 @@ services:
       DB_NAME: ${DB_NAME:-info-max}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ENABLE_SEED_DATA: ${ENABLE_SEED_DATA:-false}
-      ZHIHU_COOKIE: ${ZHIHU_COOKIE:-}
-      ZHIHU_ZSE_93: ${ZHIHU_ZSE_93:-}
-      ZHIHU_ZSE_96: ${ZHIHU_ZSE_96:-}
-      WEIBO_COOKIE: ${WEIBO_COOKIE:-}
-      XHS_COOKIE: ${XHS_COOKIE:-}
     volumes:
       - aggregation_data:/app/data
     depends_on:

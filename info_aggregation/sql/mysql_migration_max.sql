@@ -33,29 +33,28 @@ ON DUPLICATE KEY UPDATE
 -- ------------------------------------------------------------
 
 INSERT INTO `channel` (
-  `name`, `code`, `base_url`, `category_id`, `crawl_interval`,
+  `name`, `code`, `base_url`, `category_id`,
   `base_interval_minutes`, `hot_interval_minutes`, `min_interval_minutes`,
   `max_interval_minutes`, `manual_interval_enabled`, `effective_interval_minutes`,
   `schedule_version`, `is_active`
 )
 VALUES
-  ('微博', 'weibo', 'https://weibo.com', (SELECT `id` FROM `category` WHERE `code` = 'hot'), 30, 30, 10, 3, 120, 1, 30, 1, 1),
-  ('今日头条', 'toutiao', 'https://www.toutiao.com', (SELECT `id` FROM `category` WHERE `code` = 'hot'), 30, 30, 10, 3, 120, 1, 30, 1, 1),
-  ('小红书', 'xiaohongshu', 'https://www.xiaohongshu.com', (SELECT `id` FROM `category` WHERE `code` = 'hot'), 30, 30, 10, 3, 120, 1, 30, 1, 1),
-  ('知乎', 'zhihu', 'https://www.zhihu.com', (SELECT `id` FROM `category` WHERE `code` = 'ai'), 60, 60, 10, 10, 240, 1, 60, 1, 1),
-  ('东方财富网', 'eastmoney', 'https://www.eastmoney.com', (SELECT `id` FROM `category` WHERE `code` = 'economy'), 60, 60, 10, 10, 240, 1, 60, 1, 1),
-  ('路透社', 'reuters', 'https://www.reuters.com', (SELECT `id` FROM `category` WHERE `code` = 'international'), 120, 120, 10, 10, 480, 1, 120, 1, 1),
-  ('CSDN', 'csdn', 'https://blog.csdn.net', (SELECT `id` FROM `category` WHERE `code` = 'tech'), 120, 120, 10, 10, 480, 1, 120, 1, 1),
-  ('掘金', 'juejin', 'https://juejin.cn', (SELECT `id` FROM `category` WHERE `code` = 'tech'), 120, 120, 10, 10, 480, 1, 120, 1, 1),
-  ('博客园', 'cnblogs', 'https://www.cnblogs.com', (SELECT `id` FROM `category` WHERE `code` = 'tech'), 120, 120, 10, 10, 480, 1, 120, 1, 1),
-  ('36氪', '36kr', 'https://36kr.com', (SELECT `id` FROM `category` WHERE `code` = 'ai'), 120, 120, 10, 10, 480, 1, 120, 1, 1),
-  ('央视体育网', 'cctv_sports', 'https://sports.cctv.com', (SELECT `id` FROM `category` WHERE `code` = 'sports'), 60, 60, 10, 10, 240, 1, 60, 1, 1),
-  ('新浪体育', 'sina_sports', 'https://sports.sina.com.cn', (SELECT `id` FROM `category` WHERE `code` = 'sports'), 60, 60, 10, 10, 240, 1, 60, 1, 1)
+  ('微博', 'weibo', 'https://weibo.com', (SELECT `id` FROM `category` WHERE `code` = 'hot'), 30, 10, 3, 120, 1, 30, 1, 1),
+  ('今日头条', 'toutiao', 'https://www.toutiao.com', (SELECT `id` FROM `category` WHERE `code` = 'hot'), 30, 10, 3, 120, 1, 30, 1, 1),
+  ('小红书', 'xiaohongshu', 'https://www.xiaohongshu.com', (SELECT `id` FROM `category` WHERE `code` = 'hot'), 30, 10, 3, 120, 1, 30, 1, 1),
+  ('知乎', 'zhihu', 'https://www.zhihu.com', (SELECT `id` FROM `category` WHERE `code` = 'ai'), 60, 10, 10, 240, 1, 60, 1, 1),
+  ('东方财富网', 'eastmoney', 'https://www.eastmoney.com', (SELECT `id` FROM `category` WHERE `code` = 'economy'), 60, 10, 10, 240, 1, 60, 1, 1),
+  ('路透社', 'reuters', 'https://www.reuters.com', (SELECT `id` FROM `category` WHERE `code` = 'international'), 120, 10, 10, 480, 1, 120, 1, 1),
+  ('CSDN', 'csdn', 'https://blog.csdn.net', (SELECT `id` FROM `category` WHERE `code` = 'tech'), 120, 10, 10, 480, 1, 120, 1, 1),
+  ('掘金', 'juejin', 'https://juejin.cn', (SELECT `id` FROM `category` WHERE `code` = 'tech'), 120, 10, 10, 480, 1, 120, 1, 1),
+  ('博客园', 'cnblogs', 'https://www.cnblogs.com', (SELECT `id` FROM `category` WHERE `code` = 'tech'), 120, 10, 10, 480, 1, 120, 1, 1),
+  ('36氪', '36kr', 'https://36kr.com', (SELECT `id` FROM `category` WHERE `code` = 'ai'), 120, 10, 10, 480, 1, 120, 1, 1),
+  ('央视体育网', 'cctv_sports', 'https://sports.cctv.com', (SELECT `id` FROM `category` WHERE `code` = 'sports'), 60, 10, 10, 240, 1, 60, 1, 1),
+  ('新浪体育', 'sina_sports', 'https://sports.sina.com.cn', (SELECT `id` FROM `category` WHERE `code` = 'sports'), 60, 10, 10, 240, 1, 60, 1, 1)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `base_url` = VALUES(`base_url`),
   `category_id` = VALUES(`category_id`),
-  `crawl_interval` = VALUES(`crawl_interval`),
   `base_interval_minutes` = VALUES(`base_interval_minutes`),
   `hot_interval_minutes` = VALUES(`hot_interval_minutes`),
   `min_interval_minutes` = VALUES(`min_interval_minutes`),
@@ -65,6 +64,68 @@ ON DUPLICATE KEY UPDATE
   `schedule_version` = GREATEST(`schedule_version`, VALUES(`schedule_version`)),
   `is_active` = VALUES(`is_active`),
   `updated_at` = CURRENT_TIMESTAMP;
+
+-- ------------------------------------------------------------
+-- 渠道凭证格式样例：只用于管理后台展示和格式校验参考
+-- status=sample 的记录不会被采集器作为有效登录态读取。
+-- 真实 Cookie / ZSE 请在管理后台“凭证管理”中保存，保存后状态会变为 active。
+-- ------------------------------------------------------------
+
+UPDATE `channel`
+SET
+  `cookies` = JSON_OBJECT(
+    'cookie', 'SUB=sample_weibo_sub; XSRF-TOKEN=sample_csrf_token',
+    'status', 'sample',
+    'last_verified_at', CAST(NULL AS CHAR),
+    'note', '格式样例，不会被采集器作为有效凭证读取；请在管理后台替换为真实 Cookie。'
+  ),
+  `credentials_updated_at` = COALESCE(`credentials_updated_at`, CURRENT_TIMESTAMP),
+  `credentials_updated_by` = IF(COALESCE(`credentials_updated_by`, '') = '', 'seed_sample', `credentials_updated_by`)
+WHERE `code` = 'weibo'
+  AND (
+    COALESCE(`cookies`, '') = ''
+    OR (JSON_VALID(`cookies`) AND JSON_UNQUOTE(JSON_EXTRACT(`cookies`, '$.status')) = 'sample')
+  );
+
+UPDATE `channel`
+SET
+  `cookies` = JSON_OBJECT(
+    'cookie', 'z_c0=sample_z_c0; d_c0=sample_d_c0; _xsrf=sample_xsrf',
+    'status', 'sample',
+    'last_verified_at', CAST(NULL AS CHAR),
+    'note', '格式样例，不会被采集器作为有效凭证读取；请在管理后台替换为真实 Cookie。'
+  ),
+  `extra_credentials` = JSON_OBJECT(
+    'zhihu', JSON_OBJECT(
+      'zse_93', '101_3_3.0',
+      'zse_96', '2.0_sample_signature',
+      'status', 'sample',
+      'note', '格式样例，不会被采集器作为有效 ZSE 头读取。'
+    )
+  ),
+  `credentials_updated_at` = COALESCE(`credentials_updated_at`, CURRENT_TIMESTAMP),
+  `credentials_updated_by` = IF(COALESCE(`credentials_updated_by`, '') = '', 'seed_sample', `credentials_updated_by`)
+WHERE `code` = 'zhihu'
+  AND (
+    COALESCE(`cookies`, '') = ''
+    OR (JSON_VALID(`cookies`) AND JSON_UNQUOTE(JSON_EXTRACT(`cookies`, '$.status')) = 'sample')
+  );
+
+UPDATE `channel`
+SET
+  `cookies` = JSON_OBJECT(
+    'cookie', 'a1=sample_a1; web_session=sample_web_session; webId=sample_web_id',
+    'status', 'sample',
+    'last_verified_at', CAST(NULL AS CHAR),
+    'note', '格式样例，不会被采集器作为有效凭证读取；请在管理后台替换为真实 Cookie。'
+  ),
+  `credentials_updated_at` = COALESCE(`credentials_updated_at`, CURRENT_TIMESTAMP),
+  `credentials_updated_by` = IF(COALESCE(`credentials_updated_by`, '') = '', 'seed_sample', `credentials_updated_by`)
+WHERE `code` = 'xiaohongshu'
+  AND (
+    COALESCE(`cookies`, '') = ''
+    OR (JSON_VALID(`cookies`) AND JSON_UNQUOTE(JSON_EXTRACT(`cookies`, '$.status')) = 'sample')
+  );
 
 -- ------------------------------------------------------------
 -- 采集任务初始化：每个启用渠道一条 interval 任务
@@ -144,25 +205,6 @@ WHERE NOT EXISTS (
   SELECT 1
   FROM `data_quality_snapshot`
   WHERE `category_code` = 'all'
-);
-
-INSERT INTO `crawl_health_snapshot` (
-  `channel_code`, `success_rate`, `detail_complete_rate`, `avg_detail_score`,
-  `last_success_at`, `last_failed_at`, `snapshot_at`
-)
-SELECT
-  ch.`code`,
-  0.00,
-  0.00,
-  0.00,
-  NULL,
-  NULL,
-  CURRENT_TIMESTAMP
-FROM `channel` AS ch
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM `crawl_health_snapshot` AS snap
-  WHERE snap.`channel_code` = ch.`code`
 );
 
 -- ------------------------------------------------------------

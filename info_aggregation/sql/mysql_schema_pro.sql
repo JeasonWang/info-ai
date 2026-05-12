@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS `channel` (
   `code` VARCHAR(50) NOT NULL COMMENT '渠道编码',
   `base_url` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '渠道基础URL',
   `category_id` BIGINT UNSIGNED NOT NULL COMMENT '关联分类ID',
-  `crawl_interval` INT NOT NULL DEFAULT 60 COMMENT '采集间隔，单位分钟',
   `base_interval_minutes` INT NOT NULL DEFAULT 60 COMMENT '基础采集间隔，单位分钟，由管理后台配置',
   `hot_interval_minutes` INT NOT NULL DEFAULT 10 COMMENT '热点加速采集间隔，单位分钟',
   `min_interval_minutes` INT NOT NULL DEFAULT 3 COMMENT '允许的最小采集间隔，单位分钟',
@@ -36,6 +35,10 @@ CREATE TABLE IF NOT EXISTS `channel` (
   `effective_interval_minutes` INT NOT NULL DEFAULT 60 COMMENT '当前实际生效采集间隔，单位分钟',
   `schedule_version` INT NOT NULL DEFAULT 1 COMMENT '调度配置版本，用于调度器热更新',
   `is_active` TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1启用，0停用',
+  `cookies` TEXT NULL COMMENT '采集Cookie凭证，JSON格式',
+  `extra_credentials` JSON NULL COMMENT '扩展凭证，例如知乎 zse_93/zse_96',
+  `credentials_updated_at` DATETIME NULL COMMENT '凭证最后更新时间',
+  `credentials_updated_by` VARCHAR(100) NULL DEFAULT '' COMMENT '最后更新人',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -128,13 +131,31 @@ CREATE TABLE IF NOT EXISTS `event` (
   `source_count` INT NOT NULL DEFAULT 0 COMMENT '来源数量',
   `started_at` DATETIME NULL COMMENT '事件开始时间',
   `last_updated_at` DATETIME NULL COMMENT '事件最后更新时间',
+  `previous_event_id` BIGINT UNSIGNED NULL COMMENT '同实体前序事件ID',
+  `event_generation` INT UNSIGNED NULL DEFAULT 1 COMMENT '事件代数，同类事件的迭代次数',
+  `evolution_stage` VARCHAR(20) NULL DEFAULT 'emerging' COMMENT '演变阶段：emerging/peak/escalating/expanding/declining/resolved/recurring',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_event_key` (`event_key`),
   KEY `idx_event_category_score` (`primary_category_id`, `composite_score`, `last_updated_at`),
-  KEY `idx_event_status_updated` (`status`, `last_updated_at`)
+  KEY `idx_event_status_updated` (`status`, `last_updated_at`),
+  KEY `idx_event_core_entity` (`event_key`, `event_generation`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件主表：面向用户展示的聚合热点事件';
+
+CREATE TABLE IF NOT EXISTS `event_evolution` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '演变记录ID',
+  `event_id` BIGINT UNSIGNED NOT NULL COMMENT '当前事件ID',
+  `previous_event_id` BIGINT UNSIGNED NULL COMMENT '前序事件ID',
+  `evolution_type` VARCHAR(30) NOT NULL DEFAULT '' COMMENT '演变类型：escalation/expansion/correction/recurrence/none',
+  `evolution_summary` TEXT NULL COMMENT '演变摘要：本事件相比前序事件的增量变化',
+  `source_count_delta` INT NOT NULL DEFAULT 0 COMMENT '来源数变化，正数表示增加',
+  `key_change` TEXT NULL COMMENT '关键变化描述',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_event_evolution_event_id` (`event_id`),
+  KEY `idx_event_evolution_previous_event_id` (`previous_event_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件演变记录表：保存同实体事件的前后关系和关键变化';
 
 CREATE TABLE IF NOT EXISTS `event_item_link` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关联ID',
@@ -152,10 +173,12 @@ CREATE TABLE IF NOT EXISTS `event_item_link` (
 CREATE TABLE IF NOT EXISTS `event_timeline_entry` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '时间线节点ID',
   `event_id` BIGINT UNSIGNED NOT NULL COMMENT '事件ID',
+  `run_id` BIGINT UNSIGNED NULL COMMENT '关联分析运行ID',
   `occurred_at` DATETIME NOT NULL COMMENT '节点发生时间',
   `summary` VARCHAR(255) NOT NULL COMMENT '节点摘要',
   `source_item_id` BIGINT UNSIGNED NOT NULL COMMENT '来源内容项ID',
   `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '节点置信度',
+  `evidence` JSON NULL COMMENT '证据JSON，分析增强时填充',
   `display_order` INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
@@ -193,6 +216,21 @@ CREATE TABLE IF NOT EXISTS `event_analysis_run` (
   KEY `idx_event_analysis_run_event_time` (`event_id`, `created_at`),
   KEY `idx_event_analysis_run_status` (`status`, `provider`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件分析运行表：记录规则或大模型分析的一次完整执行';
+
+CREATE TABLE IF NOT EXISTS `event_analysis_source` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '分析来源ID',
+  `run_id` BIGINT UNSIGNED NOT NULL COMMENT '分析运行ID，对应 event_analysis_run.id',
+  `info_id` BIGINT UNSIGNED NOT NULL COMMENT '信息源ID，对应 info.id',
+  `info_title` VARCHAR(200) NOT NULL DEFAULT '' COMMENT '信息标题快照，避免原始内容删除后丢失来源标题',
+  `role` VARCHAR(20) NOT NULL DEFAULT 'media' COMMENT '角色：primary/media/background',
+  `weight` INT NOT NULL DEFAULT 0 COMMENT '权重，来自质量分',
+  `quality_score` INT NOT NULL DEFAULT 0 COMMENT '分析时该条信息的质量分',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_event_analysis_source_run_info` (`run_id`, `info_id`),
+  KEY `idx_event_analysis_source_run_id` (`run_id`),
+  KEY `idx_event_analysis_source_info_id` (`info_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件分析来源追溯表：记录每次分析使用的具体信息源';
 
 CREATE TABLE IF NOT EXISTS `event_fact_snapshot` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件事实ID',
@@ -321,16 +359,6 @@ CREATE TABLE IF NOT EXISTS `user_favorite_event` (
   KEY `idx_user_favorite_event_event` (`event_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户事件收藏表：保存登录用户收藏的热点事件';
 
-CREATE TABLE IF NOT EXISTS `user_follow_keyword` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关注关键词ID',
-  `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
-  `keyword` VARCHAR(100) NOT NULL COMMENT '关注关键词',
-  `category_code` VARCHAR(50) NOT NULL DEFAULT 'all' COMMENT '关键词所属分类编码，all表示全局',
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_follow_keyword` (`user_id`, `keyword`, `category_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户关键词关注表：保存登录用户关注主题';
-
 CREATE TABLE IF NOT EXISTS `user_preference` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '偏好ID',
   `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
@@ -404,19 +432,6 @@ CREATE TABLE IF NOT EXISTS `crawl_run_log` (
   KEY `idx_crawl_run_task_time` (`task_id`, `started_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采集运行日志表：记录每次采集执行结果';
 
-CREATE TABLE IF NOT EXISTS `crawl_health_snapshot` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '采集健康快照ID',
-  `channel_code` VARCHAR(50) NOT NULL COMMENT '渠道编码',
-  `success_rate` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '最近采集成功率',
-  `detail_complete_rate` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '详情完整率',
-  `avg_detail_score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '平均详情质量分',
-  `last_success_at` DATETIME NULL COMMENT '最近成功时间',
-  `last_failed_at` DATETIME NULL COMMENT '最近失败时间',
-  `snapshot_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_crawl_health_channel_time` (`channel_code`, `snapshot_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采集健康快照表：保存渠道采集稳定性指标';
-
 CREATE TABLE IF NOT EXISTS `data_quality_snapshot` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '质量快照ID',
   `category_code` VARCHAR(50) NOT NULL DEFAULT 'all' COMMENT '分类编码，all表示全局',
@@ -430,3 +445,18 @@ CREATE TABLE IF NOT EXISTS `data_quality_snapshot` (
   PRIMARY KEY (`id`),
   KEY `idx_data_quality_category_time` (`category_code`, `snapshot_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据质量快照表：保存重复、缺失、低质量等治理指标';
+
+CREATE TABLE IF NOT EXISTS `rebuild_checkpoint` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '检查点ID',
+  `checkpoint_type` VARCHAR(30) NOT NULL DEFAULT 'incremental' COMMENT '检查点类型：incremental/full',
+  `max_info_id_processed` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已处理的最大Info ID',
+  `max_event_time_processed` DATETIME NULL COMMENT '已处理的最大事件时间',
+  `events_created` INT NOT NULL DEFAULT 0 COMMENT '本次新建事件数',
+  `events_updated` INT NOT NULL DEFAULT 0 COMMENT '本次更新事件数',
+  `items_processed` INT NOT NULL DEFAULT 0 COMMENT '本次处理Info数',
+  `started_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+  `finished_at` DATETIME NULL COMMENT '结束时间',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_rebuild_checkpoint_type` (`checkpoint_type`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件重建检查点表：记录增量构建进度和状态';

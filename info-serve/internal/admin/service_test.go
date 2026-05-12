@@ -106,6 +106,30 @@ func (r *fakeActionRunner) ArchiveDuplicateTitles(ctx context.Context) (ActionRe
 	return ActionResult{Action: r.action, Message: "已归档重复标题"}, nil
 }
 
+func (r *fakeActionRunner) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	r.action = "get_channel_credentials"
+	r.channelCode = channelCode
+	return map[string]any{"channel_code": channelCode, "cookie_configured": false}, nil
+}
+
+func (r *fakeActionRunner) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	r.action = "update_channel_credentials"
+	r.channelCode = channelCode
+	return map[string]any{"channel_code": channelCode, "updated_by": payload.UpdatedBy}, nil
+}
+
+func (r *fakeActionRunner) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	r.action = "test_channel_credentials"
+	r.channelCode = channelCode
+	return map[string]any{"channel_code": channelCode, "success": true}, nil
+}
+
+func (r *fakeActionRunner) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	r.action = "delete_channel_credentials"
+	r.channelCode = channelCode
+	return map[string]any{"channel_code": channelCode, "success": true}, nil
+}
+
 func (s fakeAdminStore) GetOverview(ctx context.Context) (Overview, error) {
 	return s.overview, nil
 }
@@ -196,6 +220,19 @@ func (s fakeAdminStore) UpdateChannel(ctx context.Context, id int64, payload Cha
 
 func (s fakeAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
 	return s.auditLogs[:min(limit, len(s.auditLogs))], nil
+}
+
+func (s fakeAdminStore) GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error) {
+	return EventAnalysisRunsResult{EventID: eventID, EventTitle: "测试事件", Runs: []AnalysisRun{}}, nil
+}
+
+func (s fakeAdminStore) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error) {
+	return EventAnalysisSourcesResult{
+		EventID:    eventID,
+		EventTitle: "测试事件",
+		Run:        AnalysisRun{RunID: runID, Status: "succeeded"},
+		Sources:    []AnalysisSource{},
+	}, nil
 }
 
 func TestServiceReturnsOverview(t *testing.T) {

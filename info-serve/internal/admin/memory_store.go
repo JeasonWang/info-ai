@@ -90,3 +90,20 @@ func (s *MemoryStore) UpdateChannel(ctx context.Context, id int64, payload Chann
 func (s *MemoryStore) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
 	return []AuditLog{}, nil
 }
+
+func (s *MemoryStore) GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error) {
+	return EventAnalysisRunsResult{
+		EventID:    eventID,
+		EventTitle: "本地测试事件",
+		Runs:       []AnalysisRun{},
+	}, nil
+}
+
+func (s *MemoryStore) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error) {
+	return EventAnalysisSourcesResult{
+		EventID:    eventID,
+		EventTitle: "本地测试事件",
+		Run:        AnalysisRun{RunID: runID, Mode: "rule", Status: "succeeded"},
+		Sources:    []AnalysisSource{},
+	}, nil
+}

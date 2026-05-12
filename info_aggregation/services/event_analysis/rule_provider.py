@@ -211,11 +211,18 @@ class RuleEventAnalysisProvider:
     provider = "rule"
     model_name = ""
 
-    def analyze(self, items, chronological_items=None) -> EventAnalysisResult:
+    def analyze(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisResult:
         if not items:
             raise ValueError("event analysis requires at least one source item")
         chronological_items = chronological_items or items
         confidence_text, confidence, quality_score = _confidence_text(items)
+
+        # 收集使用的 Info ID 用于溯源
+        used_info_ids = [item.id for item in items if item.id]
+
+        # 生成历史上下文摘要
+        generated_history_context = history_context or _build_history_context(items)
+
         return EventAnalysisResult(
             one_line_summary=_build_one_line(items),
             what_happened=_build_what_happened(items),
@@ -227,9 +234,32 @@ class RuleEventAnalysisProvider:
             analysis_confidence=confidence_text,
             timeline_points=_timeline(chronological_items),
             facts=_facts(items),
+            used_info_ids=used_info_ids,
+            history_context=generated_history_context,
             provider=self.provider,
             model_name=self.model_name,
             mode="rule",
             quality_score=quality_score,
             confidence=confidence,
         )
+
+
+def _build_history_context(items) -> str:
+    """生成历史背景摘要（Rule模式使用）。"""
+    if not items:
+        return ""
+
+    # 收集关键词和实体
+    entities = _top_values(items, "tech_entities", limit=3)
+    keywords = _top_values(items, "tech_keywords", limit=3)
+
+    if not entities and not keywords:
+        return ""
+
+    parts = []
+    if entities:
+        parts.append(f"涉及实体包括{'、'.join(entities)}")
+    if keywords:
+        parts.append(f"讨论关键词包括{'、'.join(keywords)}")
+
+    return "；".join(parts) + "。"

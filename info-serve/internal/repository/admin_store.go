@@ -787,7 +787,7 @@ func (s *MySQLStore) ListChannels(ctx context.Context) ([]admin.Channel, error) 
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
-       ch.crawl_interval, ch.base_interval_minutes, ch.hot_interval_minutes,
+       ch.base_interval_minutes, ch.hot_interval_minutes,
        ch.min_interval_minutes, ch.max_interval_minutes, ch.manual_interval_enabled,
        ch.effective_interval_minutes, ch.schedule_version, ch.is_active,
        COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
@@ -810,7 +810,6 @@ ORDER BY ch.id ASC`,
 			&item.BaseURL,
 			&item.CategoryID,
 			&item.CategoryName,
-			&item.CrawlInterval,
 			&item.BaseIntervalMinutes,
 			&item.HotIntervalMinutes,
 			&item.MinIntervalMinutes,
@@ -824,6 +823,7 @@ ORDER BY ch.id ASC`,
 		); err != nil {
 			return nil, err
 		}
+		item.CrawlInterval = item.BaseIntervalMinutes
 		result = append(result, item)
 	}
 	return result, rows.Err()
@@ -836,15 +836,14 @@ func (s *MySQLStore) CreateChannel(ctx context.Context, payload admin.ChannelPay
 	result, err := s.db.ExecContext(
 		ctx,
 		`INSERT INTO channel (
-	name, code, base_url, category_id, crawl_interval,
+	name, code, base_url, category_id,
 	base_interval_minutes, hot_interval_minutes, min_interval_minutes, max_interval_minutes,
 	manual_interval_enabled, effective_interval_minutes, schedule_version, is_active
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
 		payload.Name,
 		payload.Code,
 		payload.BaseURL,
 		payload.CategoryID,
-		payload.CrawlInterval,
 		payload.BaseIntervalMinutes,
 		payload.HotIntervalMinutes,
 		payload.MinIntervalMinutes,
@@ -873,7 +872,7 @@ func (s *MySQLStore) UpdateChannel(ctx context.Context, id int64, payload admin.
 	result, err := s.db.ExecContext(
 		ctx,
 		`UPDATE channel
-SET name = ?, code = ?, base_url = ?, category_id = ?, crawl_interval = ?,
+SET name = ?, code = ?, base_url = ?, category_id = ?,
     base_interval_minutes = ?, hot_interval_minutes = ?, min_interval_minutes = ?, max_interval_minutes = ?,
     manual_interval_enabled = ?, effective_interval_minutes = ?, schedule_version = schedule_version + 1,
     is_active = ?
@@ -882,7 +881,6 @@ WHERE id = ?`,
 		payload.Code,
 		payload.BaseURL,
 		payload.CategoryID,
-		payload.CrawlInterval,
 		payload.BaseIntervalMinutes,
 		payload.HotIntervalMinutes,
 		payload.MinIntervalMinutes,
@@ -966,7 +964,7 @@ func (s *MySQLStore) getChannelByID(ctx context.Context, id int64) (admin.Channe
 	row := s.db.QueryRowContext(
 		ctx,
 		`SELECT ch.id, ch.name, ch.code, ch.base_url, ch.category_id, c.name,
-       ch.crawl_interval, ch.base_interval_minutes, ch.hot_interval_minutes,
+       ch.base_interval_minutes, ch.hot_interval_minutes,
        ch.min_interval_minutes, ch.max_interval_minutes, ch.manual_interval_enabled,
        ch.effective_interval_minutes, ch.schedule_version, ch.is_active,
        COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
@@ -984,7 +982,6 @@ WHERE ch.id = ?`,
 		&item.BaseURL,
 		&item.CategoryID,
 		&item.CategoryName,
-		&item.CrawlInterval,
 		&item.BaseIntervalMinutes,
 		&item.HotIntervalMinutes,
 		&item.MinIntervalMinutes,
@@ -999,6 +996,7 @@ WHERE ch.id = ?`,
 	if errors.Is(err, sql.ErrNoRows) {
 		return admin.Channel{}, admin.ErrNotFound
 	}
+	item.CrawlInterval = item.BaseIntervalMinutes
 	return item, err
 }
 
@@ -1009,4 +1007,138 @@ func (s *MySQLStore) ensureCategoryExists(ctx context.Context, categoryID int64)
 		return admin.ErrNotFound
 	}
 	return err
+}
+
+func (s *MySQLStore) GetEventAnalysisRuns(ctx context.Context, eventID int64) (admin.EventAnalysisRunsResult, error) {
+	// 获取事件标题
+	var eventTitle string
+	err := s.db.QueryRowContext(ctx, `SELECT title FROM event WHERE id = ?`, eventID).Scan(&eventTitle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.EventAnalysisRunsResult{}, admin.ErrNotFound
+	}
+	if err != nil {
+		return admin.EventAnalysisRunsResult{}, err
+	}
+
+	// 获取分析运行记录
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			id, analysis_version, mode, provider, model_name,
+			status, input_item_count, quality_score, confidence,
+			fallback_used, failure_reason,
+			COALESCE(DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s'), ''),
+			COALESCE(DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s'), ''),
+			COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '')
+		FROM event_analysis_run
+		WHERE event_id = ?
+		ORDER BY created_at DESC
+	`, eventID)
+	if err != nil {
+		return admin.EventAnalysisRunsResult{}, err
+	}
+	defer rows.Close()
+
+	var runs []admin.AnalysisRun
+	for rows.Next() {
+		var run admin.AnalysisRun
+		var fallbackUsed int
+		if err := rows.Scan(
+			&run.RunID, &run.AnalysisVersion, &run.Mode, &run.Provider, &run.ModelName,
+			&run.Status, &run.InputItemCount, &run.QualityScore, &run.Confidence,
+			&fallbackUsed, &run.FailureReason,
+			&run.StartedAt, &run.FinishedAt, &run.CreatedAt,
+		); err != nil {
+			return admin.EventAnalysisRunsResult{}, err
+		}
+		run.FallbackUsed = fallbackUsed == 1
+		runs = append(runs, run)
+	}
+	if runs == nil {
+		runs = []admin.AnalysisRun{}
+	}
+
+	return admin.EventAnalysisRunsResult{
+		EventID:    eventID,
+		EventTitle: eventTitle,
+		Runs:       runs,
+	}, rows.Err()
+}
+
+func (s *MySQLStore) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (admin.EventAnalysisSourcesResult, error) {
+	// 获取事件标题
+	var eventTitle string
+	err := s.db.QueryRowContext(ctx, `SELECT title FROM event WHERE id = ?`, eventID).Scan(&eventTitle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.EventAnalysisSourcesResult{}, admin.ErrNotFound
+	}
+	if err != nil {
+		return admin.EventAnalysisSourcesResult{}, err
+	}
+
+	// 获取分析运行详情
+	var run admin.AnalysisRun
+	var fallbackUsed int
+	err = s.db.QueryRowContext(ctx, `
+		SELECT
+			id, analysis_version, mode, provider, model_name,
+			status, input_item_count, quality_score, confidence,
+			fallback_used, failure_reason,
+			COALESCE(DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s'), ''),
+			COALESCE(DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s'), ''),
+			COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '')
+		FROM event_analysis_run
+		WHERE id = ? AND event_id = ?
+	`, runID, eventID).Scan(
+		&run.RunID, &run.AnalysisVersion, &run.Mode, &run.Provider, &run.ModelName,
+		&run.Status, &run.InputItemCount, &run.QualityScore, &run.Confidence,
+		&fallbackUsed, &run.FailureReason,
+		&run.StartedAt, &run.FinishedAt, &run.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return admin.EventAnalysisSourcesResult{}, admin.ErrNotFound
+	}
+	if err != nil {
+		return admin.EventAnalysisSourcesResult{}, err
+	}
+	run.FallbackUsed = fallbackUsed == 1
+
+	// 获取来源明细
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			s.id, s.info_id, COALESCE(i.title, s.info_title), s.role, s.weight, s.quality_score,
+			COALESCE(c.name, '') AS channel_name,
+			COALESCE(i.source_url, '') AS source_url,
+			COALESCE(DATE_FORMAT(i.event_time, '%Y-%m-%d %H:%i:%s'), '') AS event_time
+		FROM event_analysis_source s
+		LEFT JOIN info i ON i.id = s.info_id
+		LEFT JOIN channel c ON c.id = i.channel_id
+		WHERE s.run_id = ?
+		ORDER BY s.weight DESC
+	`, runID)
+	if err != nil {
+		return admin.EventAnalysisSourcesResult{}, err
+	}
+	defer rows.Close()
+
+	var sources []admin.AnalysisSource
+	for rows.Next() {
+		var source admin.AnalysisSource
+		if err := rows.Scan(
+			&source.SourceID, &source.InfoID, &source.Title, &source.Role, &source.Weight, &source.QualityScore,
+			&source.ChannelName, &source.SourceURL, &source.EventTime,
+		); err != nil {
+			return admin.EventAnalysisSourcesResult{}, err
+		}
+		sources = append(sources, source)
+	}
+	if sources == nil {
+		sources = []admin.AnalysisSource{}
+	}
+
+	return admin.EventAnalysisSourcesResult{
+		EventID:    eventID,
+		EventTitle: eventTitle,
+		Run:        run,
+		Sources:    sources,
+	}, rows.Err()
 }

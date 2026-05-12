@@ -49,6 +49,10 @@ type EventListItem struct {
 	SourceCount          int           `json:"source_count"`
 	SourceBadges         []string      `json:"source_badges"`
 	NewUpdateCount       int           `json:"new_update_count"`
+	// 历史脉络字段
+	PreviousEventID *int64 `json:"previous_event_id"`
+	EventGeneration int    `json:"event_generation"`
+	EvolutionStage  string `json:"evolution_stage"`
 }
 
 type EventPage struct {
@@ -68,6 +72,10 @@ type EventCore struct {
 	CompositeScore  int           `json:"composite_score"`
 	SourceCount     int           `json:"source_count"`
 	LastUpdatedAt   string        `json:"last_updated_at"`
+	// 历史脉络字段
+	PreviousEventID *int64 `json:"previous_event_id"`
+	EventGeneration int    `json:"event_generation"`
+	EvolutionStage  string `json:"evolution_stage"`
 }
 
 type TimelineItem struct {

@@ -88,15 +88,7 @@ INFO_SERVE_SESSION_SECRET=${session_secret}
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=${admin_password}
 
-# 渠道凭据配置。
-# 知乎渠道凭据。知乎高质量采集需要有效登录态；不配置时可运行，但知乎详情会降级。
-ZHIHU_COOKIE=
-ZHIHU_ZSE_93=
-ZHIHU_ZSE_96=
-# 微博渠道凭据。用于提升话题搜索、移动搜索和网页搜索详情抓取成功率。
-WEIBO_COOKIE=
-# 小红书渠道凭据。用于提升动态详情页和渲染兜底成功率。
-XHS_COOKIE=
+# 渠道登录态 Cookie / ZSE 已迁移到数据库，请在管理后台“凭证管理”维护。
 
 # 前端接口配置。
 # 生产 Docker 默认同源 /api，经由前端容器 Nginx 代理到 info-serve。

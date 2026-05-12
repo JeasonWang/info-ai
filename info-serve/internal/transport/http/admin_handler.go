@@ -275,6 +275,47 @@ func (h *AdminHandler) AuditLogs(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) GetChannelCredentials(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.GetChannelCredentials(r.Context(), r.PathValue("channel_code"))
+	if err != nil {
+		writeAdminConfigError(w, err, "渠道凭证查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) UpdateChannelCredentials(w http.ResponseWriter, r *http.Request) {
+	var payload admin.ChannelCredentialPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.BadRequest(w, "请求参数格式错误")
+		return
+	}
+	result, err := h.service.UpdateChannelCredentials(r.Context(), r.PathValue("channel_code"), payload)
+	if err != nil {
+		writeAdminConfigError(w, err, "渠道凭证更新失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) TestChannelCredentials(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.TestChannelCredentials(r.Context(), r.PathValue("channel_code"))
+	if err != nil {
+		writeAdminConfigError(w, err, "渠道凭证测试失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) DeleteChannelCredentials(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.DeleteChannelCredentials(r.Context(), r.PathValue("channel_code"))
+	if err != nil {
+		writeAdminConfigError(w, err, "渠道凭证清除失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) TriggerCrawl(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.TriggerCrawl(r.Context(), r.PathValue("channel_code"))
 	if err != nil {
@@ -416,4 +457,37 @@ func writeAdminActionError(w http.ResponseWriter, err error, fallback string) {
 	default:
 		response.InternalServerError(w, fallback)
 	}
+}
+
+func (h *AdminHandler) GetEventAnalysisRuns(w http.ResponseWriter, r *http.Request) {
+	eventID, err := strconv.ParseInt(r.PathValue("event_id"), 10, 64)
+	if err != nil {
+		response.BadRequest(w, "事件ID不正确")
+		return
+	}
+	result, err := h.service.GetEventAnalysisRuns(r.Context(), eventID)
+	if err != nil {
+		writeAdminConfigError(w, err, "事件分析运行查询失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) GetEventAnalysisSources(w http.ResponseWriter, r *http.Request) {
+	eventID, err := strconv.ParseInt(r.PathValue("event_id"), 10, 64)
+	if err != nil {
+		response.BadRequest(w, "事件ID不正确")
+		return
+	}
+	runID, err := strconv.ParseInt(r.URL.Query().Get("run_id"), 10, 64)
+	if err != nil || runID < 1 {
+		response.BadRequest(w, "run_id 参数不正确")
+		return
+	}
+	result, err := h.service.GetEventAnalysisSources(r.Context(), eventID, runID)
+	if err != nil {
+		writeAdminConfigError(w, err, "事件分析来源查询失败")
+		return
+	}
+	response.OK(w, result)
 }

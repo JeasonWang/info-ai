@@ -89,18 +89,8 @@ def _record_info_acquisition_log(
 
 
 def _effective_channel_interval(channel: Channel) -> int:
-    """返回调度器实际使用的分钟间隔，兼容尚未配置 Max 字段的历史渠道。"""
-    effective_interval = channel.effective_interval_minutes
-    legacy_interval = channel.crawl_interval or 60
-    # 新字段上线前的老渠道只有 crawl_interval；如果 Max 字段仍是默认值，
-    # 继续使用老间隔，避免调度同步后被默认 60 分钟覆盖。
-    if (
-        effective_interval == 60
-        and legacy_interval != 60
-        and (channel.base_interval_minutes in (None, 60))
-    ):
-        return legacy_interval
-    return effective_interval or legacy_interval
+    """返回调度器实际使用的分钟间隔。"""
+    return channel.effective_interval_minutes or channel.base_interval_minutes or 60
 
 
 def _sync_crawl_tasks(session) -> dict:

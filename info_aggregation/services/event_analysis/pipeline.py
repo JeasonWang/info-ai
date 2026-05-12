@@ -1,4 +1,5 @@
 import logging
+import inspect
 import time
 
 from config import (
@@ -22,9 +23,23 @@ from services.analysis.llm_model_config import (
 logger = logging.getLogger(__name__)
 
 
-def analyze_event_sources(items, chronological_items=None, session=None) -> EventAnalysisResult:
+def _provider_accepts_history_context(provider) -> bool:
+    """兼容旧测试替身和第三方 provider：只有签名支持时才传历史上下文。"""
+    try:
+        signature = inspect.signature(provider.analyze)
+    except (TypeError, ValueError):
+        return True
+    return "history_context" in signature.parameters
+
+
+def analyze_event_sources(
+    items,
+    chronological_items=None,
+    session=None,
+    history_context: str | None = None,
+) -> EventAnalysisResult:
     chronological_items = chronological_items or items
-    rule_result = RuleEventAnalysisProvider().analyze(items, chronological_items)
+    rule_result = RuleEventAnalysisProvider().analyze(items, chronological_items, history_context=history_context)
     title = items[0].title if items else ""
     rule_result = normalize_result(rule_result, title=title)
 
@@ -39,7 +54,10 @@ def analyze_event_sources(items, chronological_items=None, session=None) -> Even
     try:
         provider = build_llm_provider_from_config(selected_config) if selected_config is not None else build_llm_provider(EVENT_ANALYSIS_PROVIDER)
         started_at = time.perf_counter()
-        llm_result = provider.analyze(items, chronological_items)
+        if _provider_accepts_history_context(provider):
+            llm_result = provider.analyze(items, chronological_items, history_context=history_context)
+        else:
+            llm_result = provider.analyze(items, chronological_items)
         latency_ms = int((time.perf_counter() - started_at) * 1000)
         llm_result = normalize_result(llm_result, title=title)
         problems = validate_result(llm_result)

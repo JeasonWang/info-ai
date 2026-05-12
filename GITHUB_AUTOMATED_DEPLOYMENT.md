@@ -79,12 +79,6 @@ INFO_SERVE_SESSION_SECRET=请替换为强随机字符串
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=请替换为强密码
 
-ZHIHU_COOKIE=
-ZHIHU_ZSE_93=
-ZHIHU_ZSE_96=
-WEIBO_COOKIE=
-XHS_COOKIE=
-
 VITE_API_BASE_URL=/api
 
 PUBLIC_SITE_URL=http://服务器IP:8082
@@ -94,7 +88,7 @@ PUBLIC_AGGREGATION_URL=http://127.0.0.1:18000
 EOF
 ```
 
-渠道 Cookie 只放服务器 `.env`，不要提交到 GitHub。
+渠道 Cookie / ZSE 不再放服务器 `.env`。初始化脚本会在数据库 `channel.cookies` 和 `channel.extra_credentials` 中写入 `status=sample` 的格式样例，真实登录态请部署后进入管理后台“凭证管理”保存。
 
 ## 5. 自动部署流程
 

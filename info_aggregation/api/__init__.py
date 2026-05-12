@@ -17,6 +17,8 @@ from database import (
     Category,
     Channel,
     Event,
+    EventAnalysisRun,
+    EventAnalysisSource,
     EventItemLink,
     EventSummarySnapshot,
     EventTimelineEntry,
@@ -263,7 +265,7 @@ class ChannelPayload(BaseModel):
     code: str = Field(..., min_length=1, max_length=50)
     base_url: str = Field(default="", max_length=255)
     category_id: int
-    crawl_interval: int = Field(default=60, ge=1)
+    crawl_interval: int = Field(default=60, ge=1)  # 已废弃，保留兼容
     base_interval_minutes: int = Field(default=60, ge=1)
     hot_interval_minutes: int = Field(default=10, ge=1)
     min_interval_minutes: int = Field(default=3, ge=1)
@@ -271,6 +273,13 @@ class ChannelPayload(BaseModel):
     manual_interval_enabled: int = Field(default=1, ge=0, le=1)
     effective_interval_minutes: int = Field(default=60, ge=1)
     is_active: int = Field(default=1, ge=0, le=1)
+
+
+class ChannelCredentialPayload(BaseModel):
+    """渠道凭证更新请求。"""
+    cookies: str = Field(default="", description="Cookie字符串或JSON格式")
+    extra_credentials: dict = Field(default=None, description="扩展凭证，如 {\"zhihu\": {\"zse_93\": \"...\", \"zse_96\": \"...\"}}")
+    updated_by: str = Field(default="admin", max_length=100, description="更新操作人")
 
 
 class LLMModelConfigPayload(BaseModel):
@@ -288,7 +297,6 @@ class LLMModelConfigPayload(BaseModel):
 def _apply_channel_schedule_config(channel: Channel, payload: ChannelPayload):
     """同步管理后台提交的采集间隔配置，并推进调度版本供 worker 热更新。"""
     previous_version = channel.schedule_version or 0
-    channel.crawl_interval = payload.crawl_interval
     channel.base_interval_minutes = payload.base_interval_minutes
     channel.hot_interval_minutes = payload.hot_interval_minutes
     channel.min_interval_minutes = payload.min_interval_minutes
@@ -310,6 +318,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """API 启动时初始化需要数据库会话的全局组件。"""
+    from services.collection.credential_provider import CredentialProvider
+
+    CredentialProvider.get_instance(session_factory=get_session)
 
 
 @app.get("/")
@@ -698,6 +714,10 @@ def list_events(
                         "source_count": item.source_count,
                         "source_badges": build_badges(item.id),
                         "new_update_count": max(0, item.source_count - 1),
+                        # 历史脉络字段
+                        "previous_event_id": item.previous_event_id,
+                        "event_generation": item.event_generation or 1,
+                        "evolution_stage": item.evolution_stage or "emerging",
                     }
                     for item in items
                 ],
@@ -779,6 +799,10 @@ def get_event_detail(event_id: int):
                     "composite_score": event.composite_score,
                     "source_count": event.source_count,
                     "last_updated_at": event.last_updated_at.strftime("%Y-%m-%d %H:%M:%S") if event.last_updated_at else None,
+                    # 历史脉络字段
+                    "previous_event_id": event.previous_event_id,
+                    "event_generation": event.event_generation or 1,
+                    "evolution_stage": event.evolution_stage or "emerging",
                 },
                 "timeline": [
                     {
@@ -806,6 +830,129 @@ def get_event_detail(event_id: int):
                 ],
                 "tech_context": tech_context,
                 "evidence_chain": evidence_chain,
+            },
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/events/{event_id}/analysis-runs")
+def get_event_analysis_runs(event_id: int):
+    """
+    获取事件的历次分析运行记录。
+    用于追溯事件分析的完整历史。
+    """
+    session = get_session()
+    try:
+        event = session.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="事件不存在")
+
+        runs = (
+            session.query(EventAnalysisRun)
+            .filter(EventAnalysisRun.event_id == event_id)
+            .order_by(EventAnalysisRun.created_at.desc())
+            .all()
+        )
+
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "event_id": event_id,
+                "event_title": event.title,
+                "runs": [
+                    {
+                        "run_id": run.id,
+                        "analysis_version": run.analysis_version,
+                        "mode": run.mode,
+                        "provider": run.provider,
+                        "model_name": run.model_name,
+                        "status": run.status,
+                        "input_item_count": run.input_item_count,
+                        "quality_score": run.quality_score,
+                        "confidence": run.confidence,
+                        "fallback_used": bool(run.fallback_used),
+                        "failure_reason": run.failure_reason,
+                        "started_at": run.started_at.strftime("%Y-%m-%d %H:%M:%S") if run.started_at else None,
+                        "finished_at": run.finished_at.strftime("%Y-%m-%d %H:%M:%S") if run.finished_at else None,
+                        "created_at": run.created_at.strftime("%Y-%m-%d %H:%M:%S") if run.created_at else None,
+                    }
+                    for run in runs
+                ],
+            },
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/admin/events/{event_id}/analysis-sources")
+def get_event_analysis_sources(event_id: int, run_id: int = None):
+    """
+    获取事件分析运行的来源明细。
+
+    - 不传 run_id：返回最新一次分析运行的来源
+    - 传 run_id：返回指定分析运行的来源
+    """
+    session = get_session()
+    try:
+        event = session.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="事件不存在")
+
+        if run_id:
+            target_run = session.query(EventAnalysisRun).filter(
+                EventAnalysisRun.id == run_id,
+                EventAnalysisRun.event_id == event_id,
+            ).first()
+            if not target_run:
+                raise HTTPException(status_code=404, detail="分析运行不存在")
+        else:
+            target_run = session.query(EventAnalysisRun).filter(
+                EventAnalysisRun.event_id == event_id,
+            ).order_by(EventAnalysisRun.created_at.desc()).first()
+            if not target_run:
+                raise HTTPException(status_code=404, detail="暂无分析记录")
+
+        sources = (
+            session.query(EventAnalysisSource, Info, Channel)
+            .outerjoin(Info, Info.id == EventAnalysisSource.info_id)
+            .outerjoin(Channel, Channel.id == Info.channel_id)
+            .filter(EventAnalysisSource.run_id == target_run.id)
+            .order_by(EventAnalysisSource.weight.desc())
+            .all()
+        )
+
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "event_id": event_id,
+                "event_title": event.title,
+                "run": {
+                    "run_id": target_run.id,
+                    "mode": target_run.mode,
+                    "provider": target_run.provider,
+                    "model_name": target_run.model_name,
+                    "status": target_run.status,
+                    "quality_score": target_run.quality_score,
+                    "confidence": target_run.confidence,
+                    "created_at": target_run.created_at.strftime("%Y-%m-%d %H:%M:%S") if target_run.created_at else None,
+                },
+                "sources": [
+                    {
+                        "source_id": source.id,
+                        "info_id": info.id if info else source.info_id,
+                        "title": info.title if info else source.info_title,
+                        "role": source.role,
+                        "weight": source.weight,
+                        "quality_score": source.quality_score,
+                        "channel_name": channel.name if channel else None,
+                        "source_url": info.source_url if info else None,
+                        "event_time": info.event_time.strftime("%Y-%m-%d %H:%M:%S") if info and info.event_time else None,
+                    }
+                    for source, info, channel in sources
+                ],
             },
         }
     finally:
@@ -1060,6 +1207,112 @@ def admin_crawl_credential_report():
         }
     finally:
         session.close()
+
+
+@app.get("/api/admin/channels/{channel_code}/credentials")
+def admin_get_channel_credentials(channel_code: str):
+    """获取渠道凭证信息（脱敏）。"""
+    from services.collection.credential_provider import CredentialProvider
+
+    provider = CredentialProvider.get_instance()
+    info = provider.get_channel_credential_info(channel_code)
+
+    if info is None:
+        return {
+            "code": 1,
+            "message": f"渠道 {channel_code} 不存在或无法获取凭证信息",
+            "data": None,
+        }
+
+    return {
+        "code": 0,
+        "message": "success",
+        "data": {
+            "channel_code": info.channel_code,
+            "cookie_configured": info.cookie_configured,
+            "cookie_preview": info.cookie_preview,
+            "cookie_status": info.cookie_status,
+            "extra_credentials": info.extra_credentials,
+            "updated_at": info.updated_at,
+            "updated_by": info.updated_by,
+        },
+    }
+
+
+@app.put("/api/admin/channels/{channel_code}/credentials")
+def admin_update_channel_credentials(channel_code: str, payload: ChannelCredentialPayload):
+    """更新渠道凭证（Cookie 和扩展凭证）。"""
+    from services.collection.credential_provider import CredentialProvider
+
+    provider = CredentialProvider.get_instance()
+    success = provider.update_channel_credentials(
+        channel_code=channel_code,
+        cookies=payload.cookies if payload.cookies else None,
+        extra_credentials=payload.extra_credentials,
+        updated_by=payload.updated_by,
+    )
+
+    if not success:
+        return {
+            "code": 1,
+            "message": f"渠道 {channel_code} 不存在或更新失败",
+            "data": None,
+        }
+
+    return {
+        "code": 0,
+        "message": "凭证更新成功",
+        "data": {"channel_code": channel_code},
+    }
+
+
+@app.post("/api/admin/channels/{channel_code}/credentials/test")
+def admin_test_channel_credentials(channel_code: str):
+    """测试渠道凭证有效性。"""
+    from services.collection.credential_provider import CredentialProvider
+
+    supported_channels = ["weibo", "zhihu", "xiaohongshu"]
+    if channel_code not in supported_channels:
+        return {
+            "code": 1,
+            "message": f"不支持验证渠道 {channel_code}，支持的渠道: {', '.join(supported_channels)}",
+            "data": None,
+        }
+
+    provider = CredentialProvider.get_instance()
+    result = provider.verify_credential(channel_code)
+
+    return {
+        "code": 0 if result["success"] else 1,
+        "message": result["message"],
+        "data": {
+            "channel_code": channel_code,
+            "success": result["success"],
+            "response_code": result["response_code"],
+        },
+    }
+
+
+@app.delete("/api/admin/channels/{channel_code}/credentials")
+def admin_delete_channel_credentials(channel_code: str):
+    """清除渠道凭证。"""
+    from services.collection.credential_provider import CredentialProvider
+
+    provider = CredentialProvider.get_instance()
+    success = provider.delete_channel_credentials(channel_code)
+
+    if not success:
+        return {
+            "code": 1,
+            "message": f"渠道 {channel_code} 不存在或清除失败",
+            "data": None,
+        }
+
+    return {
+        "code": 0,
+        "message": "凭证已清除",
+        "data": {"channel_code": channel_code},
+    }
 
 
 @app.get("/api/admin/detail-jobs")

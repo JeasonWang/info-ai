@@ -73,6 +73,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, title: '事件分析质量', section: 'event-analysis' },
       },
       {
+        path: '/data-quality/event-analysis/:id',
+        name: 'event-analysis-detail',
+        component: () => import('@/views/EventAnalysisDetail.vue'),
+        meta: { requiresAuth: true, title: '事件分析详情' },
+      },
+      {
         path: '/data-quality/low-quality',
         name: 'data-quality-low-quality',
         component: () => import('@/views/DataQualityView.vue'),
@@ -117,6 +123,12 @@ export const routes: RouteRecordRaw[] = [
         name: 'channels',
         component: () => import('@/views/ChannelsView.vue'),
         meta: { requiresAuth: true, title: '渠道管理' },
+      },
+      {
+        path: '/credentials',
+        name: 'credentials',
+        component: () => import('@/views/CredentialTab.vue'),
+        meta: { requiresAuth: true, title: '凭证管理' },
       },
       {
         path: '/llm-models',

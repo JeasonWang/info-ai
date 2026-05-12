@@ -29,7 +29,7 @@ func (s *MySQLStore) ListEvents(ctx context.Context, params events.ListEventsPar
 		`SELECT e.id, e.title, e.one_line_summary, c.code, c.name,
 		       e.heat_score, e.freshness_score, e.composite_score,
 		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
-		       e.source_count
+		       e.source_count, e.previous_event_id, COALESCE(e.event_generation, 1), COALESCE(e.evolution_stage, 'emerging')
 FROM event AS e
 JOIN category AS c ON c.id = e.primary_category_id `+whereSQL+` `+orderSQL+` LIMIT ? OFFSET ?`,
 		listArgs...,
@@ -53,6 +53,9 @@ JOIN category AS c ON c.id = e.primary_category_id `+whereSQL+` `+orderSQL+` LIM
 			&item.CompositeScore,
 			&item.LastUpdatedAt,
 			&item.SourceCount,
+			&item.PreviousEventID,
+			&item.EventGeneration,
+			&item.EvolutionStage,
 		); err != nil {
 			return events.EventPage{}, err
 		}
@@ -83,7 +86,8 @@ func (s *MySQLStore) GetEventDetail(ctx context.Context, id int64) (events.Event
 		ctx,
 		`SELECT e.id, e.title, e.one_line_summary, c.code, c.name,
 		       e.heat_score, e.freshness_score, e.composite_score, e.source_count,
-		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), '')
+		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
+		       e.previous_event_id, COALESCE(e.event_generation, 1), COALESCE(e.evolution_stage, 'emerging')
 FROM event AS e
 JOIN category AS c ON c.id = e.primary_category_id
 WHERE e.id = ?`,
@@ -99,6 +103,9 @@ WHERE e.id = ?`,
 		&event.CompositeScore,
 		&event.SourceCount,
 		&event.LastUpdatedAt,
+		&event.PreviousEventID,
+		&event.EventGeneration,
+		&event.EvolutionStage,
 	)
 	if err != nil {
 		return events.EventDetail{}, err

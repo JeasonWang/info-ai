@@ -33,6 +33,8 @@ type Store interface {
 	CreateChannel(ctx context.Context, payload ChannelPayload) (Channel, error)
 	UpdateChannel(ctx context.Context, id int64, payload ChannelPayload) (Channel, error)
 	ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error)
+	GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error)
+	GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error)
 }
 
 type Service struct {
@@ -244,6 +246,28 @@ type LLMModelConfigPayload struct {
 	Priority       int    `json:"priority"`
 }
 
+type ChannelCredentialPayload struct {
+	Cookies          string         `json:"cookies"`
+	ExtraCredentials map[string]any `json:"extra_credentials"`
+	UpdatedBy        string         `json:"updated_by"`
+}
+
+type ChannelCredentialInfo struct {
+	ChannelCode      string         `json:"channel_code"`
+	CookieConfigured bool           `json:"cookie_configured"`
+	CookiePreview    string         `json:"cookie_preview"`
+	CookieStatus     string         `json:"cookie_status"`
+	ExtraCredentials map[string]any `json:"extra_credentials"`
+	UpdatedAt        string         `json:"updated_at"`
+	UpdatedBy        string         `json:"updated_by"`
+}
+
+type CredentialTestResult struct {
+	ChannelCode  string `json:"channel_code"`
+	Success      bool   `json:"success"`
+	ResponseCode int    `json:"response_code"`
+}
+
 type AuditLog struct {
 	ID          int64  `json:"id"`
 	AdminUserID int64  `json:"admin_user_id"`
@@ -253,6 +277,49 @@ type AuditLog struct {
 	TargetID    string `json:"target_id"`
 	IPAddress   string `json:"ip_address"`
 	CreatedAt   string `json:"created_at"`
+}
+
+// 事件分析溯源相关类型
+type AnalysisRun struct {
+	RunID           int64   `json:"run_id"`
+	AnalysisVersion string  `json:"analysis_version"`
+	Mode            string  `json:"mode"`
+	Provider        string  `json:"provider"`
+	ModelName       string  `json:"model_name"`
+	Status          string  `json:"status"`
+	InputItemCount  int     `json:"input_item_count"`
+	QualityScore    float64 `json:"quality_score"`
+	Confidence      float64 `json:"confidence"`
+	FallbackUsed    bool    `json:"fallback_used"`
+	FailureReason   string  `json:"failure_reason"`
+	StartedAt       string  `json:"started_at"`
+	FinishedAt      string  `json:"finished_at"`
+	CreatedAt       string  `json:"created_at"`
+}
+
+type AnalysisSource struct {
+	SourceID     int64  `json:"source_id"`
+	InfoID       int64  `json:"info_id"`
+	Title        string `json:"title"`
+	Role         string `json:"role"`
+	Weight       int    `json:"weight"`
+	QualityScore int    `json:"quality_score"`
+	ChannelName  string `json:"channel_name"`
+	SourceURL    string `json:"source_url"`
+	EventTime    string `json:"event_time"`
+}
+
+type EventAnalysisRunsResult struct {
+	EventID    int64         `json:"event_id"`
+	EventTitle string        `json:"event_title"`
+	Runs       []AnalysisRun `json:"runs"`
+}
+
+type EventAnalysisSourcesResult struct {
+	EventID    int64            `json:"event_id"`
+	EventTitle string           `json:"event_title"`
+	Run        AnalysisRun      `json:"run"`
+	Sources    []AnalysisSource `json:"sources"`
 }
 
 func NewService(store Store) *Service {
@@ -481,6 +548,56 @@ func (s *Service) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, err
 	return s.store.ListAuditLogs(ctx, limit)
 }
 
+func (s *Service) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	return s.runner.GetChannelCredentials(ctx, channelCode)
+}
+
+func (s *Service) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	payload.UpdatedBy = strings.TrimSpace(payload.UpdatedBy)
+	if payload.UpdatedBy == "" {
+		payload.UpdatedBy = "admin"
+	}
+	return s.runner.UpdateChannelCredentials(ctx, channelCode, payload)
+}
+
+func (s *Service) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	return s.runner.TestChannelCredentials(ctx, channelCode)
+}
+
+func (s *Service) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	return s.runner.DeleteChannelCredentials(ctx, channelCode)
+}
+
+func (s *Service) GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error) {
+	if eventID < 1 {
+		return EventAnalysisRunsResult{}, ErrInvalidInput
+	}
+	return s.store.GetEventAnalysisRuns(ctx, eventID)
+}
+
+func (s *Service) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error) {
+	if eventID < 1 || runID < 1 {
+		return EventAnalysisSourcesResult{}, ErrInvalidInput
+	}
+	return s.store.GetEventAnalysisSources(ctx, eventID, runID)
+}
+
 func (s *Service) TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error) {
 	channelCode = strings.TrimSpace(channelCode)
 	if channelCode == "" || len([]rune(channelCode)) > 80 {
@@ -535,6 +652,9 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 	if payload.BaseIntervalMinutes == 0 {
 		payload.BaseIntervalMinutes = payload.CrawlInterval
 	}
+	if payload.CrawlInterval == 0 {
+		payload.CrawlInterval = payload.BaseIntervalMinutes
+	}
 	if payload.HotIntervalMinutes == 0 {
 		payload.HotIntervalMinutes = 10
 	}
@@ -547,7 +667,7 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 	if payload.EffectiveIntervalMinutes == 0 {
 		payload.EffectiveIntervalMinutes = payload.CrawlInterval
 	}
-	if payload.Name == "" || payload.Code == "" || payload.CategoryID < 1 || payload.CrawlInterval < 1 {
+	if payload.Name == "" || payload.Code == "" || payload.CategoryID < 1 || payload.BaseIntervalMinutes < 1 {
 		return ChannelPayload{}, ErrInvalidInput
 	}
 	if payload.BaseIntervalMinutes < 1 || payload.HotIntervalMinutes < 1 || payload.MinIntervalMinutes < 1 || payload.MaxIntervalMinutes < 1 || payload.EffectiveIntervalMinutes < 1 {

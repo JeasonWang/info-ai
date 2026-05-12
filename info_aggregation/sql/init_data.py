@@ -3,6 +3,7 @@
 创建分类、渠道记录，并插入模拟数据以便程序启动时有数据返回
 """
 import logging
+import json
 import os
 from datetime import datetime, timedelta
 import random
@@ -22,6 +23,61 @@ from services import rebuild_events
 from services.enrichment.tech_content_parser import parse_tech_content
 
 logger = logging.getLogger(__name__)
+
+
+SAMPLE_CHANNEL_CREDENTIALS = {
+    "weibo": {
+        "cookies": {
+            "cookie": "SUB=sample_weibo_sub; XSRF-TOKEN=sample_csrf_token",
+            "status": "sample",
+            "last_verified_at": None,
+            "note": "格式样例，不会被采集器作为有效凭证读取；请在管理后台替换为真实 Cookie。",
+        }
+    },
+    "zhihu": {
+        "cookies": {
+            "cookie": "z_c0=sample_z_c0; d_c0=sample_d_c0; _xsrf=sample_xsrf",
+            "status": "sample",
+            "last_verified_at": None,
+            "note": "格式样例，不会被采集器作为有效凭证读取；请在管理后台替换为真实 Cookie。",
+        },
+        "extra_credentials": {
+            "zhihu": {
+                "zse_93": "101_3_3.0",
+                "zse_96": "2.0_sample_signature",
+                "status": "sample",
+                "note": "格式样例，不会被采集器作为有效 ZSE 头读取。",
+            }
+        },
+    },
+    "xiaohongshu": {
+        "cookies": {
+            "cookie": "a1=sample_a1; web_session=sample_web_session; webId=sample_web_id",
+            "status": "sample",
+            "last_verified_at": None,
+            "note": "格式样例，不会被采集器作为有效凭证读取；请在管理后台替换为真实 Cookie。",
+        }
+    },
+}
+
+
+def _is_sample_cookie(value: str | None) -> bool:
+    if not value:
+        return True
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    return isinstance(parsed, dict) and parsed.get("status") == "sample"
+
+
+def _is_sample_extra_credentials(value) -> bool:
+    if not value:
+        return True
+    if not isinstance(value, dict):
+        return False
+    zhihu_extra = value.get("zhihu") or {}
+    return isinstance(zhihu_extra, dict) and zhihu_extra.get("status") == "sample"
 
 
 def init_categories(session) -> dict:
@@ -91,7 +147,6 @@ def init_channels(session, category_map: dict) -> dict:
                 code=ch_def["code"],
                 base_url=ch_def["base_url"],
                 category_id=category_map[ch_def["category"]],
-                crawl_interval=ch_def["interval"],
                 base_interval_minutes=ch_def["interval"],
                 hot_interval_minutes=max(3, min(10, ch_def["interval"])),
                 min_interval_minutes=3 if ch_def["interval"] <= 30 else 10,
@@ -107,6 +162,35 @@ def init_channels(session, category_map: dict) -> dict:
             logger.info(f"创建渠道: {ch_def['name']}")
     session.commit()
     return channel_map
+
+
+def init_channel_credentials(session) -> None:
+    """
+    初始化渠道凭证格式样例。
+
+    样例记录使用 status=sample，CredentialProvider 会忽略这类值，避免假 Cookie
+    参与真实采集；管理后台保存真实凭证后会写入 status=active。
+    """
+    for channel_code, credential_def in SAMPLE_CHANNEL_CREDENTIALS.items():
+        channel = session.query(Channel).filter(Channel.code == channel_code).first()
+        if not channel:
+            continue
+
+        changed = False
+        if _is_sample_cookie(channel.cookies):
+            channel.cookies = json.dumps(credential_def["cookies"], ensure_ascii=False)
+            changed = True
+
+        extra_credentials = credential_def.get("extra_credentials")
+        if extra_credentials is not None and _is_sample_extra_credentials(channel.extra_credentials):
+            channel.extra_credentials = extra_credentials
+            changed = True
+
+        if changed:
+            channel.credentials_updated_at = channel.credentials_updated_at or datetime.now()
+            channel.credentials_updated_by = channel.credentials_updated_by or "seed_sample"
+
+    session.commit()
 
 
 def init_mock_data(session, category_map: dict, channel_map: dict):
@@ -203,6 +287,7 @@ def init_all_data():
     try:
         category_map = init_categories(session)
         channel_map = init_channels(session, category_map)
+        init_channel_credentials(session)
         if os.getenv("ENABLE_SEED_DATA", "").strip().lower() in {"1", "true", "yes", "on"}:
             init_mock_data(session, category_map, channel_map)
         else:

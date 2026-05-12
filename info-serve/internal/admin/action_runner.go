@@ -24,6 +24,10 @@ type ActionRunner interface {
 	RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error)
 	ArchiveLowQuality(ctx context.Context) (ActionResult, error)
 	ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error)
+	GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
+	UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error)
+	TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
+	DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
 }
 
 // MemoryActionRunner 是测试和本地空依赖模式使用的动作执行器。
@@ -159,4 +163,41 @@ func (r *MemoryActionRunner) ArchiveLowQuality(ctx context.Context) (ActionResul
 
 func (r *MemoryActionRunner) ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error) {
 	return ActionResult{Action: "archive_duplicate_titles", Message: "本地测试模式已模拟归档重复标题", Data: map[string]any{}}, nil
+}
+
+func (r *MemoryActionRunner) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{
+		"channel_code":       channelCode,
+		"cookie_configured":  false,
+		"cookie_preview":     "",
+		"cookie_status":     "not_configured",
+		"extra_credentials": map[string]any{},
+		"updated_at":        nil,
+		"updated_by":        "",
+	}, nil
+}
+
+func (r *MemoryActionRunner) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	return map[string]any{
+		"channel_code": channelCode,
+		"success":       true,
+		"message":      "本地测试模式已模拟凭证更新",
+	}, nil
+}
+
+func (r *MemoryActionRunner) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{
+		"channel_code":  channelCode,
+		"success":       false,
+		"response_code": 0,
+		"message":       "本地测试模式：需要连接真实采集服务验证凭证",
+	}, nil
+}
+
+func (r *MemoryActionRunner) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{
+		"channel_code": channelCode,
+		"success":      true,
+		"message":     "本地测试模式已模拟凭证清除",
+	}, nil
 }

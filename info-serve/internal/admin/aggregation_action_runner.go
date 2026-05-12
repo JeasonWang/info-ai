@@ -107,6 +107,51 @@ func (r *AggregationActionRunner) ArchiveDuplicateTitles(ctx context.Context) (A
 	return r.post(ctx, "archive_duplicate_titles", "/api/admin/archive-duplicate-titles")
 }
 
+func (r *AggregationActionRunner) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	path := "/api/admin/channels/" + url.QueryEscape(channelCode) + "/credentials"
+	return r.get(ctx, path)
+}
+
+func (r *AggregationActionRunner) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	path := "/api/admin/channels/" + url.QueryEscape(channelCode) + "/credentials"
+	data, err := r.sendAny(ctx, http.MethodPut, path, map[string]any{
+		"cookies":           payload.Cookies,
+		"extra_credentials": payload.ExtraCredentials,
+		"updated_by":        payload.UpdatedBy,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result, ok := data.(map[string]any); ok {
+		return result, nil
+	}
+	return nil, errors.New("返回格式异常")
+}
+
+func (r *AggregationActionRunner) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	path := "/api/admin/channels/" + url.QueryEscape(channelCode) + "/credentials/test"
+	data, err := r.sendAny(ctx, http.MethodPost, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if result, ok := data.(map[string]any); ok {
+		return result, nil
+	}
+	return nil, errors.New("返回格式异常")
+}
+
+func (r *AggregationActionRunner) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	path := "/api/admin/channels/" + url.QueryEscape(channelCode) + "/credentials"
+	data, err := r.sendAny(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if result, ok := data.(map[string]any); ok {
+		return result, nil
+	}
+	return nil, errors.New("返回格式异常")
+}
+
 func (r *AggregationActionRunner) post(ctx context.Context, action string, path string) (ActionResult, error) {
 	if r.baseURL == "" {
 		return ActionResult{}, fmt.Errorf("采集服务地址未配置")
