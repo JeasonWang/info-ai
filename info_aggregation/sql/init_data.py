@@ -292,7 +292,10 @@ def init_all_data():
             init_mock_data(session, category_map, channel_map)
         else:
             logger.info("未启用 ENABLE_SEED_DATA，跳过模拟数据插入")
-        rebuild_events(session)
+        if os.getenv("REBUILD_EVENTS_ON_STARTUP", "").strip().lower() in {"1", "true", "yes", "on"}:
+            rebuild_events(session)
+        else:
+            logger.info("未启用 REBUILD_EVENTS_ON_STARTUP，跳过启动时事件重建")
         logger.info("数据初始化完成")
     except Exception as e:
         session.rollback()

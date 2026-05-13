@@ -1,8 +1,6 @@
 import json
 import logging
 
-import httpx
-
 from config import (
     EVENT_ANALYSIS_API_KEY,
     EVENT_ANALYSIS_BASE_URL,
@@ -11,6 +9,8 @@ from config import (
     EVENT_ANALYSIS_TEMPERATURE,
     EVENT_ANALYSIS_TIMEOUT,
 )
+from services.analysis.llm_model_config import LLMModelConfigSnapshot
+from services.llm.chat import LLMChatMessage, LLMChatRequest, OpenAICompatibleChatClient
 
 from .schemas import EventAnalysisResult, TimelinePoint
 from .text_utils import natural_clip
@@ -41,31 +41,39 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
         self.api_key = api_key
         self.model_name = model_name
         self.timeout = timeout
+        self._config = LLMModelConfigSnapshot(
+            id=0,
+            provider_name=self.provider,
+            provider_code=self.provider,
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model_name=self.model_name,
+            is_enabled=1,
+            daily_call_limit=0,
+            daily_call_count=0,
+            last_call_date=None,
+            priority=100,
+            consecutive_failure_count=0,
+            circuit_open_until=None,
+            last_failure_reason="",
+        )
 
     def analyze(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisResult:
         chronological_items = chronological_items or items
         prompt = self._build_prompt(items, chronological_items, history_context)
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        payload = {
-            "model": self.model_name,
-            "temperature": EVENT_ANALYSIS_TEMPERATURE,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": "你是信息达人事件分析引擎，只输出严格JSON。"},
-                {"role": "user", "content": prompt},
-            ],
-        }
-        response = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=self.timeout,
+        chat_result = OpenAICompatibleChatClient(self._config).chat(
+            LLMChatRequest(
+                messages=[
+                    LLMChatMessage(role="system", content="你是信息达人事件分析引擎，只输出严格JSON。"),
+                    LLMChatMessage(role="user", content=prompt),
+                ],
+                temperature=EVENT_ANALYSIS_TEMPERATURE,
+                response_format={"type": "json_object"},
+                timeout_seconds=self.timeout,
+                input_item_count=len(items),
+            )
         )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        data = json.loads(content)
+        data = json.loads(chat_result.content)
         return self._parse_result(data, chronological_items)
 
     def _build_prompt(self, items, chronological_items, history_context: str | None = None) -> str:
@@ -164,5 +172,22 @@ def build_llm_provider_from_config(config) -> LLMEventAnalysisProvider:
         api_key=config.api_key or "",
         model_name=config.model_name,
     )
+    if hasattr(config, "id"):
+        provider._config = LLMModelConfigSnapshot(
+            id=config.id or 0,
+            provider_name=getattr(config, "provider_name", "") or "",
+            provider_code=getattr(config, "provider_code", "") or "openai_compatible",
+            base_url=config.base_url,
+            api_key=config.api_key or "",
+            model_name=config.model_name,
+            is_enabled=int(getattr(config, "is_enabled", 1) or 0),
+            daily_call_limit=int(getattr(config, "daily_call_limit", 0) or 0),
+            daily_call_count=int(getattr(config, "daily_call_count", 0) or 0),
+            last_call_date=getattr(config, "last_call_date", None),
+            priority=int(getattr(config, "priority", 100) or 100),
+            consecutive_failure_count=int(getattr(config, "consecutive_failure_count", 0) or 0),
+            circuit_open_until=getattr(config, "circuit_open_until", None),
+            last_failure_reason=getattr(config, "last_failure_reason", "") or "",
+        )
     provider.provider = config.provider_code or "openai_compatible"
     return provider

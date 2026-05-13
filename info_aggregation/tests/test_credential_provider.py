@@ -152,3 +152,56 @@ def test_sample_database_credentials_block_legacy_env_fallback(monkeypatch, sess
     provider = CredentialProvider(env_files=[Path("/tmp/not-exists")], session_factory=get_session)
 
     assert provider.get_with_source("WEIBO_COOKIE") == ("", "")
+
+
+def test_updating_sample_cookie_promotes_status_to_active(monkeypatch, session):
+    monkeypatch.delenv("WEIBO_COOKIE", raising=False)
+    category = Category(name="热点事件", code="hot", description="热点")
+    session.add(category)
+    session.flush()
+    session.add(
+        Channel(
+            name="微博",
+            code="weibo",
+            base_url="https://weibo.com",
+            category_id=category.id,
+            cookies='{"cookie": "SUB=sample", "status": "sample"}',
+            is_active=1,
+        )
+    )
+    session.commit()
+
+    provider = CredentialProvider(env_files=[Path("/tmp/not-exists")], session_factory=get_session)
+
+    assert provider.update_channel_credentials("weibo", cookies="SUB=real-cookie", updated_by="admin") is True
+    assert provider.get_with_source("WEIBO_COOKIE") == ("SUB=real-cookie", "database")
+    assert provider.get_channel_credential_info("weibo").cookie_status == "active"
+
+
+def test_updating_sample_zhihu_extra_promotes_status_to_active(session):
+    category = Category(name="AI大模型", code="ai", description="AI")
+    session.add(category)
+    session.flush()
+    session.add(
+        Channel(
+            name="知乎",
+            code="zhihu",
+            base_url="https://www.zhihu.com",
+            category_id=category.id,
+            cookies='{"cookie": "z_c0=sample", "status": "sample"}',
+            extra_credentials={"zhihu": {"zse_93": "101_3_3.0", "zse_96": "2.0_sample", "status": "sample"}},
+            is_active=1,
+        )
+    )
+    session.commit()
+
+    provider = CredentialProvider(env_files=[Path("/tmp/not-exists")], session_factory=get_session)
+
+    assert provider.update_channel_credentials(
+        "zhihu",
+        cookies="z_c0=real-cookie",
+        extra_credentials={"zhihu": {"zse_93": "101_3_3.0", "zse_96": "2.0_real", "status": "sample"}},
+        updated_by="admin",
+    ) is True
+    assert provider.get_with_source("ZHIHU_COOKIE") == ("z_c0=real-cookie", "database")
+    assert provider.get_with_source("ZHIHU_ZSE_96") == ("2.0_real", "database")

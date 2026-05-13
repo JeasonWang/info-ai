@@ -52,6 +52,7 @@ def init_db():
     logger.info("正在初始化数据库，创建表结构...")
     Base.metadata.create_all(bind=engine)
     _ensure_event_key_column()
+    _ensure_llm_call_log_payload_columns()
     logger.info("数据库表结构创建完成")
 
 
@@ -81,3 +82,32 @@ def _ensure_event_key_column():
             connection.execute(text("UPDATE event SET event_key = CONCAT('legacy-', id) WHERE event_key IS NULL"))
         else:
             connection.execute(text("UPDATE event SET event_key = 'legacy-' || id WHERE event_key IS NULL"))
+
+
+def _ensure_llm_call_log_payload_columns():
+    """兼容旧库：为大模型调用日志补充请求和响应内容字段。"""
+
+    inspector = inspect(engine)
+    if "llm_call_log" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("llm_call_log")}
+    dialect_name = engine.dialect.name
+    column_defs = {
+        "request_payload": "JSON NULL" if dialect_name == "mysql" else "JSON NULL",
+        "response_content": "LONGTEXT NULL" if dialect_name == "mysql" else "TEXT NULL",
+        "response_payload": "JSON NULL" if dialect_name == "mysql" else "JSON NULL",
+    }
+    comments = {
+        "request_payload": "请求参数快照，包含消息内容",
+        "response_content": "模型返回文本",
+        "response_payload": "模型原始响应快照",
+    }
+    with engine.begin() as connection:
+        for column_name, column_sql in column_defs.items():
+            if column_name in columns:
+                continue
+            if dialect_name == "mysql":
+                sql = f"ALTER TABLE llm_call_log ADD COLUMN {column_name} {column_sql} COMMENT '{comments[column_name]}'"
+            else:
+                sql = f"ALTER TABLE llm_call_log ADD COLUMN {column_name} {column_sql}"
+            connection.execute(text(sql))

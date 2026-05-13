@@ -32,6 +32,8 @@ def run_application():
     from scheduler import setup_scheduler
     scheduler = setup_scheduler()
     scheduler.start()
+    from services.messaging import start_aggregation_consumer
+    start_aggregation_consumer()
 
     logger.info("[4/4] 启动API服务...")
     from api import app

@@ -233,6 +233,34 @@ func (h *AdminHandler) UpdateLLMModelConfig(w http.ResponseWriter, r *http.Reque
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) TestLLMChat(w http.ResponseWriter, r *http.Request) {
+	var payload admin.LLMChatTestPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.BadRequest(w, "请求参数格式错误")
+		return
+	}
+	result, err := h.service.TestLLMChat(r.Context(), payload)
+	if err != nil {
+		writeAdminConfigError(w, err, "大模型调用测试失败")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *AdminHandler) ChatLLM(w http.ResponseWriter, r *http.Request) {
+	var payload admin.LLMChatPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.BadRequest(w, "请求参数格式错误")
+		return
+	}
+	result, err := h.service.ChatLLM(r.Context(), payload)
+	if err != nil {
+		writeAdminConfigError(w, err, "大模型对话失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	var payload admin.ChannelPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {

@@ -95,6 +95,8 @@ func registerAPIRoutes(
 	mux.HandleFunc("GET "+prefix+"/admin/llm-model-configs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.LLMModelConfigs))
 	mux.HandleFunc("POST "+prefix+"/admin/llm-model-configs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateLLMModelConfig))
 	mux.HandleFunc("PUT "+prefix+"/admin/llm-model-configs/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateLLMModelConfig))
+	mux.HandleFunc("POST "+prefix+"/admin/llm-model-configs/test-chat", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.TestLLMChat))
+	mux.HandleFunc("POST "+prefix+"/admin/llm-model-configs/chat", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.ChatLLM))
 	mux.HandleFunc("GET "+prefix+"/admin/audit-logs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.AuditLogs))
 	mux.HandleFunc("GET "+prefix+"/admin/channels/{channel_code}/credentials", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.GetChannelCredentials))
 	mux.HandleFunc("PUT "+prefix+"/admin/channels/{channel_code}/credentials", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateChannelCredentials))

@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import or_
+from sqlalchemy.orm.attributes import flag_modified
 
 from config import (
     SCHEDULER_HOT_INTERVAL,
@@ -439,7 +440,20 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
             info.detail_score = pipeline.score
             info.detail_content_length = pipeline.content_length
             info.detail_fetched_at = datetime.now()
+            for attr in (
+                "content",
+                "detail_fetch_status",
+                "detail_fetch_error",
+                "detail_strategy",
+                "detail_score",
+                "detail_content_length",
+                "detail_fetched_at",
+            ):
+                flag_modified(info, attr)
             _apply_info_semantics(info, detail_content or original_content)
+            session.add(info)
+            # 先显式刷入 Info 详情字段，再写采集日志，避免主表与日志状态脱节。
+            session.flush()
             _record_info_acquisition_log(
                 session,
                 info=info,
@@ -456,6 +470,14 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
             if status in {"partial", "complete"} and detail_content:
                 detail_success_count += 1
                 logger.info(f"详情爬取成功 [ID={info_id}] 策略={pipeline.strategy}: 内容{len(detail_content)}字")
+                logger.debug(
+                    "详情字段已回写 [ID=%s] status=%s strategy=%s score=%s length=%s",
+                    info_id,
+                    info.detail_fetch_status,
+                    info.detail_strategy,
+                    info.detail_score,
+                    info.detail_content_length,
+                )
             else:
                 detail_failed_count += 1
                 logger.warning(f"详情爬取未完成 [ID={info_id}] 状态={status}: {error_msg}，保留内容({len((detail_content or original_content))}字)")

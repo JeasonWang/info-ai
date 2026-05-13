@@ -629,6 +629,101 @@ p {
   border: 1px solid var(--line-strong);
 }
 
+.llm-test-form {
+  display: grid;
+  gap: 12px;
+}
+
+.llm-test-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.llm-test-form select,
+.llm-test-form textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--ink);
+  background: #fff;
+  outline: none;
+}
+
+.llm-test-form select {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.llm-test-form textarea {
+  min-height: 128px;
+  padding: 10px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.llm-test-form select:focus,
+.llm-test-form textarea:focus {
+  border-color: var(--primary);
+}
+
+.llm-test-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.llm-test-actions button {
+  min-height: 32px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  padding: 7px 12px;
+  color: #fff;
+  background: var(--primary);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.llm-test-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.llm-test-actions span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.test-result {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 12px;
+  background: #fafafa;
+}
+
+.test-result span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.test-result pre {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px;
+  background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+}
+
 @media (max-width: 1080px) {
   .metric-grid,
   .metric-grid--compact {

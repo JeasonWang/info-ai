@@ -51,6 +51,10 @@ class ChannelCredentialInfo:
 class _DatabaseCredentialRead:
     found: bool
     value: str = ""
+    channel_code: str = ""
+    credential_key: str = ""
+    status: str = ""
+    source: str = "database"
 
 
 CHANNEL_CREDENTIAL_SPECS: dict[str, tuple[CredentialSpec, ...]] = {
@@ -119,6 +123,7 @@ class CredentialProvider:
         self._session_factory = session_factory
         self._cache: dict[str, tuple[str, str]] = {}
         self._cache_ttl: dict[str, datetime] = {}
+        self._logged_states: set[tuple[str, str, str, int, bool]] = set()
         self._cache_duration_seconds = 30  # 缓存30秒后自动过期
 
     @classmethod
@@ -141,6 +146,7 @@ class CredentialProvider:
             with cls._lock:
                 cls._instance._cache.clear()
                 cls._instance._cache_ttl.clear()
+                cls._instance._logged_states.clear()
 
     def get(self, name: str) -> str:
         return self.get_with_source(name)[0]
@@ -158,6 +164,8 @@ class CredentialProvider:
             return cached
 
         db_credential = self._read_db_credential(name)
+        if db_credential.found:
+            self._log_credential_state(name, db_credential, bool(db_credential.value))
         if db_credential.value:
             result = (db_credential.value, "database")
             self._set_cache(name, result)
@@ -167,13 +175,17 @@ class CredentialProvider:
 
         env_value = os.getenv(name, "").strip()
         if env_value:
-            return (_strip_env_quotes(env_value), "environment")
+            value = _strip_env_quotes(env_value)
+            self._log_mapped_credential_state(name, value=value, source="environment", status="legacy")
+            return (value, "environment")
 
         for env_file in self.env_files:
             value = self._read_env_file_value(env_file, name)
             if value:
+                self._log_mapped_credential_state(name, value=value, source=f".env:{env_file.name}", status="legacy")
                 return (value, f".env:{env_file.name}")
 
+        self._log_mapped_credential_state(name, value="", source="none", status="not_configured")
         return ("", "")
 
     def get_cookie(self, channel_code: str) -> tuple[str, str]:
@@ -306,10 +318,19 @@ class CredentialProvider:
 
                     new_cookie_data = json.loads(cookies) if cookies.startswith("{") else {"cookie": cookies}
                     existing.update(new_cookie_data)
+                    if existing.get("cookie") and _is_sample_credential_status(existing.get("status", "")):
+                        existing["status"] = "active"
                     existing.setdefault("status", "active")
+                    existing.setdefault("last_verified_at", None)
                     channel.cookies = json.dumps(existing, ensure_ascii=False)
 
                 if extra_credentials is not None:
+                    if channel_code == "zhihu":
+                        zhihu_extra = extra_credentials.get("zhihu") if isinstance(extra_credentials, dict) else None
+                        if isinstance(zhihu_extra, dict) and (
+                            zhihu_extra.get("zse_93") or zhihu_extra.get("zse_96")
+                        ) and _is_sample_credential_status(zhihu_extra.get("status", "")):
+                            zhihu_extra["status"] = "active"
                     channel.extra_credentials = extra_credentials
 
                 channel.credentials_updated_at = datetime.now()
@@ -473,17 +494,45 @@ class CredentialProvider:
                             cookies_data = json.loads(channel.cookies) if isinstance(channel.cookies, str) else channel.cookies
                         except json.JSONDecodeError:
                             cookies_data = {"cookie": channel.cookies}
+                    credential_status = cookies_data.get("status", "") if isinstance(cookies_data, dict) else ""
                     if _is_sample_cookie_data(cookies_data):
-                        return _DatabaseCredentialRead(found=True)
-                    return _DatabaseCredentialRead(found=bool(cookies_data), value=cookies_data.get("cookie", "") if cookies_data else "")
+                        return _DatabaseCredentialRead(
+                            found=True,
+                            channel_code=channel_code,
+                            credential_key=credential_key,
+                            status=credential_status,
+                        )
+                    return _DatabaseCredentialRead(
+                        found=bool(cookies_data),
+                        value=cookies_data.get("cookie", "") if cookies_data else "",
+                        channel_code=channel_code,
+                        credential_key=credential_key,
+                        status=credential_status,
+                    )
                 elif credential_key.startswith("zse_"):
                     if _is_sample_cookie_data(_parse_cookie_data(channel.cookies)):
-                        return _DatabaseCredentialRead(found=True)
+                        return _DatabaseCredentialRead(
+                            found=True,
+                            channel_code=channel_code,
+                            credential_key=credential_key,
+                            status="sample",
+                        )
                     extra = channel.extra_credentials or {}
                     zhihu_extra = extra.get("zhihu", {})
                     if _is_sample_credential_status(zhihu_extra.get("status", "")):
-                        return _DatabaseCredentialRead(found=True)
-                    return _DatabaseCredentialRead(found=bool(zhihu_extra), value=zhihu_extra.get(credential_key, ""))
+                        return _DatabaseCredentialRead(
+                            found=True,
+                            channel_code=channel_code,
+                            credential_key=credential_key,
+                            status=zhihu_extra.get("status", ""),
+                        )
+                    return _DatabaseCredentialRead(
+                        found=bool(zhihu_extra),
+                        value=zhihu_extra.get(credential_key, ""),
+                        channel_code=channel_code,
+                        credential_key=credential_key,
+                        status=zhihu_extra.get("status", ""),
+                    )
                 else:
                     return _DatabaseCredentialRead(found=False)
 
@@ -505,6 +554,55 @@ class CredentialProvider:
         """设置凭证缓存。"""
         self._cache[name] = value
         self._cache_ttl[name] = datetime.now()
+
+    def _log_credential_state(self, name: str, credential: _DatabaseCredentialRead, enabled: bool) -> None:
+        """打印脱敏凭证读取状态，避免日志泄露 Cookie 明文。"""
+        state = (
+            name,
+            credential.source,
+            credential.status or "",
+            len(credential.value or ""),
+            enabled,
+        )
+        if state in self._logged_states:
+            return
+        self._logged_states.add(state)
+        if enabled:
+            logger.info(
+                "渠道凭证已读取: channel=%s key=%s source=%s status=%s length=%s",
+                credential.channel_code,
+                credential.credential_key,
+                credential.source,
+                credential.status or "unknown",
+                len(credential.value or ""),
+            )
+        else:
+            logger.warning(
+                "渠道凭证未启用: channel=%s key=%s source=%s status=%s length=%s",
+                credential.channel_code,
+                credential.credential_key,
+                credential.source,
+                credential.status or "empty",
+                len(credential.value or ""),
+            )
+
+    def _log_mapped_credential_state(self, name: str, value: str, source: str, status: str) -> None:
+        mapping = ENV_VAR_TO_CHANNEL_CREDENTIAL.get(name)
+        if not mapping:
+            return
+        channel_code, credential_key = mapping
+        self._log_credential_state(
+            name,
+            _DatabaseCredentialRead(
+                found=True,
+                value=value,
+                channel_code=channel_code,
+                credential_key=credential_key,
+                status=status,
+                source=source,
+            ),
+            bool(value),
+        )
 
     def _get_cookies_metadata(self, env_name: str) -> dict:
         """从数据库获取 cookies 的元数据（状态、验证时间）。"""

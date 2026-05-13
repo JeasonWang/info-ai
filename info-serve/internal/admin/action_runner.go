@@ -12,11 +12,6 @@ type ActionResult struct {
 // ActionRunner 定义管理后台可触发的采集和治理动作。
 type ActionRunner interface {
 	TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error)
-	GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error)
-	GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error)
-	ListLLMModelConfigs(ctx context.Context) (any, error)
-	CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error)
-	UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error)
 	EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error)
 	RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error)
 	RebuildEvents(ctx context.Context) (ActionResult, error)
@@ -24,10 +19,41 @@ type ActionRunner interface {
 	RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error)
 	ArchiveLowQuality(ctx context.Context) (ActionResult, error)
 	ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error)
-	GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
-	UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error)
 	TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
-	DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
+	InvalidateCredentials(ctx context.Context, channelCode string) (ActionResult, error)
+	TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error)
+	ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error)
+}
+
+type LLMActionRunner interface {
+	TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error)
+	ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error)
+}
+
+type CompositeActionRunner struct {
+	ActionRunner
+	llmRunner LLMActionRunner
+}
+
+func NewCompositeActionRunner(base ActionRunner, llmRunner LLMActionRunner) *CompositeActionRunner {
+	if base == nil {
+		base = NewMemoryActionRunner()
+	}
+	return &CompositeActionRunner{ActionRunner: base, llmRunner: llmRunner}
+}
+
+func (r *CompositeActionRunner) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	if r.llmRunner != nil {
+		return r.llmRunner.TestLLMChat(ctx, payload)
+	}
+	return r.ActionRunner.TestLLMChat(ctx, payload)
+}
+
+func (r *CompositeActionRunner) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	if r.llmRunner != nil {
+		return r.llmRunner.ChatLLM(ctx, payload)
+	}
+	return r.ActionRunner.ChatLLM(ctx, payload)
 }
 
 // MemoryActionRunner 是测试和本地空依赖模式使用的动作执行器。
@@ -43,86 +69,6 @@ func (r *MemoryActionRunner) TriggerCrawl(ctx context.Context, channelCode strin
 		Message: "本地测试模式已模拟触发采集",
 		Data:    map[string]any{"channel_code": channelCode},
 	}, nil
-}
-
-func (r *MemoryActionRunner) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
-	return map[string]any{
-		"summary": map[string]any{
-			"real_count":               2,
-			"complete_count":           1,
-			"high_value_partial_count": 1,
-			"usable_count":             2,
-			"needs_attention_count":    0,
-			"complete_ratio":           50.0,
-			"usable_ratio":             100.0,
-			"needs_attention_ratio":    0.0,
-			"weak_channels":            []any{},
-		},
-		"channels": []any{
-			map[string]any{
-				"channel_code":              "weibo",
-				"channel_name":              "微博",
-				"real_count":                2,
-				"complete_count":            1,
-				"complete_ratio":            50.0,
-				"high_value_partial_count":  1,
-				"usable_count":              2,
-				"usable_ratio":              100.0,
-				"needs_attention_count":     0,
-				"needs_attention_ratio":     0.0,
-				"avg_detail_score":          82.5,
-				"avg_detail_content_length": 320.0,
-				"top_failure_reasons":       []any{},
-				"top_detail_strategies":     []any{map[string]any{"strategy": "mobile_search", "count": 2}},
-				"credential_health":         map[string]any{"health": "ready"},
-				"weak_samples":              []any{},
-			},
-		},
-	}, nil
-}
-
-func (r *MemoryActionRunner) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
-	return map[string]any{
-		"summary": map[string]any{
-			"active_event_count":      1,
-			"analyzed_count":          1,
-			"missing_analysis_count":  0,
-			"low_confidence_count":    0,
-			"fallback_count":          0,
-			"weak_source_event_count": 0,
-			"avg_confidence":          0.86,
-			"avg_quality_score":       82.0,
-			"risk_event_count":        0,
-		},
-		"risk_events": []any{},
-	}, nil
-}
-
-func (r *MemoryActionRunner) ListLLMModelConfigs(ctx context.Context) (any, error) {
-	return []any{
-		map[string]any{
-			"id":               1,
-			"provider_name":    "千问",
-			"provider_code":    "qwen",
-			"base_url":         "http://127.0.0.1:8001/v1",
-			"api_key":          "",
-			"model_name":       "qwen2.5-14b-instruct",
-			"is_enabled":       0,
-			"daily_call_limit": 1000,
-			"daily_call_count": 0,
-			"priority":         10,
-		},
-	}, nil
-}
-
-func (r *MemoryActionRunner) CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error) {
-	payload["id"] = 1
-	return payload, nil
-}
-
-func (r *MemoryActionRunner) UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error) {
-	payload["id"] = id
-	return payload, nil
 }
 
 func (r *MemoryActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
@@ -165,26 +111,6 @@ func (r *MemoryActionRunner) ArchiveDuplicateTitles(ctx context.Context) (Action
 	return ActionResult{Action: "archive_duplicate_titles", Message: "本地测试模式已模拟归档重复标题", Data: map[string]any{}}, nil
 }
 
-func (r *MemoryActionRunner) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
-	return map[string]any{
-		"channel_code":       channelCode,
-		"cookie_configured":  false,
-		"cookie_preview":     "",
-		"cookie_status":     "not_configured",
-		"extra_credentials": map[string]any{},
-		"updated_at":        nil,
-		"updated_by":        "",
-	}, nil
-}
-
-func (r *MemoryActionRunner) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
-	return map[string]any{
-		"channel_code": channelCode,
-		"success":       true,
-		"message":      "本地测试模式已模拟凭证更新",
-	}, nil
-}
-
 func (r *MemoryActionRunner) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
 	return map[string]any{
 		"channel_code":  channelCode,
@@ -194,10 +120,30 @@ func (r *MemoryActionRunner) TestChannelCredentials(ctx context.Context, channel
 	}, nil
 }
 
-func (r *MemoryActionRunner) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+func (r *MemoryActionRunner) InvalidateCredentials(ctx context.Context, channelCode string) (ActionResult, error) {
+	return ActionResult{
+		Action:  "invalidate_credentials",
+		Message: "本地测试模式已模拟刷新采集凭证缓存",
+		Data:    map[string]any{"channel_code": channelCode},
+	}, nil
+}
+
+func (r *MemoryActionRunner) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
 	return map[string]any{
-		"channel_code": channelCode,
-		"success":      true,
-		"message":     "本地测试模式已模拟凭证清除",
+		"ok":        false,
+		"status":    "local_stub",
+		"message":   "本地测试模式：需要连接真实采集服务验证大模型",
+		"prompt":    payload.Prompt,
+		"config_id": payload.ConfigID,
+	}, nil
+}
+
+func (r *MemoryActionRunner) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	return map[string]any{
+		"ok":        false,
+		"status":    "local_stub",
+		"message":   "本地测试模式：需要连接真实采集服务调用大模型",
+		"user_text": payload.Message,
+		"config_id": payload.ConfigID,
 	}, nil
 }

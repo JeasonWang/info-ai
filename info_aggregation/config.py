@@ -75,6 +75,7 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # ==================== API配置 ====================
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
+ENABLE_PUBLIC_API = os.getenv("ENABLE_PUBLIC_API", "1" if APP_ENV == "test" else "0") == "1"
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -83,6 +84,17 @@ CORS_ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+
+# ==================== Redis 命令总线配置 ====================
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+ENABLE_REDIS_COMMAND_CONSUMER = os.getenv("ENABLE_REDIS_COMMAND_CONSUMER", "1") == "1"
+AGGREGATION_COMMAND_STREAM = os.getenv("AGGREGATION_COMMAND_STREAM", "info_ai:aggregation:commands")
+AGGREGATION_COMMAND_CONSUMER_GROUP = os.getenv("AGGREGATION_COMMAND_CONSUMER_GROUP", "info_aggregation")
+AGGREGATION_COMMAND_CONSUMER_NAME = os.getenv("AGGREGATION_COMMAND_CONSUMER_NAME", "")
+AGGREGATION_RESULT_TTL_SECONDS = int(os.getenv("AGGREGATION_RESULT_TTL_SECONDS", "86400"))
 
 # ==================== 信息分类枚举 ====================
 CATEGORY_HOT = "热点事件"

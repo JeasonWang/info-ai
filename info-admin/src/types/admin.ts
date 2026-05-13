@@ -359,6 +359,46 @@ export interface LLMModelConfigPayload {
   priority: number
 }
 
+export interface LLMChatTestPayload {
+  config_id?: number
+  prompt: string
+  timeout_seconds: number
+}
+
+export interface LLMChatTestResult {
+  ok: boolean
+  status: string
+  config_id?: number
+  provider_code?: string
+  model_name?: string
+  latency_ms?: number
+  status_code?: number
+  content?: string
+  json?: Record<string, unknown> | null
+  usage?: Record<string, unknown>
+  message?: string
+}
+
+export interface LLMChatPayload {
+  config_id?: number
+  message: string
+  timeout_seconds: number
+}
+
+export interface LLMChatResult {
+  ok: boolean
+  status: string
+  answer?: string
+  content?: string
+  config_id?: number
+  provider_code?: string
+  model_name?: string
+  latency_ms?: number
+  status_code?: number
+  usage?: Record<string, unknown>
+  message?: string
+}
+
 export interface AuditLog {
   id: number
   admin_user_id: number

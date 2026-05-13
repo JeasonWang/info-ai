@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import DataPanel from '@/components/DataPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { createLLMModelConfig, getLLMModelConfigs, updateLLMModelConfig } from '@/services/adminApi'
-import type { LLMModelConfig, LLMModelConfigPayload } from '@/types/admin'
+import { chatLLM, createLLMModelConfig, getLLMModelConfigs, updateLLMModelConfig } from '@/services/adminApi'
+import type { LLMChatResult, LLMModelConfig, LLMModelConfigPayload } from '@/types/admin'
 
 const configs = ref<LLMModelConfig[]>([])
 const editingId = ref<number | null>(null)
-const message = ref('')
+const configMessage = ref('')
+const chatMessage = ref('')
+const chattingId = ref<number | null>(null)
+const chatResult = ref<LLMChatResult | null>(null)
+const selectedChatConfigId = ref<number | ''>('')
+const chatInput = ref('请用三句话介绍一下信息达人系统。')
+const lastUserMessage = ref('')
 const form = reactive<LLMModelConfigPayload>({
   provider_name: '千问',
   provider_code: 'qwen',
@@ -21,8 +27,22 @@ const form = reactive<LLMModelConfigPayload>({
   priority: 10,
 })
 
+const enabledConfigs = computed(() => configs.value.filter((item) => item.is_enabled === 1))
+const selectedChatConfig = computed(() => {
+  if (selectedChatConfigId.value === '') return null
+  return configs.value.find((item) => item.id === selectedChatConfigId.value) || null
+})
+const canSendChat = computed(() => chatInput.value.trim().length > 0 && chattingId.value === null)
+const chatAnswer = computed(() => chatResult.value?.answer || chatResult.value?.content || chatResult.value?.message || '')
+
 async function refreshData() {
   configs.value = await getLLMModelConfigs()
+  if (
+    selectedChatConfigId.value !== ''
+    && !enabledConfigs.value.some((item) => item.id === selectedChatConfigId.value)
+  ) {
+    selectedChatConfigId.value = ''
+  }
 }
 
 function resetForm() {
@@ -54,13 +74,49 @@ function editConfig(item: LLMModelConfig) {
 async function submitConfig() {
   if (editingId.value) {
     await updateLLMModelConfig(editingId.value, { ...form })
-    message.value = '大模型配置已更新'
+    configMessage.value = '大模型配置已更新'
   } else {
     await createLLMModelConfig({ ...form })
-    message.value = '大模型配置已新增'
+    configMessage.value = '大模型配置已新增'
   }
   resetForm()
   await refreshData()
+}
+
+async function sendChat(config?: LLMModelConfig | null) {
+  const message = chatInput.value.trim()
+  if (!message) {
+    chatMessage.value = '请输入聊天内容'
+    return
+  }
+
+  const targetConfig = config ?? selectedChatConfig.value
+  if (targetConfig) {
+    selectedChatConfigId.value = targetConfig.id
+  }
+  chattingId.value = targetConfig?.id ?? 0
+  chatResult.value = null
+  lastUserMessage.value = message
+  chatMessage.value = '大模型正在回复，响应可能需要几十秒到数分钟。'
+  try {
+    chatResult.value = await chatLLM({
+      ...(targetConfig ? { config_id: targetConfig.id } : {}),
+      message,
+      timeout_seconds: 240,
+    })
+    chatMessage.value = chatResult.value.ok ? '大模型已回复' : '大模型回复失败'
+    await refreshData()
+  } catch (error) {
+    chatMessage.value = error instanceof Error ? error.message : '大模型回复失败'
+  } finally {
+    chattingId.value = null
+  }
+}
+
+function useConfigForChat(item: LLMModelConfig) {
+  selectedChatConfigId.value = item.id
+  chatResult.value = null
+  chatMessage.value = `已选择 ${item.provider_name} · ${item.model_name}`
 }
 
 onMounted(refreshData)
@@ -84,7 +140,42 @@ onMounted(refreshData)
         <button type="submit">{{ editingId ? '更新配置' : '新增配置' }}</button>
         <button v-if="editingId" type="button" class="button--ghost" @click="resetForm">取消编辑</button>
       </form>
-      <p class="form-message">{{ message || '所有模型停用或达到每日上限时，事件分析会自动使用本地规则分析。' }}</p>
+      <p class="form-message">{{ configMessage || '所有模型停用或达到每日上限时，事件分析会自动使用本地规则分析。' }}</p>
+    </DataPanel>
+
+    <DataPanel title="大模型聊天" status="admin → serve → aggregation → 模型">
+      <form class="llm-test-form" @submit.prevent="sendChat()">
+        <label>
+          聊天模型
+          <select v-model="selectedChatConfigId">
+            <option value="">自动选择可用模型</option>
+            <option v-for="item in enabledConfigs" :key="item.id" :value="item.id">
+              {{ item.provider_name }} · {{ item.model_name }}
+            </option>
+          </select>
+        </label>
+        <label>
+          聊天内容
+          <textarea v-model="chatInput" rows="5" placeholder="输入普通问题，大模型会直接返回答案"></textarea>
+        </label>
+        <div class="llm-test-actions">
+          <button type="submit" :disabled="!canSendChat">
+            {{ chattingId !== null ? '回复中' : '发送' }}
+          </button>
+          <span>{{ chatMessage || '输入问题后可直接和大模型对话，发送和返回内容会记录在调用日志中。' }}</span>
+        </div>
+      </form>
+      <div v-if="chatResult" class="test-result">
+        <strong>{{ chatResult.ok ? '模型回答' : '调用失败' }}</strong>
+        <span>
+          {{ chatResult.provider_code || 'unknown' }} · {{ chatResult.model_name || 'unknown' }}
+          {{ chatResult.latency_ms !== undefined ? ` · ${chatResult.latency_ms}ms` : '' }}
+        </span>
+        <span>你发送的内容</span>
+        <pre>{{ lastUserMessage }}</pre>
+        <span>大模型返回结果</span>
+        <pre>{{ chatAnswer || JSON.stringify(chatResult, null, 2) }}</pre>
+      </div>
     </DataPanel>
 
     <DataPanel title="模型列表" :status="`${configs.length} 个模型`">
@@ -108,6 +199,9 @@ onMounted(refreshData)
           </div>
           <div class="channel-quality-badges">
             <StatusBadge :label="item.is_enabled === 1 ? '启用' : '停用'" :tone="item.is_enabled === 1 ? 'success' : 'muted'" />
+            <button type="button" class="button--ghost" :disabled="item.is_enabled !== 1" @click="useConfigForChat(item)">
+              选为聊天模型
+            </button>
             <button type="button" class="button--ghost" @click="editConfig(item)">编辑</button>
           </div>
         </li>

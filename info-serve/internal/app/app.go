@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 
@@ -15,6 +16,7 @@ type App struct {
 	cfg     config.Config
 	db      *sql.DB
 	handler http.Handler
+	closers []func() error
 }
 
 // New 创建生产环境应用实例，负责连接 MySQL 并装配 HTTP handler。
@@ -27,10 +29,25 @@ func New(cfg config.Config) (*App, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	adminActions := admin.NewRedisActionRunner(admin.RedisActionRunnerConfig{
+		Addr:         cfg.RedisAddr,
+		Password:     cfg.RedisPassword,
+		DB:           admin.RedisDBFromString(cfg.RedisDB),
+		Stream:       cfg.AggregationCommandStream,
+		ResultPrefix: cfg.AggregationResultPrefix,
+		WaitTimeout:  admin.RedisWaitTimeoutFromString(cfg.AggregationResultWaitMS),
+	})
+	llmRunner := admin.NewAggregationLLMRunner(
+		cfg.AggregationHTTPBaseURL,
+		admin.DurationFromMilliseconds(cfg.AggregationLLMTimeoutMS, 4*60*time.Second),
+	)
 	return &App{
 		cfg:     cfg,
 		db:      db,
-		handler: NewHTTPHandlerFromDB(db, admin.NewAggregationActionRunner(cfg.AggregationBaseURL)),
+		handler: NewHTTPHandlerFromDB(db, admin.NewCompositeActionRunner(adminActions, llmRunner)),
+		closers: []func() error{
+			adminActions.Close,
+		},
 	}, nil
 }
 
@@ -43,8 +60,19 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) Close() error {
-	if a == nil || a.db == nil {
+	if a == nil {
 		return nil
 	}
-	return a.db.Close()
+	var closeErr error
+	for _, closer := range a.closers {
+		if err := closer(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	if a.db != nil {
+		if err := a.db.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	return closeErr
 }

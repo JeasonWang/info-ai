@@ -1,4 +1,19 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: info-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   info-aggregation:
     image: info-ai-info-aggregation:pro
     build:
@@ -34,8 +49,21 @@ services:
       EVENT_ANALYSIS_TEMPERATURE: ${EVENT_ANALYSIS_TEMPERATURE:-0.2}
       EVENT_ANALYSIS_FALLBACK_TO_RULE: ${EVENT_ANALYSIS_FALLBACK_TO_RULE:-1}
       ENABLE_SEED_DATA: ${ENABLE_SEED_DATA:-false}
+      REBUILD_EVENTS_ON_STARTUP: ${REBUILD_EVENTS_ON_STARTUP:-false}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      ENABLE_REDIS_COMMAND_CONSUMER: ${ENABLE_REDIS_COMMAND_CONSUMER:-1}
+      AGGREGATION_COMMAND_STREAM: ${AGGREGATION_COMMAND_STREAM:-info_ai:aggregation:commands}
+      AGGREGATION_COMMAND_CONSUMER_GROUP: ${AGGREGATION_COMMAND_CONSUMER_GROUP:-info_aggregation}
+      AGGREGATION_COMMAND_CONSUMER_NAME: ${AGGREGATION_COMMAND_CONSUMER_NAME:-}
+      AGGREGATION_RESULT_TTL_SECONDS: ${AGGREGATION_RESULT_TTL_SECONDS:-86400}
     volumes:
       - aggregation_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -52,12 +80,22 @@ services:
       INFO_SERVE_HTTP_ADDR: :8085
       INFO_SERVE_MYSQL_DSN: ${INFO_SERVE_MYSQL_DSN:-root:root1234@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local}
       INFO_SERVE_SESSION_SECRET: ${INFO_SERVE_SESSION_SECRET:-change-me-in-production}
-      INFO_AGGREGATION_BASE_URL: http://info-aggregation:8000
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      AGGREGATION_COMMAND_STREAM: ${AGGREGATION_COMMAND_STREAM:-info_ai:aggregation:commands}
+      AGGREGATION_RESULT_PREFIX: ${AGGREGATION_RESULT_PREFIX:-info_ai:aggregation:results:}
+      AGGREGATION_RESULT_WAIT_MS: ${AGGREGATION_RESULT_WAIT_MS:-5000}
+      AGGREGATION_HTTP_BASE_URL: ${AGGREGATION_HTTP_BASE_URL:-http://info-aggregation:8000}
+      AGGREGATION_LLM_TIMEOUT_MS: ${AGGREGATION_LLM_TIMEOUT_MS:-240000}
       INFO_ADMIN_EMAIL: ${INFO_ADMIN_EMAIL:-admin@info-daren.local}
       INFO_ADMIN_PASSWORD: ${INFO_ADMIN_PASSWORD:-Admin123456}
       TZ: ${TZ:-Asia/Shanghai}
     depends_on:
-      - info-aggregation
+      redis:
+        condition: service_healthy
+      info-aggregation:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -94,4 +132,5 @@ services:
       - info-serve
 
 volumes:
+  redis_data:
   aggregation_data:

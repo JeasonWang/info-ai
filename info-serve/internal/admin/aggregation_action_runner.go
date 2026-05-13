@@ -152,6 +152,14 @@ func (r *AggregationActionRunner) DeleteChannelCredentials(ctx context.Context, 
 	return nil, errors.New("返回格式异常")
 }
 
+func (r *AggregationActionRunner) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	return NewAggregationLLMRunner(r.baseURL, 4*time.Minute).TestLLMChat(ctx, payload)
+}
+
+func (r *AggregationActionRunner) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	return NewAggregationLLMRunner(r.baseURL, 4*time.Minute).ChatLLM(ctx, payload)
+}
+
 func (r *AggregationActionRunner) post(ctx context.Context, action string, path string) (ActionResult, error) {
 	if r.baseURL == "" {
 		return ActionResult{}, fmt.Errorf("采集服务地址未配置")

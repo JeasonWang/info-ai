@@ -24,6 +24,26 @@ func (s *MemoryStore) ListChannelHealth(ctx context.Context) ([]ChannelHealth, e
 	return []ChannelHealth{}, nil
 }
 
+func (s *MemoryStore) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
+	return map[string]any{
+		"summary": map[string]any{
+			"real_count":            0,
+			"complete_count":        0,
+			"usable_count":          0,
+			"needs_attention_count": 0,
+			"weak_channels":         []any{},
+		},
+		"channels": []any{},
+	}, nil
+}
+
+func (s *MemoryStore) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
+	return map[string]any{
+		"summary":     map[string]any{"active_event_count": 0, "risk_event_count": 0},
+		"risk_events": []any{},
+	}, nil
+}
+
 func (s *MemoryStore) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
 	return []QualitySnapshot{}, nil
 }
@@ -85,6 +105,40 @@ func (s *MemoryStore) CreateChannel(ctx context.Context, payload ChannelPayload)
 
 func (s *MemoryStore) UpdateChannel(ctx context.Context, id int64, payload ChannelPayload) (Channel, error) {
 	return Channel{ID: id, Name: payload.Name, Code: payload.Code, BaseURL: payload.BaseURL, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
+}
+
+func (s *MemoryStore) ListLLMModelConfigs(ctx context.Context) (any, error) {
+	return []any{}, nil
+}
+
+func (s *MemoryStore) CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error) {
+	payload["id"] = int64(1)
+	return payload, nil
+}
+
+func (s *MemoryStore) UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error) {
+	payload["id"] = id
+	return payload, nil
+}
+
+func (s *MemoryStore) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{
+		"channel_code":       channelCode,
+		"cookie_configured":  false,
+		"cookie_preview":     "",
+		"cookie_status":      "not_configured",
+		"extra_credentials":  map[string]any{},
+		"updated_at":         "",
+		"updated_by":         "",
+	}, nil
+}
+
+func (s *MemoryStore) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "success": true, "message": "本地测试模式已模拟凭证更新"}, nil
+}
+
+func (s *MemoryStore) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "success": true, "message": "本地测试模式已模拟凭证清除"}, nil
 }
 
 func (s *MemoryStore) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {

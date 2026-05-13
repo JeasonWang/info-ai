@@ -22,7 +22,9 @@ import {
   refreshQuality,
   retryLowQualityDetails,
   triggerCrawlTask,
+  chatLLM,
   createLLMModelConfig,
+  testLLMChat,
   updateLLMModelConfig,
 } from '@/services/adminApi'
 import { loginAdmin } from '@/services/authApi'
@@ -90,6 +92,16 @@ describe('admin API versioned paths', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/admin/llm-model-configs/3',
       expect.objectContaining({ method: 'PUT' }),
+    )
+    await testLLMChat({ config_id: 3, prompt: 'ping', timeout_seconds: 240 })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/llm-model-configs/test-chat',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    await chatLLM({ config_id: 3, message: '你好', timeout_seconds: 240 })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/llm-model-configs/chat',
+      expect.objectContaining({ method: 'POST' }),
     )
 
     await getEventAnalysisQualityReport(18)

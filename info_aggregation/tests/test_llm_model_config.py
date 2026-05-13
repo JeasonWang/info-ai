@@ -3,6 +3,7 @@ from datetime import date
 from database import LLMModelConfig
 from services.analysis.llm_model_config import (
     create_llm_model_config,
+    increment_llm_call_count,
     list_llm_model_configs,
     select_available_llm_config,
     update_llm_model_config,
@@ -78,24 +79,44 @@ def test_select_available_llm_config_skips_disabled_and_daily_limited(session):
     assert selected.provider_code == "qwen"
 
 
-def test_select_available_llm_config_resets_yesterday_count(session):
-    session.add(
-        LLMModelConfig(
-            provider_name="千问",
-            provider_code="qwen",
-            base_url="http://127.0.0.1:8001/v1",
-            api_key="",
-            model_name="qwen-local",
-            is_enabled=1,
-            daily_call_limit=2,
-            daily_call_count=2,
-            last_call_date=date(2026, 1, 1),
-        )
+def test_select_available_llm_config_treats_yesterday_count_as_available_without_flushing(session):
+    config = LLMModelConfig(
+        provider_name="千问",
+        provider_code="qwen",
+        base_url="http://127.0.0.1:8001/v1",
+        api_key="",
+        model_name="qwen-local",
+        is_enabled=1,
+        daily_call_limit=2,
+        daily_call_count=2,
+        last_call_date=date(2026, 1, 1),
     )
+    session.add(config)
     session.commit()
 
     selected = select_available_llm_config(session)
 
     assert selected is not None
-    assert selected.daily_call_count == 0
-    assert selected.last_call_date == date.today()
+    assert selected.daily_call_count == 2
+    assert selected.last_call_date == date(2026, 1, 1)
+
+
+def test_increment_llm_call_count_resets_yesterday_count(session):
+    config = LLMModelConfig(
+        provider_name="千问",
+        provider_code="qwen",
+        base_url="http://127.0.0.1:8001/v1",
+        api_key="",
+        model_name="qwen-local",
+        is_enabled=1,
+        daily_call_limit=2,
+        daily_call_count=2,
+        last_call_date=date(2026, 1, 1),
+    )
+    session.add(config)
+    session.commit()
+
+    increment_llm_call_count(session, config)
+
+    assert config.daily_call_count == 1
+    assert config.last_call_date == date.today()

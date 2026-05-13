@@ -500,7 +500,7 @@ class LLMModelConfig(Base):
 
 
 class LLMCallLog(Base):
-    """大模型调用日志表：记录事件分析模型调用的成功、失败和耗时。"""
+    """大模型调用日志表：记录模型调用请求、响应、成功失败和耗时。"""
 
     __tablename__ = "llm_call_log"
 
@@ -511,6 +511,9 @@ class LLMCallLog(Base):
     status = Column(String(20), nullable=False, comment="调用状态: succeeded/failed")
     latency_ms = Column(Integer, default=0, nullable=False, comment="调用耗时毫秒")
     input_item_count = Column(Integer, default=0, nullable=False, comment="输入来源数量")
+    request_payload = Column(JSON, default=None, comment="请求参数快照，包含消息内容")
+    response_content = Column(Text, default="", comment="模型返回文本")
+    response_payload = Column(JSON, default=None, comment="模型原始响应快照")
     error_message = Column(String(500), default="", comment="错误信息")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
 

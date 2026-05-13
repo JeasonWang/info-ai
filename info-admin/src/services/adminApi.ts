@@ -16,6 +16,10 @@ import type {
   DetailJobReport,
   EventAnalysisQualityReport,
   LLMModelConfig,
+  LLMChatPayload,
+  LLMChatResult,
+  LLMChatTestPayload,
+  LLMChatTestResult,
   LLMModelConfigPayload,
   LowQualityInfo,
   QualitySnapshot,
@@ -130,6 +134,20 @@ export function createLLMModelConfig(payload: LLMModelConfigPayload) {
 export function updateLLMModelConfig(id: number, payload: LLMModelConfigPayload) {
   return apiRequest<LLMModelConfig>(apiV1(`/admin/llm-model-configs/${id}`), {
     method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function testLLMChat(payload: LLMChatTestPayload) {
+  return apiRequest<LLMChatTestResult>(apiV1('/admin/llm-model-configs/test-chat'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function chatLLM(payload: LLMChatPayload) {
+  return apiRequest<LLMChatResult>(apiV1('/admin/llm-model-configs/chat'), {
+    method: 'POST',
     body: JSON.stringify(payload),
   })
 }

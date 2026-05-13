@@ -655,6 +655,8 @@ def _get_latest_checkpoint(session) -> RebuildCheckpoint | None:
 
 def _incremental_rebuild(session, limit: int = 200):
     """增量重建：只处理新增Info。"""
+    rebuild_started_at = datetime.now()
+
     # 1. 获取检查点
     checkpoint = _get_latest_checkpoint(session)
     if checkpoint:
@@ -681,16 +683,6 @@ def _incremental_rebuild(session, limit: int = 200):
 
     if not new_infos:
         return
-
-    # 记录开始检查点
-    start_checkpoint = RebuildCheckpoint(
-        checkpoint_type="incremental",
-        max_info_id_processed=max_info_id,
-        items_processed=len(new_infos),
-        started_at=datetime.now(),
-    )
-    session.add(start_checkpoint)
-    session.flush()
 
     # 3. 加载现有事件
     existing_events = _load_existing_events(session)
@@ -720,23 +712,23 @@ def _incremental_rebuild(session, limit: int = 200):
             _create_new_event(session, group, event_key, existing_events)
             events_created += 1
 
-    # 更新检查点
-    start_checkpoint.max_info_id_processed = max_processed_id
-    start_checkpoint.events_created = events_created
-    start_checkpoint.events_updated = events_updated
-    start_checkpoint.finished_at = datetime.now()
+    session.add(
+        RebuildCheckpoint(
+            checkpoint_type="incremental",
+            max_info_id_processed=max_processed_id,
+            items_processed=len(new_infos),
+            events_created=events_created,
+            events_updated=events_updated,
+            started_at=rebuild_started_at,
+            finished_at=datetime.now(),
+        )
+    )
 
     session.commit()
 
 
-def _reanalyze_existing_event(session, event: Event) -> bool:
-    """基于事件当前所有来源重新生成分析输出，不修改来源关联。"""
-    all_event_items = (
-        session.query(Info)
-        .join(EventItemLink, EventItemLink.item_id == Info.id)
-        .filter(EventItemLink.event_id == event.id)
-        .all()
-    )
+def _reanalyze_event_items(session, event: Event, all_event_items: list[Info]) -> bool:
+    """基于给定来源重新生成分析输出；外部大模型调用完成后才写分析表。"""
     if not all_event_items:
         return False
 
@@ -758,25 +750,37 @@ def _reanalyze_existing_event(session, event: Event) -> bool:
     return True
 
 
+def _reanalyze_existing_event(session, event: Event) -> bool:
+    """基于事件当前所有来源重新生成分析输出，不修改来源关联。"""
+    all_event_items = (
+        session.query(Info)
+        .join(EventItemLink, EventItemLink.item_id == Info.id)
+        .filter(EventItemLink.event_id == event.id)
+        .all()
+    )
+    return _reanalyze_event_items(session, event, all_event_items)
+
+
 def _incrementally_update_event(session, event: Event, new_group: list[Info]) -> bool:
     """增量更新现有事件：追加ItemLink，更新时间线/摘要。"""
     existing_item_ids = {
         item_id
         for (item_id,) in session.query(EventItemLink.item_id).filter(EventItemLink.event_id == event.id).all()
     }
+    existing_event_items = (
+        session.query(Info)
+        .join(EventItemLink, EventItemLink.item_id == Info.id)
+        .filter(EventItemLink.event_id == event.id)
+        .all()
+    )
     new_group = [item for item in new_group if item.id not in existing_item_ids]
     if not new_group:
         return False
 
-    chronological_group = sorted(new_group, key=lambda item: item.event_time or item.created_at)
-    prioritized_group = _prioritize_event_items(new_group)
+    if not _reanalyze_event_items(session, event, existing_event_items + new_group):
+        return False
 
-    # 更新事件基础信息
-    event.source_count = (event.source_count or 0) + len(prioritized_group)
-    latest_item = chronological_group[-1]
-    if latest_item.event_time and latest_item.event_time > (event.last_updated_at or datetime.min):
-        event.last_updated_at = latest_item.event_time
-    event.one_line_summary = _build_one_line(_prioritize_event_items(new_group))
+    prioritized_group = _prioritize_event_items(new_group)
 
     # 添加新的ItemLink
     existing_link_count = (
@@ -795,7 +799,7 @@ def _incrementally_update_event(session, event: Event, new_group: list[Info]) ->
             )
         )
 
-    return _reanalyze_existing_event(session, event)
+    return True
 
 
 def _create_new_event(session, group: list[Info], event_key: str, existing_events: dict):
@@ -888,16 +892,7 @@ def _full_rebuild(session, limit: int = 200):
         grouped_items[_build_event_key(item)].append(item)
 
     existing_events = _load_existing_events(session)
-    session.query(EventItemLink).delete()
-    session.query(EventTimelineEntry).delete()
-    session.query(EventSummarySnapshot).delete()
-    session.query(EventTimelineAnalysis).delete()
-    session.query(EventAnalysisSnapshot).delete()
-    session.query(EventFactSnapshot).delete()
-    session.query(EventAnalysisSource).delete()
-    session.query(EventAnalysisRun).delete()
-    session.query(Event).update({Event.status: "archived"}, synchronize_session="fetch")
-    session.flush()
+    analysis_plans = []
 
     for (category_id, anchor), group in grouped_items.items():
         chronological_group = sorted(group, key=lambda item: item.event_time or item.created_at)
@@ -918,25 +913,65 @@ def _full_rebuild(session, limit: int = 200):
             evolution_summary = _generate_evolution_summary(evolution_type, group, historical_events)
             evolution_stage = _determine_evolution_stage(group, historical_events, source_delta)
 
-            event.previous_event_id = previous_event.id
-            event.event_generation = (previous_event.event_generation or 1) + 1
-            event.evolution_stage = evolution_stage
             # 保存演变分析结果，稍后在事件flush后写入
             pending_evolution = {
                 "previous_event_id": previous_event.id,
+                "event_generation": (previous_event.event_generation or 1) + 1,
+                "evolution_stage": evolution_stage,
                 "evolution_type": evolution_type,
                 "evolution_summary": evolution_summary,
                 "source_count_delta": source_delta,
                 "key_change": key_change,
             }
         else:
-            event.previous_event_id = None
-            event.event_generation = 1
-            event.evolution_stage = "emerging"
             pending_evolution = None
 
         history_context = _build_history_context(core_entity, historical_events)
         analysis = analyze_event_sources(analysis_group, chronological_group, session=session, history_context=history_context)
+
+        analysis_plans.append(
+            {
+                "analysis": analysis,
+                "analysis_group": analysis_group,
+                "chronological_group": chronological_group,
+                "event": event,
+                "event_key": event_key,
+                "lead_item": lead_item,
+                "latest_item": latest_item,
+                "pending_evolution": pending_evolution,
+                "prioritized_group": prioritized_group,
+            }
+        )
+
+    session.query(EventItemLink).delete()
+    session.query(EventTimelineEntry).delete()
+    session.query(EventSummarySnapshot).delete()
+    session.query(EventTimelineAnalysis).delete()
+    session.query(EventAnalysisSnapshot).delete()
+    session.query(EventFactSnapshot).delete()
+    session.query(EventAnalysisSource).delete()
+    session.query(EventAnalysisRun).delete()
+    session.query(Event).update({Event.status: "archived"}, synchronize_session="fetch")
+
+    for plan in analysis_plans:
+        analysis = plan["analysis"]
+        analysis_group = plan["analysis_group"]
+        chronological_group = plan["chronological_group"]
+        event = plan["event"]
+        event_key = plan["event_key"]
+        lead_item = plan["lead_item"]
+        latest_item = plan["latest_item"]
+        pending_evolution = plan["pending_evolution"]
+        prioritized_group = plan["prioritized_group"]
+
+        if pending_evolution:
+            event.previous_event_id = pending_evolution["previous_event_id"]
+            event.event_generation = pending_evolution["event_generation"]
+            event.evolution_stage = pending_evolution["evolution_stage"]
+        else:
+            event.previous_event_id = None
+            event.event_generation = 1
+            event.evolution_stage = "emerging"
 
         event.title = lead_item.title
         event.one_line_summary = analysis.one_line_summary

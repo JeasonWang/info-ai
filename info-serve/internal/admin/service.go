@@ -17,6 +17,8 @@ type Store interface {
 	GetOverview(ctx context.Context) (Overview, error)
 	ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunSummary, error)
 	ListChannelHealth(ctx context.Context) ([]ChannelHealth, error)
+	GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error)
+	GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error)
 	ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error)
 	ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error)
 	GetDetailJobReport(ctx context.Context, filter DetailJobFilter) (DetailJobReport, error)
@@ -32,6 +34,12 @@ type Store interface {
 	ListChannels(ctx context.Context) ([]Channel, error)
 	CreateChannel(ctx context.Context, payload ChannelPayload) (Channel, error)
 	UpdateChannel(ctx context.Context, id int64, payload ChannelPayload) (Channel, error)
+	ListLLMModelConfigs(ctx context.Context) (any, error)
+	CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error)
+	UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error)
+	GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
+	UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error)
+	DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
 	ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error)
 	GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error)
 	GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error)
@@ -246,6 +254,18 @@ type LLMModelConfigPayload struct {
 	Priority       int    `json:"priority"`
 }
 
+type LLMChatTestPayload struct {
+	ConfigID       int64  `json:"config_id"`
+	Prompt         string `json:"prompt"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
+type LLMChatPayload struct {
+	ConfigID       int64  `json:"config_id"`
+	Message        string `json:"message"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
 type ChannelCredentialPayload struct {
 	Cookies          string         `json:"cookies"`
 	ExtraCredentials map[string]any `json:"extra_credentials"`
@@ -358,7 +378,7 @@ func (s *Service) GetChannelQualityReport(ctx context.Context, sampleLimit int) 
 	if sampleLimit > 20 {
 		sampleLimit = 20
 	}
-	return s.runner.GetChannelQualityReport(ctx, sampleLimit)
+	return s.store.GetChannelQualityReport(ctx, sampleLimit)
 }
 
 func (s *Service) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
@@ -368,11 +388,11 @@ func (s *Service) GetEventAnalysisQualityReport(ctx context.Context, limit int) 
 	if limit > 100 {
 		limit = 100
 	}
-	return s.runner.GetEventAnalysisQualityReport(ctx, limit)
+	return s.store.GetEventAnalysisQualityReport(ctx, limit)
 }
 
 func (s *Service) ListLLMModelConfigs(ctx context.Context) (any, error) {
-	return s.runner.ListLLMModelConfigs(ctx)
+	return s.store.ListLLMModelConfigs(ctx)
 }
 
 func (s *Service) CreateLLMModelConfig(ctx context.Context, payload LLMModelConfigPayload) (any, error) {
@@ -380,7 +400,7 @@ func (s *Service) CreateLLMModelConfig(ctx context.Context, payload LLMModelConf
 	if err != nil {
 		return nil, err
 	}
-	return s.runner.CreateLLMModelConfig(ctx, normalized)
+	return s.store.CreateLLMModelConfig(ctx, normalized)
 }
 
 func (s *Service) UpdateLLMModelConfig(ctx context.Context, id int64, payload LLMModelConfigPayload) (any, error) {
@@ -391,7 +411,43 @@ func (s *Service) UpdateLLMModelConfig(ctx context.Context, id int64, payload LL
 	if err != nil {
 		return nil, err
 	}
-	return s.runner.UpdateLLMModelConfig(ctx, id, normalized)
+	return s.store.UpdateLLMModelConfig(ctx, id, normalized)
+}
+
+func (s *Service) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	normalized := payload
+	normalized.Prompt = strings.TrimSpace(normalized.Prompt)
+	if normalized.Prompt == "" {
+		normalized.Prompt = "请返回JSON：{\"ok\":true,\"summary\":\"大模型连接正常\"}"
+	}
+	if normalized.TimeoutSeconds <= 0 {
+		normalized.TimeoutSeconds = 180
+	}
+	if normalized.TimeoutSeconds < 10 {
+		normalized.TimeoutSeconds = 10
+	}
+	if normalized.TimeoutSeconds > 600 {
+		normalized.TimeoutSeconds = 600
+	}
+	return s.runner.TestLLMChat(ctx, normalized)
+}
+
+func (s *Service) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	normalized := payload
+	normalized.Message = strings.TrimSpace(normalized.Message)
+	if normalized.Message == "" {
+		return nil, ErrInvalidInput
+	}
+	if normalized.TimeoutSeconds <= 0 {
+		normalized.TimeoutSeconds = 240
+	}
+	if normalized.TimeoutSeconds < 10 {
+		normalized.TimeoutSeconds = 10
+	}
+	if normalized.TimeoutSeconds > 600 {
+		normalized.TimeoutSeconds = 600
+	}
+	return s.runner.ChatLLM(ctx, normalized)
 }
 
 func (s *Service) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
@@ -553,7 +609,7 @@ func (s *Service) GetChannelCredentials(ctx context.Context, channelCode string)
 	if channelCode == "" || len([]rune(channelCode)) > 80 {
 		return nil, ErrInvalidInput
 	}
-	return s.runner.GetChannelCredentials(ctx, channelCode)
+	return s.store.GetChannelCredentials(ctx, channelCode)
 }
 
 func (s *Service) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
@@ -565,7 +621,12 @@ func (s *Service) UpdateChannelCredentials(ctx context.Context, channelCode stri
 	if payload.UpdatedBy == "" {
 		payload.UpdatedBy = "admin"
 	}
-	return s.runner.UpdateChannelCredentials(ctx, channelCode, payload)
+	result, err := s.store.UpdateChannelCredentials(ctx, channelCode, payload)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.runner.InvalidateCredentials(ctx, channelCode)
+	return result, nil
 }
 
 func (s *Service) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
@@ -581,7 +642,12 @@ func (s *Service) DeleteChannelCredentials(ctx context.Context, channelCode stri
 	if channelCode == "" || len([]rune(channelCode)) > 80 {
 		return nil, ErrInvalidInput
 	}
-	return s.runner.DeleteChannelCredentials(ctx, channelCode)
+	result, err := s.store.DeleteChannelCredentials(ctx, channelCode)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.runner.InvalidateCredentials(ctx, channelCode)
+	return result, nil
 }
 
 func (s *Service) GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error) {

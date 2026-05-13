@@ -85,6 +85,8 @@ data_quality_snapshot     (数据质量快照，独立表)
 **凭证格式**：
 `mysql_migration_max.sql` 和 Python 初始化会为微博、知乎、小红书写入 `status=sample` 的格式样例，方便管理后台展示和后续手工替换。`CredentialProvider` 会忽略 `sample/placeholder/example` 状态的 Cookie 和 ZSE，只有管理后台保存后的 `status=active` 记录才会进入真实采集链路。
 
+管理后台或脚本保存真实 Cookie 时必须把 `status` 置为 `active`；当前 `CredentialProvider.update_channel_credentials()` 会在覆盖样例 Cookie/ZSE 时自动把 `sample` 提升为 `active`。采集进程读取凭证时只记录来源、状态和长度，不会把 Cookie 明文写入日志。
+
 ```json
 {
   "cookie": "SUB=...; XSRF-TOKEN=...",
