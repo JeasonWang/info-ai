@@ -86,7 +86,7 @@ class WeiboCrawler(BaseCrawler):
                 source_id = self._build_source_id(source_url)
                 results.append({
                     "source_id": source_id,
-                    "title": title[:40],
+                    "title": title[:200],
                     "content": title[:500],
                     "source_url": source_url,
                     "event_time": datetime.now(),
@@ -135,7 +135,7 @@ class WeiboCrawler(BaseCrawler):
             source_id = self._build_source_id(source_key)
             results.append({
                 "source_id": source_id,
-                "title": word[:40],
+                "title": word[:200],
                 "content": content[:500],
                 "source_url": source_url,
                 "event_time": datetime.now(),
@@ -163,7 +163,7 @@ class WeiboCrawler(BaseCrawler):
             source_id = self._build_source_id(source_url)
             results.append({
                 "source_id": source_id,
-                "title": word[:40],
+                "title": word[:200],
                 "content": word[:500],
                 "source_url": source_url,
                 "event_time": datetime.now(),

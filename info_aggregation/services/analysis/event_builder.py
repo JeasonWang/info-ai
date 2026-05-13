@@ -23,6 +23,7 @@ from services.collection.acquisition_quality import build_acquisition_quality_pr
 from services.quality.data_quality import is_title_content_duplicate, normalize_text
 from services.event_analysis import analyze_event_sources
 from services.event_analysis.schemas import TimelinePoint
+from services.analysis.event_display_quality import evaluate_event_display_quality
 
 
 TECH_TOPIC_LABELS = {
@@ -35,6 +36,13 @@ TECH_TOPIC_LABELS = {
 def _build_event_key(item: Info) -> tuple[int, str]:
     anchor = _event_anchor(item)
     return item.category_id, anchor
+
+
+def _group_related_items(items: list[Info]) -> dict[tuple[int, str], list[Info]]:
+    grouped_items: dict[tuple[int, str], list[Info]] = defaultdict(list)
+    for item in items:
+        grouped_items[_build_event_key(item)].append(item)
+    return _merge_related_groups(grouped_items)
 
 
 def _event_anchor(item: Info) -> str:
@@ -76,6 +84,80 @@ def _text_similarity(left: str, right: str) -> float:
     if not normalized_left or not normalized_right:
         return 0
     return SequenceMatcher(None, normalized_left, normalized_right).ratio()
+
+
+def _event_terms(text: str) -> set[str]:
+    normalized = _normalize_summary_text(text).lower()
+    terms = set(_split_csv(normalized.replace("，", ",").replace("、", ",")))
+    current = ""
+    chunks: list[str] = []
+    for char in normalized:
+        if char.isspace() or char in "，。！？、；：,.!?;:/|()[]{}【】《》“”\"'":
+            if current:
+                chunks.append(current)
+                current = ""
+        else:
+            current += char
+    if current:
+        chunks.append(current)
+    for chunk in chunks:
+        if chunk.isascii():
+            if len(chunk) >= 2:
+                terms.add(chunk)
+            continue
+        for index in range(max(0, len(chunk) - 1)):
+            term = chunk[index : index + 2]
+            if term not in {"事件", "热点", "最新", "关注", "相关", "进展", "网友", "消息", "视频"}:
+                terms.add(term)
+    return {term for term in terms if len(term) >= 2}
+
+
+def _items_related(left: Info, right: Info) -> bool:
+    left_text = f"{left.title or ''} {left.content or ''}"
+    right_text = f"{right.title or ''} {right.content or ''}"
+    if _text_similarity(left.title or "", right.title or "") >= 0.58:
+        return True
+    left_title_terms = _event_terms(left.title or "")
+    right_title_terms = _event_terms(right.title or "")
+    shared_title_terms = left_title_terms.intersection(right_title_terms)
+    if not shared_title_terms:
+        return False
+    left_terms = _event_terms(left_text)
+    right_terms = _event_terms(right_text)
+    shared_terms = left_terms.intersection(right_terms)
+    if len(shared_terms) < 2:
+        return False
+    cue_words = ("事故", "通报", "坠", "伤", "死", "救援", "回应", "发布", "宣布", "价格", "模型", "芯片", "比赛")
+    left_cue_hit = any(word in left_text for word in cue_words)
+    right_cue_hit = any(word in right_text for word in cue_words)
+    return left_cue_hit and right_cue_hit and len(shared_terms) >= 2
+
+
+def _groups_related(left_items: list[Info], right_items: list[Info]) -> bool:
+    for left in left_items[:3]:
+        for right in right_items[:3]:
+            if _items_related(left, right):
+                return True
+    return False
+
+
+def _merge_related_groups(grouped_items: dict[tuple[int, str], list[Info]]) -> dict[tuple[int, str], list[Info]]:
+    """保守合并同分类下相似标题组，补足无实体字段时的跨源聚合。"""
+
+    merged: dict[tuple[int, str], list[Info]] = {}
+    for key, items in grouped_items.items():
+        target_key = None
+        for existing_key, existing_items in merged.items():
+            if existing_key[0] != key[0]:
+                continue
+            if key[1] == existing_key[1] or _groups_related(existing_items, items):
+                target_key = existing_key
+                break
+        if target_key:
+            merged[target_key].extend(items)
+        else:
+            merged[key] = list(items)
+    return merged
 
 
 def _is_low_quality_item(item: Info) -> bool:
@@ -632,6 +714,14 @@ def _replace_event_analysis_outputs(session, event: Event, analysis, analysis_gr
     return analysis_run
 
 
+def _apply_display_quality(event: Event, items: list[Info], analysis=None) -> None:
+    quality = evaluate_event_display_quality(items, analysis_quality_score=getattr(analysis, "quality_score", 0.0))
+    event.status = quality.status
+    event.display_quality_score = quality.score
+    event.display_quality_level = quality.level
+    event.display_quality_reason = quality.reason_text
+
+
 def rebuild_events(session, limit: int = 200, mode: str = "incremental"):
     """
     重建事件。
@@ -691,13 +781,14 @@ def _incremental_rebuild(session, limit: int = 200):
     max_processed_id = max_info_id
 
     # 4. 对每个新 Info 进行事件归属
-    grouped_items: dict[tuple[int, str], list[Info]] = defaultdict(list)
+    candidate_items = []
     for item in new_infos:
         if _is_low_quality_item(item):
             continue
-        grouped_items[_build_event_key(item)].append(item)
+        candidate_items.append(item)
         if item.id > max_processed_id:
             max_processed_id = item.id
+    grouped_items = _group_related_items(candidate_items)
 
     for (category_id, anchor), group in grouped_items.items():
         event_key = _build_event_key_value(category_id, anchor)
@@ -746,6 +837,7 @@ def _reanalyze_event_items(session, event: Event, all_event_items: list[Info]) -
         session=session,
         history_context=_build_history_context_for_event(event),
     )
+    _apply_display_quality(event, prioritized_group, analysis)
     _replace_event_analysis_outputs(session, event, analysis, analysis_group)
     return True
 
@@ -835,7 +927,7 @@ def _create_new_event(session, group: list[Info], event_key: str, existing_event
     event.title = lead_item.title
     event.one_line_summary = analysis.one_line_summary
     event.primary_category_id = lead_item.category_id
-    event.status = "active"
+    _apply_display_quality(event, prioritized_group, analysis)
     event.heat_score = min(100, 60 + len(prioritized_group) * 10)
     event.freshness_score = 90
     event.composite_score = min(100, 70 + len(prioritized_group) * 8)
@@ -885,11 +977,7 @@ def _full_rebuild(session, limit: int = 200):
         .all()
     )
 
-    grouped_items: dict[tuple[int, str], list[Info]] = defaultdict(list)
-    for item in items:
-        if _is_low_quality_item(item):
-            continue
-        grouped_items[_build_event_key(item)].append(item)
+    grouped_items = _group_related_items([item for item in items if not _is_low_quality_item(item)])
 
     existing_events = _load_existing_events(session)
     analysis_plans = []
@@ -976,7 +1064,7 @@ def _full_rebuild(session, limit: int = 200):
         event.title = lead_item.title
         event.one_line_summary = analysis.one_line_summary
         event.primary_category_id = lead_item.category_id
-        event.status = "active"
+        _apply_display_quality(event, prioritized_group, analysis)
         event.heat_score = min(100, 60 + len(prioritized_group) * 10)
         event.freshness_score = 90
         event.composite_score = min(100, 70 + len(prioritized_group) * 8)

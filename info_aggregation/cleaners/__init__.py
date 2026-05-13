@@ -26,7 +26,7 @@ def clean_title(title: str) -> str:
     title = re.sub(r"<[^>]+>", "", title)
     title = title.strip()
     title = re.sub(r"\s+", " ", title)
-    return title[:40]
+    return title[:200]
 
 
 def clean_content(content: str) -> str:

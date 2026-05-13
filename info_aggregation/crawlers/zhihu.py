@@ -261,7 +261,7 @@ class ZhihuCrawler(BaseCrawler):
             excerpt = target.get("excerpt", title)[:500]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": excerpt,
                 "source_url": f"https://www.zhihu.com/question/{question_id}",
                 "event_time": datetime.now(),
@@ -295,7 +295,7 @@ class ZhihuCrawler(BaseCrawler):
             source_id = hashlib.md5(f"zhihu_{question_id}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": f"https://www.zhihu.com/question/{question_id}",
                 "event_time": datetime.now(),

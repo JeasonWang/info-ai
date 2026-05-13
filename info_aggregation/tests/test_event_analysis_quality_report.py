@@ -83,3 +83,47 @@ def test_event_analysis_quality_report_surfaces_missing_analysis(session):
 
     assert report["summary"]["missing_analysis_count"] == 1
     assert report["risk_events"][0]["issue_reasons"] == ["missing_analysis"]
+
+
+def test_event_analysis_quality_report_surfaces_display_quality_blocks(session):
+    category = Category(name="热点事件", code="hot")
+    session.add(category)
+    session.flush()
+    session.add_all(
+        [
+            Event(
+                title="可展示事件",
+                one_line_summary="可展示事件已有完整事实来源。",
+                primary_category_id=category.id,
+                status="active",
+                source_count=2,
+                display_quality_score=82,
+                display_quality_level="good",
+                display_quality_reason="",
+                last_updated_at=datetime(2026, 5, 13, 12, 0, 0),
+            ),
+            Event(
+                title="弱热点线索",
+                one_line_summary="弱热点线索仍缺少完整事实来源。",
+                primary_category_id=category.id,
+                status="monitoring",
+                source_count=1,
+                display_quality_score=22,
+                display_quality_level="weak",
+                display_quality_reason="single_weak_source,low_value_content",
+                last_updated_at=datetime(2026, 5, 13, 11, 0, 0),
+            ),
+        ]
+    )
+    session.commit()
+
+    report = build_event_analysis_quality_report(session, limit=10)
+    display_quality = report["display_quality"]
+
+    assert display_quality["summary"]["tracked_event_count"] == 2
+    assert display_quality["summary"]["display_ready_count"] == 1
+    assert display_quality["summary"]["blocked_count"] == 1
+    assert display_quality["summary"]["status_counts"]["monitoring"] == 1
+    assert display_quality["summary"]["top_block_reasons"][0] == {"reason": "single_weak_source", "count": 1}
+    assert display_quality["blocked_samples"][0]["title"] == "弱热点线索"
+    assert "low_value_content" in display_quality["blocked_samples"][0]["display_quality_reasons"]

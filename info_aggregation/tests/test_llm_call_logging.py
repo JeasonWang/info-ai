@@ -137,6 +137,48 @@ def test_event_analysis_records_failed_llm_call_log_and_falls_back(session, monk
     assert log.error_message == "qwen timeout"
 
 
+def test_event_analysis_retries_transient_llm_failure_before_fallback(session, monkeypatch):
+    info, config = _seed_info_and_config(session)
+    attempts = {"count": 0}
+
+    class FlakyProvider:
+        def analyze(self, items, chronological_items=None):
+            from services.event_analysis.schemas import EventAnalysisResult, TimelinePoint
+
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise TimeoutError("temporary qwen timeout")
+            return EventAnalysisResult(
+                one_line_summary="模型重试后生成的一句话摘要。",
+                what_happened="模型重试后生成了事件经过。",
+                why_it_matters="模型重试后说明了重要性。",
+                latest_update="模型重试后生成最新进展。",
+                heat_reason="模型重试后生成热度原因。",
+                risk_notice="模型重试后生成风险提示。",
+                source_compare="模型重试后生成来源对比。",
+                analysis_confidence="分析可信度：高。",
+                timeline_points=[TimelinePoint(occurred_at=items[0].event_time, summary="模型重试后生成时间线。", source_item_id=items[0].id)],
+                provider="qwen",
+                model_name="qwen-local",
+                mode="llm",
+                quality_score=88,
+                confidence=0.82,
+            )
+
+    monkeypatch.setattr("services.event_analysis.pipeline.build_llm_provider_from_config", lambda selected: FlakyProvider())
+    monkeypatch.setattr("services.event_analysis.pipeline.EVENT_ANALYSIS_LLM_RETRY_TIMES", 2)
+
+    result = analyze_event_sources([info], session=session)
+
+    assert attempts["count"] == 2
+    assert result.provider == "qwen"
+    assert result.fallback_used is False
+    log = session.query(LLMCallLog).one()
+    assert log.config_id == config.id
+    assert log.status == "succeeded"
+    assert log.error_message == ""
+
+
 def test_event_analysis_opens_llm_circuit_after_repeated_failures(session, monkeypatch):
     info, config = _seed_info_and_config(session)
 

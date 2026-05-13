@@ -54,8 +54,21 @@ const tabs = [
 ]
 const pagedChannels = computed(() => pageSlice(channelQuality.value?.channels || [], channelPage.value))
 const riskEvents = computed(() => eventAnalysisQuality.value?.risk_events || [])
+const displayQuality = computed(() => eventAnalysisQuality.value?.display_quality || null)
+const blockedEventSamples = computed(() => displayQuality.value?.blocked_samples || [])
 const pagedSnapshots = computed(() => pageSlice(snapshots.value, snapshotPage.value))
 const pagedLowQualityInfos = computed(() => pageSlice(lowQualityInfos.value, lowQualityPage.value))
+const channelStatusRows = computed(() => (channelQuality.value?.channels || []).slice(0, 8))
+const analysisRiskRows = computed(() => {
+  const summary = eventAnalysisQuality.value?.summary
+  if (!summary) return []
+  return [
+    { label: '缺失分析', count: summary.missing_analysis_count || 0, tone: 'warning' },
+    { label: '低置信度', count: summary.low_confidence_count || 0, tone: 'warning' },
+    { label: '模型回退', count: summary.fallback_count || 0, tone: 'danger' },
+    { label: '展示拦截', count: displayQuality.value?.summary.blocked_count || 0, tone: 'muted' },
+  ]
+})
 
 async function loadData() {
   loadError.value = ''
@@ -152,6 +165,35 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
   if (item.risk_score >= 45) return 'muted'
   return 'success'
 }
+
+function displayReasonText(reasons: string[]) {
+  const labels: Record<string, string> = {
+    empty_sources: '无来源',
+    single_weak_source: '单一弱来源',
+    low_value_content: '低价值内容',
+    social_signal_without_fact_source: '社交热度缺事实源',
+    missing_complete_source: '缺完整来源',
+    missing_usable_source: '缺可用来源',
+  }
+  return reasons.length ? reasons.map((reason) => labels[reason] || reason).join(' / ') : '暂无拦截原因'
+}
+
+function displayStatusTone(status: string) {
+  if (status === 'active') return 'success'
+  if (status === 'monitoring') return 'warning'
+  return 'muted'
+}
+
+function percentWidth(value: number | undefined) {
+  return `${Math.max(0, Math.min(100, Number(value || 0)))}%`
+}
+
+function progressTone(value: number | undefined) {
+  const ratio = Number(value || 0)
+  if (ratio >= 70) return 'success'
+  if (ratio >= 45) return 'warning'
+  return 'danger'
+}
 </script>
 
 <template>
@@ -181,6 +223,11 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
         :value="eventAnalysisQuality?.summary.risk_event_count ?? 0"
         hint="低置信度、模型回退、弱来源或缺失分析事件"
       />
+      <MetricCard
+        label="展示可用率"
+        :value="`${displayQuality?.summary.display_ready_ratio ?? 0}%`"
+        hint="展示质量门槛下可进入用户端的信息比例"
+      />
     </section>
 
     <section class="panel-grid">
@@ -206,6 +253,33 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
       </DataPanel>
 
       <DataPanel v-if="section === 'report'" title="渠道质量报告" :status="`${channelQuality?.channels.length ?? 0} 个渠道`">
+        <div v-if="channelStatusRows.length" class="ruoyi-table">
+          <div class="ruoyi-table-row ruoyi-table-head">
+            <span>渠道</span>
+            <span>完整率</span>
+            <span>可用率</span>
+            <span>待治理</span>
+            <span>凭证</span>
+          </div>
+          <div v-for="item in channelStatusRows" :key="`status-${item.channel_code}`" class="ruoyi-table-row">
+            <strong>{{ item.channel_name }} / {{ item.channel_code }}</strong>
+            <div class="progress-cell">
+              <span class="progress-track">
+                <i :class="`progress-bar ${progressTone(item.complete_ratio)}`" :style="{ width: percentWidth(item.complete_ratio) }" />
+              </span>
+              <em>{{ item.complete_ratio }}%</em>
+            </div>
+            <div class="progress-cell">
+              <span class="progress-track">
+                <i :class="`progress-bar ${progressTone(item.usable_ratio)}`" :style="{ width: percentWidth(item.usable_ratio) }" />
+              </span>
+              <em>{{ item.usable_ratio }}%</em>
+            </div>
+            <span>{{ item.needs_attention_count }} 条 / {{ item.needs_attention_ratio }}%</span>
+            <StatusBadge :label="credentialLabel(item)" :tone="credentialTone(item)" />
+          </div>
+        </div>
+
         <ul v-if="pagedChannels.length" class="data-list data-list--channel-quality">
           <li v-for="item in pagedChannels" :key="item.channel_code">
             <div class="channel-quality-main">
@@ -280,6 +354,13 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
             处理过期分析
           </button>
         </div>
+        <div v-if="analysisRiskRows.length" class="analysis-board">
+          <div class="analysis-board-item" v-for="item in analysisRiskRows" :key="item.label">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.count }}</strong>
+            <i :class="`analysis-board-mark ${item.tone}`" />
+          </div>
+        </div>
         <div class="quality-summary-strip">
           <span>活跃事件 {{ eventAnalysisQuality?.summary.active_event_count ?? 0 }}</span>
           <span>已分析 {{ eventAnalysisQuality?.summary.analyzed_count ?? 0 }}</span>
@@ -287,6 +368,20 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
           <span>低置信度 {{ eventAnalysisQuality?.summary.low_confidence_count ?? 0 }}</span>
           <span>模型回退 {{ eventAnalysisQuality?.summary.fallback_count ?? 0 }}</span>
           <span>平均质量 {{ eventAnalysisQuality?.summary.avg_quality_score ?? 0 }}</span>
+        </div>
+        <div class="quality-summary-strip">
+          <span>追踪事件 {{ displayQuality?.summary.tracked_event_count ?? 0 }}</span>
+          <span>可展示 {{ displayQuality?.summary.display_ready_count ?? 0 }}</span>
+          <span>已拦截 {{ displayQuality?.summary.blocked_count ?? 0 }}</span>
+          <span>展示可用率 {{ displayQuality?.summary.display_ready_ratio ?? 0 }}%</span>
+          <span>
+            主要原因
+            {{
+              displayQuality?.summary.top_block_reasons.length
+                ? displayQuality.summary.top_block_reasons.map((item) => `${item.reason} ${item.count}`).join(' / ')
+                : '暂无'
+            }}
+          </span>
         </div>
         <ul v-if="riskEvents.length" class="data-list event-analysis-list">
           <li v-for="item in riskEvents" :key="item.event_id">
@@ -316,6 +411,30 @@ function eventRiskTone(item: EventAnalysisRiskEvent) {
           v-if="!riskEvents.length"
           title="事件分析质量稳定"
           description="当前没有命中低置信度、模型回退、弱来源或缺失分析的事件。"
+        />
+        <h3 class="subsection-title">展示质量拦截样本</h3>
+        <ul v-if="blockedEventSamples.length" class="data-list event-analysis-list">
+          <li v-for="item in blockedEventSamples" :key="item.event_id">
+            <div class="event-analysis-main">
+              <router-link :to="`/data-quality/event-analysis/${item.event_id}`" class="event-link">
+                <strong>{{ item.title }}</strong>
+              </router-link>
+              <span>{{ item.one_line_summary || '暂无一句话摘要' }}</span>
+              <small>
+                来源 {{ item.source_count }} · 展示分 {{ item.display_quality_score }} ·
+                等级 {{ item.display_quality_level || '未评级' }} · {{ item.last_updated_at || '暂无更新时间' }}
+              </small>
+            </div>
+            <div class="channel-quality-badges">
+              <StatusBadge :label="item.status" :tone="displayStatusTone(item.status)" />
+              <StatusBadge :label="displayReasonText(item.display_quality_reasons)" tone="warning" />
+            </div>
+          </li>
+        </ul>
+        <EmptyState
+          v-if="!blockedEventSamples.length"
+          title="暂无展示拦截样本"
+          description="当前没有 monitoring 或 low_quality 事件。"
         />
       </DataPanel>
 

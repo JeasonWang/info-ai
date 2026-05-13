@@ -17,6 +17,22 @@ UNUSABLE_CONTENT_MARKERS = (
     "验证后继续访问",
 )
 
+LOW_VALUE_EXACT_VALUES = {
+    "hot",
+    "new",
+}
+
+LOW_VALUE_PATTERNS = (
+    r"^互动[:：](?:点赞|收藏|评论|分享)[\w\d.+万千百十,，+]+(?:[，,](?:点赞|收藏|评论|分享)[\w\d.+万千百十,，+]+)*$",
+    r"^热榜分类[:：].{1,20}$",
+    r"^热榜标签[:：].{1,20}$",
+    r"^当前排名[:：]?\d+$",
+    r"^热度值[:：]?\d+$",
+    r"^official reuters url[:：]\s*https?://",
+    r"^reuters published at .+ official news sitemap\.?$",
+    r"^reuters published this item according to its official news sitemap\.?$",
+)
+
 
 def normalize_text(value: str) -> str:
     """统一文本形态，方便做稳定的重复判断。"""
@@ -57,6 +73,8 @@ def is_low_quality_list_item(title: str, content: str) -> bool:
         return True
     if is_unusable_detail_content(content):
         return True
+    if is_low_value_content(title, content):
+        return True
     if len(normalized_content) < 12:
         return True
     return is_title_content_duplicate(title, content)
@@ -65,6 +83,32 @@ def is_low_quality_list_item(title: str, content: str) -> bool:
 def is_unusable_detail_content(content: str) -> bool:
     """判断正文是否是登录、验证或 JS 壳页面等不可读内容。"""
     return any(marker in (content or "") for marker in UNUSABLE_CONTENT_MARKERS)
+
+
+def is_low_value_content(title: str, content: str) -> bool:
+    """判断内容是否只有热度、榜单、作者或索引元数据，不能作为事实分析依据。"""
+    normalized = normalize_text(content).strip(" 。.!！?？")
+    if not normalized:
+        return True
+    if normalized in LOW_VALUE_EXACT_VALUES:
+        return True
+    if re.fullmatch(r"[\W_]+", normalized):
+        return True
+    if re.fullmatch(r"\d{2,}(?:\s+\d{2,})*", normalized):
+        return True
+    for pattern in LOW_VALUE_PATTERNS:
+        if re.match(pattern, normalized, flags=re.IGNORECASE):
+            return True
+    normalized_title = normalize_text(title)
+    if normalized_title and normalized == normalized_title:
+        return True
+    if (
+        title
+        and len(normalized) <= 24
+        and not re.search(r"(通报|回应|事故|发布|宣布|影响|原因|进展|数据|报告|为什么|需要|如何|方案|能力|媒体|追踪|关注|开发者|模型|according|said)", normalized)
+    ):
+        return True
+    return False
 
 
 def is_near_duplicate_item(

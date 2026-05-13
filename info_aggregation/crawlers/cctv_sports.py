@@ -78,7 +78,7 @@ class CctvSportsCrawler(BaseCrawler):
     def _build_item(self, title: str, source_url: str) -> dict:
         return {
             "source_id": stable_source_id(self.channel_code, source_url),
-            "title": title[:40],
+            "title": title[:200],
             "content": f"{title}。来自央视体育网的体育新闻，后续将持续跟进赛事进展和相关报道。"[:500],
             "source_url": source_url,
             "event_time": infer_datetime_from_url(source_url),

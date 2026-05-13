@@ -20,6 +20,7 @@ type ListEventsParams struct {
 	CategoryCode string
 	ChannelCode  string
 	Keyword      string
+	Status       string
 	Sort         string
 	Page         int
 	PageSize     int
@@ -39,12 +40,16 @@ type CategoryBrief struct {
 type EventListItem struct {
 	ID                   int64         `json:"id"`
 	RepresentativeInfoID *int64        `json:"representative_info_id"`
+	Status               string        `json:"status"`
 	Title                string        `json:"title"`
 	OneLineSummary       string        `json:"one_line_summary"`
 	PrimaryCategory      CategoryBrief `json:"primary_category"`
 	HeatScore            int           `json:"heat_score"`
 	FreshnessScore       int           `json:"freshness_score"`
 	CompositeScore       int           `json:"composite_score"`
+	DisplayQualityScore  int           `json:"display_quality_score"`
+	DisplayQualityLevel  string        `json:"display_quality_level"`
+	DisplayQualityReason string        `json:"display_quality_reason"`
 	LastUpdatedAt        string        `json:"last_updated_at"`
 	SourceCount          int           `json:"source_count"`
 	SourceBadges         []string      `json:"source_badges"`
@@ -63,15 +68,19 @@ type EventPage struct {
 }
 
 type EventCore struct {
-	ID              int64         `json:"id"`
-	Title           string        `json:"title"`
-	OneLineSummary  string        `json:"one_line_summary"`
-	PrimaryCategory CategoryBrief `json:"primary_category"`
-	HeatScore       int           `json:"heat_score"`
-	FreshnessScore  int           `json:"freshness_score"`
-	CompositeScore  int           `json:"composite_score"`
-	SourceCount     int           `json:"source_count"`
-	LastUpdatedAt   string        `json:"last_updated_at"`
+	ID                   int64         `json:"id"`
+	Status               string        `json:"status"`
+	Title                string        `json:"title"`
+	OneLineSummary       string        `json:"one_line_summary"`
+	PrimaryCategory      CategoryBrief `json:"primary_category"`
+	HeatScore            int           `json:"heat_score"`
+	FreshnessScore       int           `json:"freshness_score"`
+	CompositeScore       int           `json:"composite_score"`
+	DisplayQualityScore  int           `json:"display_quality_score"`
+	DisplayQualityLevel  string        `json:"display_quality_level"`
+	DisplayQualityReason string        `json:"display_quality_reason"`
+	SourceCount          int           `json:"source_count"`
+	LastUpdatedAt        string        `json:"last_updated_at"`
 	// 历史脉络字段
 	PreviousEventID *int64 `json:"previous_event_id"`
 	EventGeneration int    `json:"event_generation"`
@@ -142,6 +151,10 @@ func (s *Service) ListEvents(ctx context.Context, params ListEventsParams) (Even
 		params.CategoryCode = "all"
 	}
 	params.ChannelCode = strings.TrimSpace(params.ChannelCode)
+	params.Status = strings.TrimSpace(params.Status)
+	if params.Status != "monitoring" {
+		params.Status = "active"
+	}
 	params.Sort = strings.TrimSpace(params.Sort)
 	if params.Sort != "latest" {
 		params.Sort = "composite"

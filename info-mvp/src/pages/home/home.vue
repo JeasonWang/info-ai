@@ -27,8 +27,13 @@ const activeChannelCode = ref(memory.value.channelCode)
 const keyword = ref(memory.value.keyword)
 const appliedKeyword = ref(memory.value.keyword)
 const sortMode = ref<'composite' | 'latest'>(memory.value.sortMode)
+const feedStatus = ref<'active' | 'monitoring'>('active')
 const showBackToTop = ref(false)
 const nearBottomDistance = 180
+const feedOptions = [
+  { value: 'active' as const, label: '可信事件', meta: '可直接阅读' },
+  { value: 'monitoring' as const, label: '观察中', meta: '等待更多信源' },
+]
 const activeCategoryName = computed(() => {
   if (activeCategoryCode.value === 'all') return '全网热点'
   return categories.value.find((item) => item.code === activeCategoryCode.value)?.name || '全网热点'
@@ -38,6 +43,13 @@ const activeChannelName = computed(() => {
   return channels.value.find((item) => item.code === activeChannelCode.value)?.name || '全部渠道'
 })
 const leadingEvents = computed(() => events.value.slice(0, 3))
+const activeFeedName = computed(() => (feedStatus.value === 'monitoring' ? '观察中热点' : '可信事件'))
+const briefingTitle = computed(() => (feedStatus.value === 'monitoring' ? '重点观察' : '今日重点'))
+const briefingHint = computed(() =>
+  feedStatus.value === 'monitoring'
+    ? '这些线索已有热度，但仍需要事实源补强。'
+    : '优先阅读可信度较高、来源更完整的事件。',
+)
 const userInitial = computed(() => {
   const email = userStore.user?.email || ''
   return (email.trim()[0] || '我').toUpperCase()
@@ -56,6 +68,7 @@ const {
     category_code: activeCategoryCode.value,
     channel_code: activeChannelCode.value,
     keyword: appliedKeyword.value,
+    status: feedStatus.value,
     sort: sortMode.value,
     page,
     page_size: size,
@@ -154,6 +167,13 @@ function onSortChange(mode: 'composite' | 'latest') {
   if (mode === sortMode.value) return
   sortMode.value = mode
   rememberCurrentFilter()
+  refresh()
+  scrollToTop()
+}
+
+function onFeedStatusChange(status: 'active' | 'monitoring') {
+  if (status === feedStatus.value) return
+  feedStatus.value = status
   refresh()
   scrollToTop()
 }
@@ -386,6 +406,45 @@ function onShareTimeline() {
         @search="onSearch"
       />
 
+      <view class="feed-switch" aria-label="事件视图">
+        <view
+          v-for="option in feedOptions"
+          :key="option.value"
+          class="feed-switch-item"
+          :class="{ active: feedStatus === option.value }"
+          @click="onFeedStatusChange(option.value)"
+        >
+          <text class="feed-switch-label">{{ option.label }}</text>
+          <text class="feed-switch-meta">{{ option.meta }}</text>
+        </view>
+      </view>
+
+      <view class="briefing-panel">
+        <view class="briefing-head">
+          <view>
+            <text class="briefing-title">{{ briefingTitle }}</text>
+            <text class="briefing-hint">{{ briefingHint }}</text>
+          </view>
+          <text class="briefing-count">{{ eventTotal }} 条</text>
+        </view>
+        <view v-if="leadingEvents.length" class="briefing-list">
+          <view
+            v-for="(item, index) in leadingEvents"
+            :key="item.id"
+            class="briefing-item"
+            @click="uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${item.id}` })"
+          >
+            <text class="briefing-rank">{{ index + 1 }}</text>
+            <view class="briefing-copy">
+              <text class="briefing-event-title">{{ item.title }}</text>
+              <text class="briefing-event-summary">{{ item.one_line_summary }}</text>
+            </view>
+            <text class="briefing-score">{{ item.display_quality_score || item.composite_score }}</text>
+          </view>
+        </view>
+        <text v-else-if="!loading" class="briefing-empty">当前筛选下暂无可展示事件。</text>
+      </view>
+
       <!-- 筛选面板（分类+渠道+排序） -->
       <view class="filter-wrap">
         <FilterPanel
@@ -422,6 +481,7 @@ function onShareTimeline() {
         <view class="insight-rail">
           <view class="rail-card">
             <text class="rail-title">当前视图</text>
+            <text class="rail-line">{{ activeFeedName }}</text>
             <text class="rail-line">{{ activeCategoryName }}</text>
             <text class="rail-line">{{ activeChannelName }}</text>
             <text class="rail-line">{{ sortMode === 'latest' ? '最新发布优先' : '综合热度优先' }}</text>
@@ -603,6 +663,169 @@ function onShareTimeline() {
   margin-bottom: 16rpx;
 }
 
+.feed-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10rpx;
+  margin: 16rpx 24rpx 0;
+  padding: 8rpx;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1rpx solid var(--divider);
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
+}
+
+.feed-switch-item {
+  min-width: 0;
+  min-height: 76rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 10rpx 16rpx;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.feed-switch-item.active {
+  background: #1f2937;
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.feed-switch-label,
+.feed-switch-meta {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.feed-switch-label {
+  font-size: 26rpx;
+  font-weight: 800;
+}
+
+.feed-switch-meta {
+  font-size: 20rpx;
+  opacity: 0.76;
+}
+
+.briefing-panel {
+  margin: 16rpx 24rpx 0;
+  padding: 24rpx;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1rpx solid var(--divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  box-sizing: border-box;
+}
+
+.briefing-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 18rpx;
+}
+
+.briefing-title,
+.briefing-hint,
+.briefing-event-title,
+.briefing-event-summary,
+.briefing-empty {
+  display: block;
+}
+
+.briefing-title {
+  color: var(--text-primary);
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.briefing-hint {
+  margin-top: 6rpx;
+  color: var(--text-muted);
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.briefing-count {
+  flex-shrink: 0;
+  height: 36rpx;
+  padding: 0 14rpx;
+  color: var(--brand-accent);
+  background: var(--brand-accent-light);
+  border-radius: var(--radius-pill);
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+}
+
+.briefing-list {
+  display: grid;
+  gap: 12rpx;
+}
+
+.briefing-item {
+  display: grid;
+  grid-template-columns: 40rpx minmax(0, 1fr) 52rpx;
+  align-items: center;
+  gap: 14rpx;
+  padding: 16rpx;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-md);
+}
+
+.briefing-rank {
+  width: 40rpx;
+  height: 40rpx;
+  color: #fff;
+  background: #1f2937;
+  border-radius: 50%;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 40rpx;
+  text-align: center;
+}
+
+.briefing-copy {
+  min-width: 0;
+}
+
+.briefing-event-title {
+  color: var(--text-primary);
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.briefing-event-summary {
+  margin-top: 4rpx;
+  color: var(--text-secondary);
+  font-size: 22rpx;
+  line-height: 1.45;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.briefing-score {
+  color: #117a4f;
+  font-size: 28rpx;
+  font-weight: 800;
+  text-align: right;
+}
+
+.briefing-empty {
+  color: var(--text-muted);
+  font-size: 24rpx;
+}
+
 .desktop-grid {
   display: block;
 }
@@ -774,6 +997,78 @@ function onShareTimeline() {
     margin-right: 16px;
   }
 
+  .feed-switch {
+    width: 358px;
+    max-width: calc(100% - 32px);
+    margin: 14px 16px 0;
+    padding: 4px;
+    gap: 4px;
+    border-radius: 12px;
+  }
+
+  .feed-switch-item {
+    min-height: 54px;
+    padding: 8px 10px;
+    border-radius: 9px;
+  }
+
+  .feed-switch-label {
+    font-size: 14px;
+  }
+
+  .feed-switch-meta {
+    font-size: 11px;
+  }
+
+  .briefing-panel {
+    width: 358px;
+    max-width: calc(100% - 32px);
+    margin: 14px 16px 0;
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .briefing-title {
+    font-size: 17px;
+  }
+
+  .briefing-hint {
+    font-size: 12px;
+  }
+
+  .briefing-count {
+    height: 22px;
+    padding: 0 8px;
+    font-size: 12px;
+    line-height: 22px;
+  }
+
+  .briefing-item {
+    grid-template-columns: 24px minmax(0, 1fr) 36px;
+    gap: 9px;
+    padding: 10px;
+    border-radius: 9px;
+  }
+
+  .briefing-rank {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    line-height: 24px;
+  }
+
+  .briefing-event-title {
+    font-size: 14px;
+  }
+
+  .briefing-event-summary {
+    font-size: 12px;
+  }
+
+  .briefing-score {
+    font-size: 16px;
+  }
+
   .back-to-top {
     right: 20px;
     bottom: 32px;
@@ -845,6 +1140,75 @@ function onShareTimeline() {
     gap: 20px;
     padding: 0 24px;
     align-items: start;
+  }
+
+  .feed-switch {
+    max-width: 760px;
+    margin: 18px 24px 0;
+    padding: 5px;
+    gap: 6px;
+    border-radius: 14px;
+  }
+
+  .feed-switch-item {
+    min-height: 58px;
+    padding: 9px 14px;
+    border-radius: 10px;
+  }
+
+  .feed-switch-label {
+    font-size: 15px;
+  }
+
+  .feed-switch-meta {
+    font-size: 12px;
+  }
+
+  .briefing-panel {
+    max-width: 760px;
+    margin: 18px 24px 0;
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .briefing-title {
+    font-size: 20px;
+  }
+
+  .briefing-hint {
+    font-size: 13px;
+  }
+
+  .briefing-count {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 12px;
+    line-height: 24px;
+  }
+
+  .briefing-item {
+    grid-template-columns: 28px minmax(0, 1fr) 44px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .briefing-rank {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+    line-height: 28px;
+  }
+
+  .briefing-event-title {
+    font-size: 14px;
+  }
+
+  .briefing-event-summary {
+    font-size: 12px;
+  }
+
+  .briefing-score {
+    font-size: 18px;
   }
 
   .insight-rail {

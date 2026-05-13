@@ -52,6 +52,7 @@ def init_db():
     logger.info("正在初始化数据库，创建表结构...")
     Base.metadata.create_all(bind=engine)
     _ensure_event_key_column()
+    _ensure_event_display_quality_columns()
     _ensure_llm_call_log_payload_columns()
     logger.info("数据库表结构创建完成")
 
@@ -110,4 +111,33 @@ def _ensure_llm_call_log_payload_columns():
                 sql = f"ALTER TABLE llm_call_log ADD COLUMN {column_name} {column_sql} COMMENT '{comments[column_name]}'"
             else:
                 sql = f"ALTER TABLE llm_call_log ADD COLUMN {column_name} {column_sql}"
+            connection.execute(text(sql))
+
+
+def _ensure_event_display_quality_columns():
+    """兼容旧库：为事件表补充展示质量字段。"""
+
+    inspector = inspect(engine)
+    if "event" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("event")}
+    dialect_name = engine.dialect.name
+    column_defs = {
+        "display_quality_score": "INT NOT NULL DEFAULT 0",
+        "display_quality_level": "VARCHAR(20) NOT NULL DEFAULT ''",
+        "display_quality_reason": "VARCHAR(500) NOT NULL DEFAULT ''",
+    }
+    comments = {
+        "display_quality_score": "展示质量分",
+        "display_quality_level": "展示质量等级: excellent/good/weak/blocked",
+        "display_quality_reason": "展示质量原因，逗号分隔",
+    }
+    with engine.begin() as connection:
+        for column_name, column_sql in column_defs.items():
+            if column_name in columns:
+                continue
+            if dialect_name == "mysql":
+                sql = f"ALTER TABLE event ADD COLUMN {column_name} {column_sql} COMMENT '{comments[column_name]}'"
+            else:
+                sql = f"ALTER TABLE event ADD COLUMN {column_name} {column_sql}"
             connection.execute(text(sql))

@@ -109,7 +109,7 @@ class ToutiaoCrawler(BaseCrawler):
                 content = "。".join(content_parts)
                 results.append({
                     "source_id": source_id,
-                    "title": title[:40],
+                    "title": title[:200],
                     "content": content[:500],
                     "source_url": hot_board_url,
                     "event_time": datetime.now(),

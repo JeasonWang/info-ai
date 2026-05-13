@@ -8,9 +8,13 @@ import (
 type fakeEventStore struct {
 	listResult   EventPage
 	detailResult EventDetail
+	listParams   *ListEventsParams
 }
 
 func (s fakeEventStore) ListEvents(ctx context.Context, params ListEventsParams) (EventPage, error) {
+	if s.listParams != nil {
+		*s.listParams = params
+	}
 	result := s.listResult
 	result.Page = params.Page
 	result.PageSize = params.PageSize
@@ -22,7 +26,8 @@ func (s fakeEventStore) GetEventDetail(ctx context.Context, id int64) (EventDeta
 }
 
 func TestServiceNormalizesListParams(t *testing.T) {
-	service := NewService(fakeEventStore{listResult: EventPage{Total: 1}})
+	var captured ListEventsParams
+	service := NewService(fakeEventStore{listResult: EventPage{Total: 1}, listParams: &captured})
 
 	page, err := service.ListEvents(context.Background(), ListEventsParams{
 		CategoryCode: "",
@@ -38,6 +43,22 @@ func TestServiceNormalizesListParams(t *testing.T) {
 	}
 	if page.PageSize != 10 {
 		t.Fatalf("page_size = %d, want 10", page.PageSize)
+	}
+	if captured.Status != "active" {
+		t.Fatalf("status = %q, want active", captured.Status)
+	}
+}
+
+func TestServiceAllowsMonitoringListStatus(t *testing.T) {
+	var captured ListEventsParams
+	service := NewService(fakeEventStore{listResult: EventPage{Total: 1}, listParams: &captured})
+
+	_, err := service.ListEvents(context.Background(), ListEventsParams{Status: "monitoring", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListEvents returned error: %v", err)
+	}
+	if captured.Status != "monitoring" {
+		t.Fatalf("status = %q, want monitoring", captured.Status)
 	}
 }
 

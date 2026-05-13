@@ -149,7 +149,7 @@ class XiaohongshuCrawler(BaseCrawler):
         
         return {
             "source_id": source_id,
-            "title": title[:40],
+            "title": title[:200],
             "content": content[:500],
             "source_url": source_url,
             "event_time": datetime.now(),

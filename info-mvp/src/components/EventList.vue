@@ -50,6 +50,30 @@ function formatEventTime(value: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+function qualityText(item: EventListItem): string {
+  const score = item.display_quality_score ?? 0
+  const level = item.display_quality_level || ''
+  if (level === 'excellent') return `高可信 ${score}`
+  if (level === 'good') return `可信 ${score}`
+  if (level === 'weak') return `观察 ${score}`
+  if (score > 0) return `质量 ${score}`
+  return ''
+}
+
+function qualityClass(item: EventListItem): string {
+  const level = item.display_quality_level || ''
+  if (level === 'excellent' || level === 'good') return 'quality-chip--good'
+  if (level === 'weak') return 'quality-chip--watch'
+  return 'quality-chip--muted'
+}
+
+function insightLabel(item: EventListItem): string {
+  if (item.status === 'monitoring' || item.display_quality_level === 'weak') return '待核实'
+  if ((item.source_count || 0) >= 3) return '多源确认'
+  if ((item.display_quality_score || 0) >= 70) return '优先看'
+  return '线索'
+}
+
 // #ifdef H5
 let loadObserver: IntersectionObserver | null = null
 
@@ -101,6 +125,7 @@ onUnmounted(() => {
       <view class="card-body">
         <view class="card-header">
           <view class="title-wrap">
+            <text class="insight-label">{{ insightLabel(item) }}</text>
             <text class="title">{{ item.title }}</text>
             <view v-if="item.new_update_count > 0" class="update-dot-wrap">
               <text class="update-badge">+{{ item.new_update_count }}</text>
@@ -110,6 +135,10 @@ onUnmounted(() => {
         </view>
 
         <text class="summary">{{ item.one_line_summary }}</text>
+
+        <view v-if="item.status === 'monitoring' || item.display_quality_reason" class="reason-line">
+          <text>{{ item.status === 'monitoring' ? '观察原因' : '判断依据' }}：{{ item.display_quality_reason || '等待更多事实源补充' }}</text>
+        </view>
 
         <view class="footer">
           <view class="badges">
@@ -125,6 +154,9 @@ onUnmounted(() => {
             </text>
             <text v-if="item.last_updated_at" class="event-time">
               {{ formatEventTime(item.last_updated_at) }}
+            </text>
+            <text v-if="qualityText(item)" class="quality-chip" :class="qualityClass(item)">
+              {{ qualityText(item) }}
             </text>
           </view>
 
@@ -224,6 +256,18 @@ onUnmounted(() => {
   gap: 12rpx;
 }
 
+.insight-label {
+  flex-shrink: 0;
+  margin-top: 4rpx;
+  padding: 5rpx 10rpx;
+  color: #fff;
+  background: #1f2937;
+  border-radius: var(--radius-sm);
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .title {
   flex: 1;
   font-size: var(--text-lg);
@@ -292,6 +336,23 @@ onUnmounted(() => {
   -webkit-box-orient: vertical;
 }
 
+.reason-line {
+  margin: -8rpx 0 18rpx;
+  padding: 10rpx 14rpx;
+  background: rgba(246, 162, 58, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.reason-line text {
+  display: block;
+  color: var(--cat-orange);
+  font-size: 22rpx;
+  line-height: 1.45;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .footer {
   display: flex;
   justify-content: space-between;
@@ -326,6 +387,28 @@ onUnmounted(() => {
   font-size: var(--text-xs);
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.quality-chip {
+  font-size: var(--text-xs);
+  padding: 4rpx 10rpx;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
+.quality-chip--good {
+  color: #117a4f;
+  background: rgba(17, 122, 79, 0.1);
+}
+
+.quality-chip--watch {
+  color: var(--cat-orange);
+  background: rgba(246, 162, 58, 0.14);
+}
+
+.quality-chip--muted {
+  color: var(--text-muted);
+  background: var(--divider);
 }
 
 .stats {
@@ -462,9 +545,24 @@ onUnmounted(() => {
     line-height: 1.45;
   }
 
+  .insight-label {
+    margin-top: 3px;
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+
   .summary {
     font-size: 14px;
     margin-bottom: 16px;
+  }
+
+  .reason-line {
+    margin: -6px 0 12px;
+    padding: 7px 9px;
+  }
+
+  .reason-line text {
+    font-size: 12px;
   }
 
   .badge,

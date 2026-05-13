@@ -384,6 +384,154 @@ p {
   font-size: 13px;
 }
 
+.quality-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ruoyi-table {
+  display: grid;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ruoyi-table-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.2fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(120px, 0.8fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.ruoyi-table-row:nth-child(odd):not(.ruoyi-table-head) {
+  background: #fafafa;
+}
+
+.ruoyi-table-head {
+  min-height: 40px;
+  color: var(--ink);
+  background: #f5f7fa;
+  font-weight: 700;
+}
+
+.ruoyi-table strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.progress-cell {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-cell em {
+  color: var(--muted);
+  font-style: normal;
+  text-align: right;
+}
+
+.progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ebeef5;
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+
+.progress-bar.success {
+  background: var(--success);
+}
+
+.progress-bar.warning {
+  background: var(--warning);
+}
+
+.progress-bar.danger {
+  background: var(--danger);
+}
+
+.analysis-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analysis-board-item {
+  position: relative;
+  min-height: 74px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.analysis-board-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analysis-board-item strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.analysis-board-mark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 76px;
+  height: 4px;
+  background: var(--primary);
+}
+
+.analysis-board-mark.warning {
+  background: var(--warning);
+}
+
+.analysis-board-mark.danger {
+  background: var(--danger);
+}
+
+.analysis-board-mark.muted {
+  background: var(--subtle);
+}
+
+.quality-summary-strip span {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: #fafafa;
+}
+
+.subsection-title {
+  margin: 16px 0 8px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
 .weak-sample-list {
   grid-column: 1 / -1;
   margin: 2px 0 0;

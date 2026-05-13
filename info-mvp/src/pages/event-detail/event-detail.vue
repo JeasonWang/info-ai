@@ -113,6 +113,22 @@ const hasHeatReason = computed(() => heatReason.value.trim().length > 0)
 const hasRiskNotice = computed(() => riskNotice.value.trim().length > 0)
 const hasSourceCompare = computed(() => sourceCompare.value.trim().length > 0)
 const hasAnalysisConfidence = computed(() => analysisConfidence.value.trim().length > 0)
+const intelligenceItems = computed(() => {
+  const items = [
+    { label: '核心事实', value: primarySummary.value, tone: 'blue' },
+    { label: '最新进展', value: latestUpdate.value, tone: 'green' },
+    { label: '为什么重要', value: whyMatters.value, tone: 'purple' },
+    { label: '风险提示', value: riskNotice.value || eventQualityReason.value, tone: 'orange' },
+  ]
+  return items.filter((item) => item.value && item.value.trim().length > 0).slice(0, 4)
+})
+const detailStatusText = computed(() => {
+  const current = event.value?.event
+  if (!current) return ''
+  if (current.status === 'monitoring' || current.display_quality_level === 'weak') return '观察中，等待更多事实源'
+  if ((current.source_count || 0) >= 3) return '多来源交叉验证'
+  return '可信事件'
+})
 
 const primarySource = computed(() => {
   if (!event.value) return null
@@ -189,6 +205,35 @@ const sourceQualityText = computed(() => {
   return `${source.channel_name} · 评分 ${source.detail_score || 0} · ${length}字`
 })
 
+const eventQualityText = computed(() => {
+  const current = event.value?.event
+  if (!current) return ''
+  const score = current.display_quality_score ?? 0
+  const level = current.display_quality_level || ''
+  if (level === 'excellent') return `高可信 · ${score}`
+  if (level === 'good') return `可信 · ${score}`
+  if (level === 'weak') return `观察中 · ${score}`
+  if (score > 0) return `质量 · ${score}`
+  return ''
+})
+
+const eventQualityReason = computed(() => {
+  const reason = event.value?.event.display_quality_reason || ''
+  const labels: Record<string, string> = {
+    single_weak_source: '单一弱来源',
+    low_value_content: '低价值线索',
+    social_signal_without_fact_source: '社交热度缺事实源',
+    missing_complete_source: '缺完整来源',
+    missing_usable_source: '缺可用来源',
+  }
+  return reason
+    .split(',')
+    .map((item) => labels[item.trim()] || item.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(' / ')
+})
+
 const isLatestUpdateRedundant = computed(() => {
   if (!hasLatestUpdate.value || !primarySummary.value) return false
   return latestUpdate.value.includes(primarySummary.value.slice(0, 30)) || primarySummary.value.includes(latestUpdate.value.slice(0, 30))
@@ -241,11 +286,16 @@ function onShareAppMessage() {
             <text>{{ event.event.primary_category.name }}</text>
           </view>
           <text class="update-time">{{ formatRelativeTime(event.event.last_updated_at) }}更新</text>
+          <text v-if="eventQualityText" class="quality-tag">{{ eventQualityText }}</text>
         </view>
 
         <text class="hero-title">{{ event.event.title }}</text>
 
         <text class="hero-summary">{{ event.event.one_line_summary }}</text>
+
+        <view v-if="eventQualityReason" class="quality-note">
+          <text>{{ eventQualityReason }}</text>
+        </view>
 
         <view class="hero-actions">
           <view class="action-btn" @click="shareEvent">
@@ -264,6 +314,28 @@ function onShareAppMessage() {
           <view class="stat-item">
             <text class="stat-value">{{ event.event.source_count || 0 }}</text>
             <text class="stat-label">来源</text>
+          </view>
+        </view>
+
+        <view v-if="detailStatusText" class="detail-verdict">
+          <text>{{ detailStatusText }}</text>
+        </view>
+      </view>
+
+      <view v-if="intelligenceItems.length" class="section section--briefing">
+        <view class="section-header">
+          <view class="section-dot" />
+          <text class="section-title">情报摘要</text>
+        </view>
+        <view class="briefing-grid">
+          <view
+            v-for="item in intelligenceItems"
+            :key="item.label"
+            class="briefing-card"
+            :class="`briefing-card--${item.tone}`"
+          >
+            <text class="briefing-card-label">{{ item.label }}</text>
+            <text class="briefing-card-text">{{ item.value }}</text>
           </view>
         </view>
       </view>
@@ -521,6 +593,7 @@ function onShareAppMessage() {
 .hero-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16rpx;
   margin-bottom: 20rpx;
 }
@@ -541,6 +614,14 @@ function onShareAppMessage() {
   color: var(--text-muted);
 }
 
+.quality-tag {
+  font-size: 22rpx;
+  color: #117a4f;
+  background: rgba(17, 122, 79, 0.1);
+  padding: 6rpx 14rpx;
+  border-radius: var(--radius-sm);
+}
+
 .hero-title {
   display: block;
   font-size: 40rpx;
@@ -556,6 +637,18 @@ function onShareAppMessage() {
   color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 24rpx;
+}
+
+.quality-note {
+  margin: -8rpx 0 24rpx;
+  padding: 12rpx 16rpx;
+  border-radius: var(--radius-sm);
+  background: rgba(246, 162, 58, 0.12);
+}
+
+.quality-note text {
+  font-size: 24rpx;
+  color: var(--cat-orange);
 }
 
 .hero-actions {
@@ -598,6 +691,20 @@ function onShareAppMessage() {
   padding: 20rpx 0;
 }
 
+.detail-verdict {
+  margin-top: 18rpx;
+  padding: 14rpx 18rpx;
+  background: rgba(31, 41, 55, 0.06);
+  border-radius: var(--radius-md);
+}
+
+.detail-verdict text {
+  color: #1f2937;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .stat-item {
   flex: 1;
   display: flex;
@@ -627,6 +734,10 @@ function onShareAppMessage() {
 /* ========== Sections ========== */
 .section {
   margin-bottom: 32rpx;
+}
+
+.section--briefing {
+  margin-top: -8rpx;
 }
 
 .section-header {
@@ -685,6 +796,50 @@ function onShareAppMessage() {
   font-size: 28rpx;
   color: var(--text-primary);
   line-height: 1.8;
+}
+
+.briefing-grid {
+  display: grid;
+  gap: 16rpx;
+}
+
+.briefing-card {
+  padding: 24rpx;
+  background: var(--card-bg);
+  border-left: 8rpx solid var(--brand-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.briefing-card--green {
+  border-left-color: var(--cat-teal);
+}
+
+.briefing-card--purple {
+  border-left-color: var(--cat-purple);
+}
+
+.briefing-card--orange {
+  border-left-color: var(--cat-orange);
+  background: rgba(255, 247, 237, 0.96);
+}
+
+.briefing-card-label,
+.briefing-card-text {
+  display: block;
+}
+
+.briefing-card-label {
+  color: var(--text-muted);
+  font-size: 22rpx;
+  font-weight: 800;
+  margin-bottom: 8rpx;
+}
+
+.briefing-card-text {
+  color: var(--text-primary);
+  font-size: 27rpx;
+  line-height: 1.75;
 }
 
 /* ========== Tag Card ========== */

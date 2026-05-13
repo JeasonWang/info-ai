@@ -111,7 +111,7 @@ class JuejinCrawler(BaseCrawler):
             brief = article_info.get("brief_content", title)[:500]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": brief,
                 "source_url": f"https://juejin.cn/post/{article_id}",
                 "event_time": datetime.now(),
@@ -141,7 +141,7 @@ class JuejinCrawler(BaseCrawler):
             source_id = hashlib.md5(f"juejin_{article_id}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": f"https://juejin.cn/post/{article_id}",
                 "event_time": datetime.now(),

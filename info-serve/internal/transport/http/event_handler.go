@@ -31,6 +31,7 @@ func (h *EventHandler) List(w http.ResponseWriter, r *http.Request) {
 		CategoryCode: query.Get("category_code"),
 		ChannelCode:  query.Get("channel_code"),
 		Keyword:      query.Get("keyword"),
+		Status:       query.Get("status"),
 		Sort:         query.Get("sort"),
 		Page:         page,
 		PageSize:     pageSize,

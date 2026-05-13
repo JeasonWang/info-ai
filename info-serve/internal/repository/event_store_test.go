@@ -93,3 +93,14 @@ func TestCompactArticleTextPreservesReadableParagraphs(t *testing.T) {
 		t.Fatalf("punctuation spacing was not normalized: %q", result)
 	}
 }
+
+func TestBuildEventWhereUsesRequestedPublicStatus(t *testing.T) {
+	whereSQL, args := buildEventWhere(events.ListEventsParams{Status: "monitoring", CategoryCode: "tech"})
+
+	if !strings.Contains(whereSQL, "e.status = ?") {
+		t.Fatalf("where sql missing status filter: %s", whereSQL)
+	}
+	if len(args) < 1 || args[0] != "monitoring" {
+		t.Fatalf("args = %+v, want first arg monitoring", args)
+	}
+}

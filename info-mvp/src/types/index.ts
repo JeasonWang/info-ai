@@ -86,6 +86,7 @@ export interface EventCategory {
 export interface EventListItem {
   id: number
   representative_info_id: number | null
+  status?: 'active' | 'monitoring' | string
   title: string
   one_line_summary: string
   primary_category: {
@@ -95,6 +96,9 @@ export interface EventListItem {
   heat_score: number
   freshness_score: number
   composite_score: number
+  display_quality_score?: number
+  display_quality_level?: string
+  display_quality_reason?: string
   last_updated_at: string | null
   source_count: number
   source_badges: string[]
@@ -174,6 +178,7 @@ export interface EventTechContext {
 export interface EventDetail {
   event: {
     id: number
+    status?: 'active' | 'monitoring' | string
     title: string
     one_line_summary: string
     primary_category: {
@@ -183,6 +188,9 @@ export interface EventDetail {
     heat_score: number
     freshness_score?: number
     composite_score?: number
+    display_quality_score?: number
+    display_quality_level?: string
+    display_quality_reason?: string
     source_count?: number
     last_updated_at: string | null
   }
@@ -236,6 +244,7 @@ export interface ListEventParams {
   category_code?: string
   channel_code?: string
   keyword?: string
+  status?: 'active' | 'monitoring'
   sort?: 'composite' | 'latest'
   page?: number
   page_size?: number

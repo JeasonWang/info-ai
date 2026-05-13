@@ -216,7 +216,7 @@ class Kr36Crawler(BaseCrawler):
                 content_parts.append("热度：" + "，".join(stat_parts))
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": "。".join(part for part in content_parts if part)[:500],
                 "source_url": f"https://www.36kr.com/p/{article_id}",
                 "event_time": datetime.now(),
@@ -266,7 +266,7 @@ class Kr36Crawler(BaseCrawler):
                     summary = article.get("summary", title)[:500]
                     results.append({
                         "source_id": source_id,
-                        "title": title[:40],
+                        "title": title[:200],
                         "content": summary,
                         "source_url": f"https://www.36kr.com/p/{article_id}",
                         "event_time": datetime.now(),
@@ -290,7 +290,7 @@ class Kr36Crawler(BaseCrawler):
                 source_id = hashlib.md5(f"36kr_{article_id}".encode()).hexdigest()[:16]
                 results.append({
                     "source_id": source_id,
-                    "title": title[:40],
+                    "title": title[:200],
                     "content": title[:500],
                     "source_url": f"https://www.36kr.com/p/{article_id}",
                     "event_time": datetime.now(),
@@ -325,7 +325,7 @@ class Kr36Crawler(BaseCrawler):
             summary = description or title
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": summary[:500],
                 "source_url": link,
                 "event_time": datetime.now(),

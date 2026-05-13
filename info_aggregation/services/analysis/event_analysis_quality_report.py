@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections import Counter
 
 from database import Event, EventAnalysisRun, EventItemLink, Info
 from services.collection.acquisition_quality import build_acquisition_quality_profile
@@ -80,9 +81,60 @@ def _risk_score(run: EventAnalysisRun | None, weak_count: int, reasons: list[str
     return round(score, 2)
 
 
+def _display_quality_report(events: list[Event], limit: int) -> dict:
+    status_counter = Counter(event.status or "unknown" for event in events)
+    level_counter = Counter(event.display_quality_level or "unknown" for event in events)
+    reason_counter: Counter[str] = Counter()
+    blocked_samples: list[dict] = []
+
+    for event in events:
+        reasons = [reason.strip() for reason in (event.display_quality_reason or "").split(",") if reason.strip()]
+        reason_counter.update(reasons)
+        if (event.status or "") in {"monitoring", "low_quality"}:
+            blocked_samples.append(
+                {
+                    "event_id": event.id,
+                    "title": event.title,
+                    "one_line_summary": event.one_line_summary,
+                    "status": event.status,
+                    "source_count": event.source_count,
+                    "display_quality_score": event.display_quality_score or 0,
+                    "display_quality_level": event.display_quality_level or "",
+                    "display_quality_reasons": reasons,
+                    "last_updated_at": event.last_updated_at.strftime("%Y-%m-%d %H:%M:%S") if event.last_updated_at else "",
+                }
+            )
+
+    blocked_samples.sort(key=lambda item: (item["display_quality_score"], -item["event_id"]))
+    display_ready_count = status_counter.get("active", 0)
+    blocked_count = status_counter.get("monitoring", 0) + status_counter.get("low_quality", 0)
+    total_count = display_ready_count + blocked_count
+    return {
+        "summary": {
+            "tracked_event_count": total_count,
+            "display_ready_count": display_ready_count,
+            "blocked_count": blocked_count,
+            "display_ready_ratio": round(display_ready_count * 100 / total_count, 2) if total_count else 0,
+            "status_counts": dict(sorted(status_counter.items())),
+            "level_counts": dict(sorted(level_counter.items())),
+            "top_block_reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in reason_counter.most_common(8)
+            ],
+        },
+        "blocked_samples": blocked_samples[:limit],
+    }
+
+
 def build_event_analysis_quality_report(session, limit: int = 20) -> dict:
     limit = max(1, min(limit, 100))
-    events = session.query(Event).filter(Event.status == "active").order_by(Event.last_updated_at.desc()).all()
+    tracked_events = (
+        session.query(Event)
+        .filter(Event.status.in_(("active", "monitoring", "low_quality")))
+        .order_by(Event.last_updated_at.desc(), Event.id.desc())
+        .all()
+    )
+    events = [event for event in tracked_events if event.status == "active"]
     latest_runs = _latest_runs_by_event(session)
     linked_infos = _linked_infos_by_event(session)
 
@@ -153,4 +205,5 @@ def build_event_analysis_quality_report(session, limit: int = 20) -> dict:
             "risk_event_count": len(risk_events),
         },
         "risk_events": risk_events[:limit],
+        "display_quality": _display_quality_report(tracked_events, limit),
     }

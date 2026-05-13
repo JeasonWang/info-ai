@@ -26,8 +26,9 @@ func (s *MySQLStore) ListEvents(ctx context.Context, params events.ListEventsPar
 	listArgs := append(args, params.PageSize, offset)
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT e.id, e.title, e.one_line_summary, c.code, c.name,
+		`SELECT e.id, e.status, e.title, e.one_line_summary, c.code, c.name,
 		       e.heat_score, e.freshness_score, e.composite_score,
+		       COALESCE(e.display_quality_score, 0), COALESCE(e.display_quality_level, ''), COALESCE(e.display_quality_reason, ''),
 		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
 		       e.source_count, e.previous_event_id, COALESCE(e.event_generation, 1), COALESCE(e.evolution_stage, 'emerging')
 FROM event AS e
@@ -44,6 +45,7 @@ JOIN category AS c ON c.id = e.primary_category_id `+whereSQL+` `+orderSQL+` LIM
 		var item events.EventListItem
 		if err := rows.Scan(
 			&item.ID,
+			&item.Status,
 			&item.Title,
 			&item.OneLineSummary,
 			&item.PrimaryCategory.Code,
@@ -51,6 +53,9 @@ JOIN category AS c ON c.id = e.primary_category_id `+whereSQL+` `+orderSQL+` LIM
 			&item.HeatScore,
 			&item.FreshnessScore,
 			&item.CompositeScore,
+			&item.DisplayQualityScore,
+			&item.DisplayQualityLevel,
+			&item.DisplayQualityReason,
 			&item.LastUpdatedAt,
 			&item.SourceCount,
 			&item.PreviousEventID,
@@ -84,8 +89,9 @@ func (s *MySQLStore) GetEventDetail(ctx context.Context, id int64) (events.Event
 	var event events.EventCore
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT e.id, e.title, e.one_line_summary, c.code, c.name,
+		`SELECT e.id, e.status, e.title, e.one_line_summary, c.code, c.name,
 		       e.heat_score, e.freshness_score, e.composite_score, e.source_count,
+		       COALESCE(e.display_quality_score, 0), COALESCE(e.display_quality_level, ''), COALESCE(e.display_quality_reason, ''),
 		       COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
 		       e.previous_event_id, COALESCE(e.event_generation, 1), COALESCE(e.evolution_stage, 'emerging')
 FROM event AS e
@@ -94,6 +100,7 @@ WHERE e.id = ?`,
 		id,
 	).Scan(
 		&event.ID,
+		&event.Status,
 		&event.Title,
 		&event.OneLineSummary,
 		&event.PrimaryCategory.Code,
@@ -102,6 +109,9 @@ WHERE e.id = ?`,
 		&event.FreshnessScore,
 		&event.CompositeScore,
 		&event.SourceCount,
+		&event.DisplayQualityScore,
+		&event.DisplayQualityLevel,
+		&event.DisplayQualityReason,
 		&event.LastUpdatedAt,
 		&event.PreviousEventID,
 		&event.EventGeneration,
@@ -143,8 +153,12 @@ WHERE e.id = ?`,
 }
 
 func buildEventWhere(params events.ListEventsParams) (string, []any) {
-	clauses := []string{"e.status = 'active'"}
-	args := []any{}
+	status := strings.TrimSpace(params.Status)
+	if status != "monitoring" {
+		status = "active"
+	}
+	clauses := []string{"e.status = ?"}
+	args := []any{status}
 	if params.CategoryCode != "" && params.CategoryCode != "all" {
 		clauses = append(clauses, "c.code = ?")
 		args = append(args, params.CategoryCode)

@@ -1,6 +1,7 @@
 from collections import Counter
 
 from services.collection.acquisition_quality import build_acquisition_quality_profile
+from services.quality.data_quality import is_low_value_content
 
 from .schemas import EventAnalysisResult, EventFact, TimelinePoint
 from .text_utils import clean_source_text, ensure_sentence_end, natural_clip, remove_title_prefix, split_sentences, text_similarity
@@ -44,10 +45,18 @@ def _item_count(items) -> int:
 
 def _best_sentence(item) -> str:
     content = remove_title_prefix(item.content or "", item.title or "")
+    if is_low_value_content(item.title or "", content):
+        return ""
     sentences = split_sentences(content)
+    meaningful_sentences = [sentence for sentence in sentences if not is_low_value_content(item.title or "", sentence)]
+    if meaningful_sentences:
+        return meaningful_sentences[0]
     if sentences:
         return sentences[0]
-    return natural_clip(content or item.title or "", 120)
+    fallback = content or item.title or ""
+    if is_low_value_content(item.title or "", fallback):
+        return ""
+    return natural_clip(fallback, 120)
 
 
 def _build_one_line(items) -> str:
@@ -70,6 +79,8 @@ def _build_one_line(items) -> str:
         return ensure_sentence_end(f"{topic_phrase}{heat_phrase}")
 
     sentence = _best_sentence(lead_item)
+    if not sentence:
+        return ensure_sentence_end(f"{entity}正在形成热度线索，但当前缺少完整事实来源")
     if text_similarity(sentence, lead_item.title or "") >= 0.86:
         if keywords:
             return ensure_sentence_end(f"{entity}相关内容开始升温，核心讨论集中在{'、'.join(keywords)}")
@@ -79,8 +90,11 @@ def _build_one_line(items) -> str:
 
 def _build_what_happened(items) -> str:
     lead = items[0]
+    if is_low_value_content(lead.title or "", lead.content or ""):
+        return "当前仍是热度线索，缺少完整事实来源支撑，暂不宜得出确定结论。"
     sentences = split_sentences(remove_title_prefix(lead.content or "", lead.title or ""))
-    summary = "".join(sentences[:2]) if sentences else _best_sentence(lead)
+    meaningful_sentences = [sentence for sentence in sentences if not is_low_value_content(lead.title or "", sentence)]
+    summary = "".join(meaningful_sentences[:2]) if meaningful_sentences else _best_sentence(lead)
     keywords = _top_values(items, "tech_keywords", limit=2)
     if keywords and all(keyword not in summary for keyword in keywords):
         summary += f" 当前讨论还围绕{'、'.join(keywords)}展开。"

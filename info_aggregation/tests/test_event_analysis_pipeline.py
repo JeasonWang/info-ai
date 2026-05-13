@@ -88,6 +88,27 @@ def test_rule_analysis_caps_long_unpunctuated_one_line_summary(session):
     assert result.one_line_summary.endswith(("。", "！", "？"))
 
 
+def test_rule_analysis_does_not_use_low_value_interaction_text_as_summary(session):
+    category, channel = _seed_channel(session)
+    item = Info(
+        title="夏日辣妹美甲",
+        content="夏日辣妹美甲。互动：点赞2.8万",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="low-value-summary",
+        source_url="https://example.com/low-value-summary",
+        event_time=datetime(2026, 5, 13, 10, 0, 0),
+        detail_fetch_status="list_only",
+        detail_score=10,
+    )
+
+    result = analyze_event_sources([item])
+
+    assert "互动：点赞" not in result.one_line_summary
+    assert "热度线索" in result.one_line_summary
+    assert "缺少完整事实来源" in result.what_happened
+
+
 def test_rebuild_events_persists_analysis_runs_snapshots_and_timeline(session):
     category, channel = _seed_channel(session)
     now = datetime(2026, 5, 8, 9, 0, 0)

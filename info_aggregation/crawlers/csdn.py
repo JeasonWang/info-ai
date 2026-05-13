@@ -92,7 +92,7 @@ class CSDNCrawler(BaseCrawler):
             url = article.get("url", f"https://blog.csdn.net/article/details/{article_id}")
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": desc,
                 "source_url": url,
                 "event_time": datetime.now(),
@@ -138,7 +138,7 @@ class CSDNCrawler(BaseCrawler):
             source_id = hashlib.md5(f"csdn_{article_id}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": url,
                 "event_time": datetime.now(),

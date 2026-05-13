@@ -66,7 +66,7 @@ class CnblogsCrawler(BaseCrawler):
             source_id = hashlib.md5(f"cnblogs_{post_id}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": post_url,
                 "event_time": datetime.now(),

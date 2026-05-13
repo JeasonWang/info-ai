@@ -6,7 +6,7 @@ from api import app
 import api
 from crawlers.registry import crawler_registry
 from database import Category, Channel, Event, EventItemLink, Info
-from services.analysis.event_builder import rebuild_events
+from services.analysis.event_builder import _group_related_items, rebuild_events
 
 
 def seed_event_data(session):
@@ -579,6 +579,81 @@ def test_rebuild_events_groups_related_titles_by_semantic_entity(session):
     event = session.query(Event).filter(Event.status == "active").one()
     assert event.source_count == 2
     assert "OpenAI" in event.title
+
+
+def test_rebuild_events_groups_cross_source_hot_titles_without_entity_fields(session):
+    hot = Category(name="热点事件", code="hot", description="热点")
+    session.add(hot)
+    session.flush()
+
+    toutiao = Channel(
+        name="今日头条",
+        code="toutiao",
+        base_url="https://toutiao.com",
+        category_id=hot.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    cctv = Channel(
+        name="央视新闻",
+        code="cctv",
+        base_url="https://news.cctv.com",
+        category_id=hot.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add_all([toutiao, cctv])
+    session.flush()
+
+    session.add_all(
+        [
+            Info(
+                title="广西公交车坠翻致3死5伤",
+                content="广西梧州一辆公交车发生坠翻事故，当地通报已有人员伤亡，救援和原因调查正在推进。",
+                category_id=hot.id,
+                channel_id=toutiao.id,
+                source_id="hot-cross-source-1",
+                source_url="https://example.com/hot-cross-source-1",
+                event_time=datetime(2026, 5, 13, 9, 0, 0),
+                detail_fetch_status="complete",
+                detail_score=90,
+                detail_content_length=42,
+            ),
+            Info(
+                title="广西梧州公交事故救援进展",
+                content="广西梧州公交事故救援持续进行，伤者治疗和事故原因调查成为后续关注重点。",
+                category_id=hot.id,
+                channel_id=cctv.id,
+                source_id="hot-cross-source-2",
+                source_url="https://example.com/hot-cross-source-2",
+                event_time=datetime(2026, 5, 13, 9, 20, 0),
+                detail_fetch_status="complete",
+                detail_score=88,
+                detail_content_length=36,
+            ),
+        ]
+    )
+    session.commit()
+
+    rebuild_events(session)
+
+    event = session.query(Event).filter(Event.status == "active").one()
+    assert event.source_count == 2
+    assert session.query(EventItemLink).filter(EventItemLink.event_id == event.id).count() == 2
+
+
+def test_related_grouping_does_not_merge_unrelated_social_titles():
+    items = [
+        Info(category_id=1, title="浏阳烟花厂爆炸事故已有29人出院", content="浏阳烟花厂爆炸事故救援处置继续推进。"),
+        Info(category_id=1, title="豆包 我不敢动饶雪漫这四个字", content="网友围绕影视娱乐内容展开讨论。"),
+        Info(category_id=1, title="带儿子出门VS带女儿出门", content="社交平台用户分享亲子出行体验。"),
+        Info(category_id=1, title="女子称儿子遭奶奶侵害 警方已立案", content="警方已立案调查，后续情况等待通报。"),
+        Info(category_id=1, title="上海居民恢复金门马祖游 首批游客成行", content="上海居民赴金门马祖旅游恢复，首批游客已经成行。"),
+    ]
+
+    grouped = _group_related_items(items)
+
+    assert len(grouped) == 5
 
 
 def test_list_events_supports_latest_sort(session):

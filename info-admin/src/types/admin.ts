@@ -169,6 +169,39 @@ export interface EventAnalysisRiskEvent {
 export interface EventAnalysisQualityReport {
   summary: EventAnalysisQualitySummary
   risk_events: EventAnalysisRiskEvent[]
+  display_quality: EventDisplayQualityReport
+}
+
+export interface EventDisplayQualityReasonCount {
+  reason: string
+  count: number
+}
+
+export interface EventDisplayQualitySummary {
+  tracked_event_count: number
+  display_ready_count: number
+  blocked_count: number
+  display_ready_ratio: number
+  status_counts: Record<string, number>
+  level_counts: Record<string, number>
+  top_block_reasons: EventDisplayQualityReasonCount[]
+}
+
+export interface EventDisplayQualityBlockedSample {
+  event_id: number
+  title: string
+  one_line_summary: string
+  status: string
+  source_count: number
+  display_quality_score: number
+  display_quality_level: string
+  display_quality_reasons: string[]
+  last_updated_at: string
+}
+
+export interface EventDisplayQualityReport {
+  summary: EventDisplayQualitySummary
+  blocked_samples: EventDisplayQualityBlockedSample[]
 }
 
 export interface AdminOverview {
