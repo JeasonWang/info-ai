@@ -9,6 +9,59 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+func TestChannelQualityActionAdvicePrioritizesCredentialIssue(t *testing.T) {
+	row := map[string]any{
+		"real_count":                12,
+		"usable_ratio":              35.0,
+		"needs_attention_ratio":     80.0,
+		"avg_detail_content_length": 90.0,
+		"top_failure_reasons":       []map[string]any{{"reason": "anti_crawl_blocked", "count": 5}},
+		"credential_health":         map[string]any{"health": "missing_required", "missing_required": []string{"WEIBO_COOKIE"}},
+	}
+
+	advice := channelQualityActionAdvice(row)
+
+	if advice["primary_issue"] != "缺少采集凭证" {
+		t.Fatalf("primary_issue = %v", advice["primary_issue"])
+	}
+	if advice["next_action"] != "配置 WEIBO_COOKIE 后重抓低完整详情" {
+		t.Fatalf("next_action = %v", advice["next_action"])
+	}
+}
+
+func TestChannelQualityActionAdviceHandlesEmptyCoreSource(t *testing.T) {
+	row := emptyCoreSourceRow("reuters")
+
+	if row["primary_issue"] != "暂无真实采集数据" {
+		t.Fatalf("primary_issue = %v", row["primary_issue"])
+	}
+	if row["next_action"] != "确认核心信源采集任务是否启用" {
+		t.Fatalf("next_action = %v", row["next_action"])
+	}
+}
+
+func TestEventAnalysisActionAdvicePrioritizesWeakSources(t *testing.T) {
+	advice := eventAnalysisActionAdvice([]string{"low_confidence", "weak_sources"}, 2)
+
+	if advice["primary_issue"] != "来源质量不足" {
+		t.Fatalf("primary_issue = %v", advice["primary_issue"])
+	}
+	if advice["next_action"] != "先执行详情补偿，再重新分析该事件" {
+		t.Fatalf("next_action = %v", advice["next_action"])
+	}
+}
+
+func TestDisplayQualityActionAdvicePrioritizesSingleWeakSource(t *testing.T) {
+	advice := displayQualityActionAdvice([]string{"single_weak_source", "low_value_content"})
+
+	if advice["primary_issue"] != "单一弱来源" {
+		t.Fatalf("primary_issue = %v", advice["primary_issue"])
+	}
+	if advice["next_action"] != "补充可用事实源后刷新展示质量" {
+		t.Fatalf("next_action = %v", advice["next_action"])
+	}
+}
+
 func TestMySQLStoreGetsAdminOverviewFromMigratedData(t *testing.T) {
 	dsn := os.Getenv("INFO_SERVE_TEST_MYSQL_DSN")
 	if dsn == "" {

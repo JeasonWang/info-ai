@@ -113,6 +113,22 @@ const hasHeatReason = computed(() => heatReason.value.trim().length > 0)
 const hasRiskNotice = computed(() => riskNotice.value.trim().length > 0)
 const hasSourceCompare = computed(() => sourceCompare.value.trim().length > 0)
 const hasAnalysisConfidence = computed(() => analysisConfidence.value.trim().length > 0)
+const intelligenceBrief = computed(() => event.value?.intelligence_brief || null)
+const hasIntelligenceBrief = computed(() => {
+  const brief = intelligenceBrief.value
+  return !!brief && (brief.stage || brief.confidence_reason || brief.decision_hint || brief.follow_up_questions?.length)
+})
+const followUpQuestions = computed(() => {
+  return (intelligenceBrief.value?.follow_up_questions || []).filter(Boolean).slice(0, 3)
+})
+const controversyBrief = computed(() => event.value?.controversy_brief || null)
+const hasControversyBrief = computed(() => {
+  const brief = controversyBrief.value
+  return !!brief && brief.level !== 'none' && (brief.summary || brief.action_hint || brief.signals?.length)
+})
+const relatedEvents = computed(() => {
+  return (event.value?.related_events || []).filter((item) => item.id && item.title).slice(0, 5)
+})
 const intelligenceItems = computed(() => {
   const items = [
     { label: '核心事实', value: primarySummary.value, tone: 'blue' },
@@ -325,6 +341,48 @@ function onShareAppMessage() {
         </view>
       </view>
 
+      <view v-if="hasIntelligenceBrief && intelligenceBrief" class="section section--intel-brief">
+        <view class="section-header">
+          <view class="section-dot" />
+          <text class="section-title">情报判断</text>
+        </view>
+        <view class="intel-brief-card">
+          <view class="intel-brief-top">
+            <text v-if="intelligenceBrief.stage" class="intel-stage">{{ intelligenceBrief.stage }}</text>
+            <text v-if="intelligenceBrief.decision_hint" class="intel-decision">{{ intelligenceBrief.decision_hint }}</text>
+          </view>
+          <text v-if="intelligenceBrief.confidence_reason" class="intel-confidence">
+            {{ intelligenceBrief.confidence_reason }}
+          </text>
+          <view v-if="followUpQuestions.length" class="follow-up-list">
+            <view v-for="question in followUpQuestions" :key="question" class="follow-up-item">
+              <view class="follow-up-dot" />
+              <text>{{ question }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="hasControversyBrief && controversyBrief" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-orange);" />
+          <text class="section-title">反转/争议提示</text>
+        </view>
+        <view class="controversy-card" :class="`controversy-card--${controversyBrief.level}`">
+          <view class="controversy-top">
+            <text class="controversy-title">{{ controversyBrief.title }}</text>
+            <text v-if="controversyBrief.has_rumor_signal" class="controversy-tag">核验中</text>
+          </view>
+          <text v-if="controversyBrief.summary" class="controversy-summary">{{ controversyBrief.summary }}</text>
+          <view v-if="controversyBrief.signals.length" class="controversy-signals">
+            <text v-for="signal in controversyBrief.signals.slice(0, 3)" :key="signal" class="controversy-signal">
+              {{ signal }}
+            </text>
+          </view>
+          <text v-if="controversyBrief.action_hint" class="controversy-action">{{ controversyBrief.action_hint }}</text>
+        </view>
+      </view>
+
       <view v-if="intelligenceItems.length" class="section section--briefing">
         <view class="section-header">
           <view class="section-dot" />
@@ -446,8 +504,13 @@ function onShareAppMessage() {
         </view>
         <view class="source-view-grid">
           <view v-for="view in event.source_views" :key="view.channel_name" class="source-view-card">
-            <text class="source-view-channel">{{ view.channel_name }}</text>
+            <view class="source-view-head">
+              <text class="source-view-channel">{{ view.channel_name }}</text>
+              <text v-if="view.focus" class="source-view-focus">{{ view.focus }}</text>
+            </view>
+            <text v-if="view.stance" class="source-view-stance">{{ view.stance }}</text>
             <text class="source-view-summary">{{ view.summary }}</text>
+            <text v-if="view.difference_hint" class="source-view-hint">{{ view.difference_hint }}</text>
           </view>
         </view>
       </view>
@@ -482,6 +545,30 @@ function onShareAppMessage() {
           </view>
           <view v-if="event.evidence_chain.weak_sources.length > 0" class="evidence-warning">
             <text>风险来源：{{ event.evidence_chain.weak_sources[0].quality_summary }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- ========== 历史关联 ========== -->
+      <view v-if="relatedEvents.length > 0" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-purple);" />
+          <text class="section-title">历史关联</text>
+        </view>
+        <view class="related-list">
+          <view
+            v-for="related in relatedEvents"
+            :key="related.id"
+            class="related-card"
+            @click="uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${related.id}` })"
+          >
+            <view class="related-head">
+              <text class="related-label">{{ related.relation_label || '相关事件' }}</text>
+              <text v-if="related.last_updated_at" class="related-time">{{ formatRelativeTime(related.last_updated_at) }}</text>
+            </view>
+            <text class="related-title">{{ related.title }}</text>
+            <text v-if="related.one_line_summary" class="related-summary">{{ related.one_line_summary }}</text>
+            <text v-if="related.relation_reason" class="related-reason">{{ related.relation_reason }}</text>
           </view>
         </view>
       </view>
@@ -743,6 +830,10 @@ function onShareAppMessage() {
   margin-top: -8rpx;
 }
 
+.section--intel-brief {
+  margin-top: -4rpx;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -799,6 +890,142 @@ function onShareAppMessage() {
   font-size: 28rpx;
   color: var(--text-primary);
   line-height: 1.8;
+}
+
+.intel-brief-card {
+  padding: 28rpx;
+  background: var(--card-bg);
+  border: 1rpx solid rgba(16, 185, 129, 0.18);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.intel-brief-top {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.intel-stage {
+  flex-shrink: 0;
+  padding: 8rpx 18rpx;
+  color: #047857;
+  font-size: 23rpx;
+  font-weight: 900;
+  line-height: 1.2;
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: var(--radius-pill);
+}
+
+.intel-decision {
+  color: var(--text-primary);
+  font-size: 29rpx;
+  font-weight: 850;
+  line-height: 1.5;
+}
+
+.intel-confidence {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 26rpx;
+  line-height: 1.7;
+}
+
+.follow-up-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 22rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgba(15, 23, 42, 0.08);
+}
+
+.follow-up-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.follow-up-dot {
+  width: 10rpx;
+  height: 10rpx;
+  flex-shrink: 0;
+  margin-top: 14rpx;
+  background: var(--brand-accent);
+  border-radius: 50%;
+}
+
+.follow-up-item text {
+  color: var(--text-primary);
+  font-size: 25rpx;
+  line-height: 1.65;
+}
+
+.controversy-card {
+  padding: 28rpx;
+  background: rgba(255, 247, 237, 0.96);
+  border: 1rpx solid rgba(234, 88, 12, 0.18);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.controversy-card--high {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(254, 242, 242, 0.96);
+}
+
+.controversy-top {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 12rpx;
+}
+
+.controversy-title {
+  color: var(--text-primary);
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.controversy-tag {
+  flex-shrink: 0;
+  padding: 6rpx 14rpx;
+  color: #b45309;
+  font-size: 22rpx;
+  font-weight: 900;
+  background: rgba(245, 158, 11, 0.16);
+  border-radius: var(--radius-pill);
+}
+
+.controversy-summary,
+.controversy-action {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 26rpx;
+  line-height: 1.75;
+}
+
+.controversy-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin: 18rpx 0;
+}
+
+.controversy-signal {
+  padding: 8rpx 16rpx;
+  color: #9a3412;
+  font-size: 23rpx;
+  font-weight: 700;
+  background: rgba(251, 146, 60, 0.14);
+  border-radius: var(--radius-pill);
+}
+
+.controversy-action {
+  color: #7c2d12;
+  font-weight: 800;
 }
 
 .briefing-grid {
@@ -962,7 +1189,18 @@ function onShareAppMessage() {
   box-shadow: var(--shadow-sm);
 }
 
+.source-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 10rpx;
+}
+
 .source-view-channel,
+.source-view-focus,
+.source-view-stance,
+.source-view-hint,
 .source-view-summary {
   display: block;
 }
@@ -971,13 +1209,37 @@ function onShareAppMessage() {
   color: var(--brand-accent);
   font-size: 24rpx;
   font-weight: 700;
-  margin-bottom: 10rpx;
+}
+
+.source-view-focus {
+  flex-shrink: 0;
+  padding: 6rpx 14rpx;
+  color: #1d4ed8;
+  font-size: 22rpx;
+  font-weight: 800;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: var(--radius-pill);
+}
+
+.source-view-stance {
+  color: var(--text-primary);
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 1.5;
+  margin-bottom: 8rpx;
 }
 
 .source-view-summary {
   color: var(--text-secondary);
   font-size: 27rpx;
   line-height: 1.7;
+}
+
+.source-view-hint {
+  margin-top: 12rpx;
+  color: var(--text-muted);
+  font-size: 24rpx;
+  line-height: 1.55;
 }
 
 /* ========== Evidence Chain ========== */
@@ -1043,6 +1305,75 @@ function onShareAppMessage() {
   color: var(--cat-orange);
   font-size: 24rpx;
   line-height: 1.6;
+}
+
+/* ========== Related Events ========== */
+.related-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.related-card {
+  padding: 24rpx;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.related-card:active {
+  transform: scale(0.995);
+}
+
+.related-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.related-label,
+.related-time,
+.related-title,
+.related-summary,
+.related-reason {
+  display: block;
+}
+
+.related-label {
+  padding: 6rpx 14rpx;
+  color: #6d28d9;
+  font-size: 22rpx;
+  font-weight: 900;
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: var(--radius-pill);
+}
+
+.related-time {
+  color: var(--text-muted);
+  font-size: 22rpx;
+}
+
+.related-title {
+  color: var(--text-primary);
+  font-size: 28rpx;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.related-summary {
+  margin-top: 10rpx;
+  color: var(--text-secondary);
+  font-size: 25rpx;
+  line-height: 1.65;
+}
+
+.related-reason {
+  margin-top: 12rpx;
+  color: var(--text-muted);
+  font-size: 24rpx;
+  line-height: 1.55;
 }
 
 /* ========== Timeline ========== */

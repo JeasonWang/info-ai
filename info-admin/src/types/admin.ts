@@ -124,6 +124,8 @@ export interface ChannelQualityItem {
   needs_attention_ratio: number
   quality_rank_score: number
   governance_advice: string[]
+  primary_issue?: string
+  next_action?: string
   avg_detail_score: number
   avg_detail_content_length: number
   top_failure_reasons: ChannelQualityFailureReason[]
@@ -158,6 +160,8 @@ export interface EventAnalysisRiskEvent {
   weak_source_count: number
   issue_reasons: string[]
   governance_advice: string[]
+  primary_issue?: string
+  next_action?: string
   risk_score: number
   run_id: number | null
   mode: string
@@ -201,6 +205,8 @@ export interface EventDisplayQualityBlockedSample {
   display_quality_score: number
   display_quality_level: string
   display_quality_reasons: string[]
+  primary_issue?: string
+  next_action?: string
   last_updated_at: string
 }
 

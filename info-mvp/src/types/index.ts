@@ -122,6 +122,9 @@ export interface EventTimelineItem {
 export interface EventSourceView {
   channel_name: string
   summary: string
+  focus?: string
+  stance?: string
+  difference_hint?: string
 }
 
 export interface EventEvidenceSource {
@@ -175,6 +178,34 @@ export interface EventTechContext {
   keywords: string[]
 }
 
+export interface EventIntelligenceBrief {
+  stage: string
+  confidence_reason: string
+  decision_hint: string
+  follow_up_questions: string[]
+}
+
+export interface EventControversyBrief {
+  level: 'none' | 'low' | 'medium' | 'high' | string
+  title: string
+  summary: string
+  signals: string[]
+  action_hint: string
+  has_rumor_signal: boolean
+}
+
+export interface EventRelatedEvent {
+  id: number
+  title: string
+  one_line_summary: string
+  last_updated_at: string | null
+  relation_type: 'previous' | 'next' | string
+  relation_label: string
+  relation_reason: string
+  evolution_type: string
+  evolution_summary: string
+}
+
 export interface EventDetail {
   event: {
     id: number
@@ -200,6 +231,9 @@ export interface EventDetail {
   representative_sources: EventRepresentativeSource[]
   tech_context: EventTechContext
   evidence_chain?: EventEvidenceChain
+  intelligence_brief?: EventIntelligenceBrief
+  controversy_brief?: EventControversyBrief
+  related_events?: EventRelatedEvent[]
 }
 
 export interface StatsData {

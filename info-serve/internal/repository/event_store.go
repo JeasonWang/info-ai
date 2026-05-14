@@ -138,6 +138,10 @@ WHERE e.id = ?`,
 	if err != nil {
 		return events.EventDetail{}, err
 	}
+	relatedEvents, err := s.relatedEvents(ctx, event)
+	if err != nil {
+		return events.EventDetail{}, err
+	}
 
 	return events.EventDetail{
 		Event:                 event,
@@ -146,7 +150,100 @@ WHERE e.id = ?`,
 		SourceViews:           sourceViews,
 		RepresentativeSources: representativeSources,
 		TechContext:           techContext,
+		RelatedEvents:         relatedEvents,
 	}, nil
+}
+
+func (s *MySQLStore) relatedEvents(ctx context.Context, event events.EventCore) ([]events.RelatedEvent, error) {
+	result := []events.RelatedEvent{}
+	seen := map[int64]bool{event.ID: true}
+	if event.PreviousEventID != nil {
+		previous, err := s.relatedEventByID(ctx, *event.PreviousEventID, "previous", event.ID)
+		if err != nil {
+			return nil, err
+		}
+		if previous != nil {
+			result = append(result, *previous)
+			seen[previous.ID] = true
+		}
+	}
+	nextEvents, err := s.nextRelatedEvents(ctx, event.ID, seen)
+	if err != nil {
+		return nil, err
+	}
+	result = append(result, nextEvents...)
+	if len(result) > 5 {
+		result = result[:5]
+	}
+	return result, nil
+}
+
+func (s *MySQLStore) relatedEventByID(ctx context.Context, relatedID int64, relationType string, currentID int64) (*events.RelatedEvent, error) {
+	var item events.RelatedEvent
+	item.RelationType = relationType
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT e.id, e.title, e.one_line_summary, COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
+		       COALESCE(ev.evolution_type, ''), COALESCE(ev.evolution_summary, '')
+FROM event AS e
+LEFT JOIN event_evolution AS ev ON ev.event_id = ? AND ev.previous_event_id = e.id
+WHERE e.id = ?`,
+		currentID,
+		relatedID,
+	).Scan(
+		&item.ID,
+		&item.Title,
+		&item.OneLineSummary,
+		&item.LastUpdatedAt,
+		&item.EvolutionType,
+		&item.EvolutionSummary,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *MySQLStore) nextRelatedEvents(ctx context.Context, currentID int64, seen map[int64]bool) ([]events.RelatedEvent, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT e.id, e.title, e.one_line_summary, COALESCE(DATE_FORMAT(e.last_updated_at, '%Y-%m-%d %H:%i:%s'), ''),
+		       COALESCE(ev.evolution_type, ''), COALESCE(ev.evolution_summary, '')
+FROM event AS e
+LEFT JOIN event_evolution AS ev ON ev.event_id = e.id AND ev.previous_event_id = ?
+WHERE e.previous_event_id = ?
+ORDER BY e.last_updated_at DESC, e.id DESC
+LIMIT 5`,
+		currentID,
+		currentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []events.RelatedEvent{}
+	for rows.Next() {
+		item := events.RelatedEvent{RelationType: "next"}
+		if err := rows.Scan(
+			&item.ID,
+			&item.Title,
+			&item.OneLineSummary,
+			&item.LastUpdatedAt,
+			&item.EvolutionType,
+			&item.EvolutionSummary,
+		); err != nil {
+			return nil, err
+		}
+		if seen[item.ID] {
+			continue
+		}
+		seen[item.ID] = true
+		result = append(result, item)
+	}
+	return result, rows.Err()
 }
 
 func buildEventWhere(params events.ListEventsParams) (string, []any) {

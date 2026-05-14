@@ -96,6 +96,47 @@ def _governance_advice(row: dict) -> list[str]:
     return advice
 
 
+def _action_advice(row: dict) -> dict:
+    credential_health = row.get("credential_health") or {}
+    missing_required = credential_health.get("missing_required") or []
+    if missing_required:
+        name = missing_required[0]
+        return {
+            "primary_issue": "缺少采集凭证",
+            "next_action": f"配置 {name} 后重抓低完整详情",
+        }
+    if row["real_count"] == 0:
+        return {
+            "primary_issue": "暂无真实采集数据",
+            "next_action": "确认核心信源采集任务是否启用",
+        }
+    top_failure = (row.get("top_failure_reasons") or [{}])[0].get("reason", "")
+    if top_failure in {"anti_crawl_blocked", "http_401_blocked", "http_403_blocked"}:
+        return {
+            "primary_issue": "疑似反爬阻断",
+            "next_action": "检查 Cookie、请求头或渲染抓取策略",
+        }
+    if row["usable_ratio"] < 45:
+        return {
+            "primary_issue": "详情可用率偏低",
+            "next_action": "优先重抓低完整详情并复查正文抽取规则",
+        }
+    if row["avg_detail_content_length"] < 120 and row["real_count"] > 0:
+        return {
+            "primary_issue": "平均正文偏短",
+            "next_action": "抽样对比原站详情页并增强正文抽取",
+        }
+    if row["needs_attention_ratio"] >= 40:
+        return {
+            "primary_issue": "待治理比例偏高",
+            "next_action": "批量重抓低完整详情后刷新质量",
+        }
+    return {
+        "primary_issue": "质量稳定",
+        "next_action": "保持定时采集和质量监控",
+    }
+
+
 def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
     """按渠道输出真实采集详情质量，明确哪些渠道还不能支撑产品展示。"""
 
@@ -164,6 +205,7 @@ def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
         }
         row["quality_rank_score"] = _quality_rank_score(row)
         row["governance_advice"] = _governance_advice(row)
+        row.update(_action_advice(row))
         rows.append(row)
 
     summary = _build_summary(rows)
@@ -234,6 +276,8 @@ def _empty_core_source(code: str) -> dict:
         "needs_attention_ratio": 0.0,
         "quality_rank_score": 100.0,
         "governance_advice": ["核心信源尚未接入或暂无真实采集数据，建议确认采集任务是否启用。"],
+        "primary_issue": "暂无真实采集数据",
+        "next_action": "确认核心信源采集任务是否启用",
         "avg_detail_score": 0.0,
         "avg_detail_content_length": 0.0,
         "top_failure_reasons": [],

@@ -242,8 +242,8 @@ func (s *MySQLStore) GetChannelQualityReport(ctx context.Context, sampleLimit in
 		return nil, err
 	}
 	return map[string]any{
-		"summary":  summary.toMap(channels),
-		"channels": channels,
+		"summary":      summary.toMap(channels),
+		"channels":     channels,
 		"core_sources": coreSourceRows(channels),
 	}, nil
 }
@@ -459,6 +459,9 @@ WHERE channel_id = ? AND is_deleted = 0`,
 	row["weak_samples"] = weakSamples
 	row["quality_rank_score"] = channelQualityRankScore(row)
 	row["governance_advice"] = channelGovernanceAdvice(row)
+	for key, value := range channelQualityActionAdvice(row) {
+		row[key] = value
+	}
 	return row, nil
 }
 
@@ -704,6 +707,8 @@ func emptyCoreSourceRow(code string) map[string]any {
 		"needs_attention_ratio":     0.0,
 		"quality_rank_score":        100.0,
 		"governance_advice":         []string{"核心信源尚未接入或暂无真实采集数据，建议确认采集任务是否启用。"},
+		"primary_issue":             "暂无真实采集数据",
+		"next_action":               "确认核心信源采集任务是否启用",
 		"avg_detail_score":          0.0,
 		"avg_detail_content_length": 0.0,
 		"top_failure_reasons":       []map[string]any{},
@@ -730,6 +735,65 @@ func coreSourceName(code string) string {
 	default:
 		return code
 	}
+}
+
+func channelQualityActionAdvice(row map[string]any) map[string]any {
+	if health, ok := row["credential_health"].(map[string]any); ok {
+		if health["health"] == "missing_required" {
+			missing := stringSliceFromAny(health["missing_required"])
+			name := "渠道 Cookie"
+			if len(missing) > 0 {
+				name = missing[0]
+			}
+			return map[string]any{
+				"primary_issue": "缺少采集凭证",
+				"next_action":   "配置 " + name + " 后重抓低完整详情",
+			}
+		}
+	}
+	if intFromAny(row["real_count"]) == 0 {
+		return map[string]any{
+			"primary_issue": "暂无真实采集数据",
+			"next_action":   "确认核心信源采集任务是否启用",
+		}
+	}
+	if reason := firstFailureReason(row["top_failure_reasons"]); reason == "anti_crawl_blocked" || reason == "http_401_blocked" || reason == "http_403_blocked" {
+		return map[string]any{
+			"primary_issue": "疑似反爬阻断",
+			"next_action":   "检查 Cookie、请求头或渲染抓取策略",
+		}
+	}
+	if floatFromAny(row["usable_ratio"]) < 45 {
+		return map[string]any{
+			"primary_issue": "详情可用率偏低",
+			"next_action":   "优先重抓低完整详情并复查正文抽取规则",
+		}
+	}
+	if floatFromAny(row["avg_detail_content_length"]) < 120 && intFromAny(row["real_count"]) > 0 {
+		return map[string]any{
+			"primary_issue": "平均正文偏短",
+			"next_action":   "抽样对比原站详情页并增强正文抽取",
+		}
+	}
+	if floatFromAny(row["needs_attention_ratio"]) >= 40 {
+		return map[string]any{
+			"primary_issue": "待治理比例偏高",
+			"next_action":   "批量重抓低完整详情后刷新质量",
+		}
+	}
+	return map[string]any{
+		"primary_issue": "质量稳定",
+		"next_action":   "保持定时采集和质量监控",
+	}
+}
+
+func firstFailureReason(value any) string {
+	items, ok := value.([]map[string]any)
+	if !ok || len(items) == 0 {
+		return ""
+	}
+	reason, _ := items[0]["reason"].(string)
+	return reason
 }
 
 func channelQualityRankScore(row map[string]any) float64 {
@@ -821,6 +885,9 @@ func scanEventAnalysisQualityRow(rows *sql.Rows) (map[string]any, []string, erro
 		"failure_reason":    "",
 		"last_analyzed_at":  "",
 	}
+	for key, value := range eventAnalysisActionAdvice(reasons, weakSourceCount) {
+		row[key] = value
+	}
 	if runID.Valid {
 		row["run_id"] = runID.Int64
 		row["mode"] = mode.String
@@ -834,6 +901,55 @@ func scanEventAnalysisQualityRow(rows *sql.Rows) (map[string]any, []string, erro
 		row["last_analyzed_at"] = lastAnalyzedAt
 	}
 	return row, reasons, nil
+}
+
+func eventAnalysisActionAdvice(reasons []string, weakSourceCount int) map[string]any {
+	reasonSet := map[string]bool{}
+	for _, reason := range reasons {
+		reasonSet[reason] = true
+	}
+	if reasonSet["missing_analysis"] {
+		return map[string]any{"primary_issue": "缺少事件分析", "next_action": "执行事件重建或分析补偿"}
+	}
+	if reasonSet["weak_sources"] {
+		return map[string]any{"primary_issue": "来源质量不足", "next_action": "先执行详情补偿，再重新分析该事件"}
+	}
+	if reasonSet["fallback_used"] || reasonSet["llm_or_analysis_fallback"] {
+		return map[string]any{"primary_issue": "大模型分析回退", "next_action": "检查模型服务、超时和输出格式后重分析"}
+	}
+	if reasonSet["empty_one_line_summary"] {
+		return map[string]any{"primary_issue": "一句话摘要缺失", "next_action": "重新构建事件分析结果"}
+	}
+	if reasonSet["low_confidence"] || reasonSet["low_quality_score"] {
+		return map[string]any{"primary_issue": "分析置信度偏低", "next_action": "补充多源证据或启用大模型增强后重分析"}
+	}
+	return map[string]any{"primary_issue": "质量稳定", "next_action": "继续观察"}
+}
+
+func displayQualityActionAdvice(reasons []string) map[string]any {
+	reasonSet := map[string]bool{}
+	for _, reason := range reasons {
+		reasonSet[reason] = true
+	}
+	if reasonSet["mixed_unrelated_sources"] {
+		return map[string]any{"primary_issue": "疑似错合并", "next_action": "执行事件重建预演并拆分错误来源"}
+	}
+	if reasonSet["social_signal_without_fact_source"] {
+		return map[string]any{"primary_issue": "社交热度缺事实源", "next_action": "等待媒体或官方事实源后刷新展示质量"}
+	}
+	if reasonSet["single_weak_source"] {
+		return map[string]any{"primary_issue": "单一弱来源", "next_action": "补充可用事实源后刷新展示质量"}
+	}
+	if reasonSet["missing_complete_source"] || reasonSet["missing_usable_source"] {
+		return map[string]any{"primary_issue": "缺少可用来源", "next_action": "执行详情补偿或二跳检索"}
+	}
+	if reasonSet["low_value_content"] {
+		return map[string]any{"primary_issue": "内容价值偏低", "next_action": "归档低价值内容或等待高质量来源"}
+	}
+	if reasonSet["empty_sources"] {
+		return map[string]any{"primary_issue": "缺少来源", "next_action": "重新构建事件来源关系"}
+	}
+	return map[string]any{"primary_issue": "展示质量不足", "next_action": "补充证据后刷新展示质量"}
 }
 
 func eventAnalysisIssueReasons(hasRun bool, status string, failureReason string, qualityScore float64, confidence float64, fallbackUsed bool, weakSourceCount int, oneLineSummary string) []string {
@@ -1021,6 +1137,23 @@ func floatFromAny(value any) float64 {
 		return float64(typed)
 	default:
 		return 0
+	}
+}
+
+func stringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		result := []string{}
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				result = append(result, text)
+			}
+		}
+		return result
+	default:
+		return []string{}
 	}
 }
 

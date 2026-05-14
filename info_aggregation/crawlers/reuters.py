@@ -384,13 +384,7 @@ class ReutersCrawler(BaseCrawler):
             if hasattr(response, "raise_for_status"):
                 response.raise_for_status()
             article = response.json().get("result", {})
-            texts = []
-            for part in article.get("content_items", []) or []:
-                if part.get("type") != "paragraph":
-                    continue
-                text = self._clean_detail_text(part.get("content", ""))
-                if text:
-                    texts.append(text)
+            texts = self._extract_article_api_paragraphs(article)
             rn_text = self._clean_detail_text(article.get("rn_text", ""))
             if rn_text:
                 texts.append(rn_text)
@@ -404,6 +398,22 @@ class ReutersCrawler(BaseCrawler):
         except Exception as e:
             self.logger.warning(f"路透社详情爬取失败: {e}")
         return None
+
+    def _extract_article_api_paragraphs(self, node) -> list[str]:
+        texts: list[str] = []
+        if isinstance(node, dict):
+            if node.get("type") == "paragraph":
+                text = self._clean_detail_text(node.get("content", ""))
+                if text:
+                    texts.append(text)
+            for key in ("content_items", "items", "children", "body", "article"):
+                value = node.get(key)
+                if value:
+                    texts.extend(self._extract_article_api_paragraphs(value))
+        elif isinstance(node, list):
+            for child in node:
+                texts.extend(self._extract_article_api_paragraphs(child))
+        return texts
 
     def _fetch_json_ld_detail(self, item: dict):
         source_url = item.get("source_url", "")

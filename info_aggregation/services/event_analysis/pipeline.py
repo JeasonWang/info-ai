@@ -13,6 +13,7 @@ from .providers import build_llm_provider
 from .providers import build_llm_provider_from_config
 from .rule_provider import RuleEventAnalysisProvider
 from .schemas import EventAnalysisResult
+from .tasks import default_event_analysis_tasks
 from .validator import normalize_result
 from .llm_runner import run_event_analysis_llm
 from services.analysis.llm_model_config import (
@@ -31,6 +32,7 @@ def analyze_event_sources(
     history_context: str | None = None,
 ) -> EventAnalysisResult:
     chronological_items = chronological_items or items
+    llm_tasks = default_event_analysis_tasks()
     rule_result = RuleEventAnalysisProvider().analyze(items, chronological_items, history_context=history_context)
     title = items[0].title if items else ""
     rule_result = normalize_result(rule_result, title=title)
@@ -53,6 +55,7 @@ def analyze_event_sources(
             history_context,
             title,
             EVENT_ANALYSIS_LLM_RETRY_TIMES,
+            tasks=llm_tasks,
         )
         latency_ms = int((time.perf_counter() - started_at) * 1000)
         if selected_config is not None:

@@ -68,6 +68,20 @@ def _governance_advice(reasons: list[str], weak_count: int) -> list[str]:
     return advice or ["当前事件分析质量稳定，继续观察即可。"]
 
 
+def _action_advice(reasons: list[str], weak_count: int) -> dict:
+    if "missing_analysis" in reasons:
+        return {"primary_issue": "缺少事件分析", "next_action": "执行事件重建或分析补偿"}
+    if "weak_sources" in reasons:
+        return {"primary_issue": "来源质量不足", "next_action": "先执行详情补偿，再重新分析该事件"}
+    if "fallback_used" in reasons or "llm_or_analysis_fallback" in reasons:
+        return {"primary_issue": "大模型分析回退", "next_action": "检查模型服务、超时和输出格式后重分析"}
+    if "empty_one_line_summary" in reasons:
+        return {"primary_issue": "一句话摘要缺失", "next_action": "重新构建事件分析结果"}
+    if "low_confidence" in reasons or "low_quality_score" in reasons:
+        return {"primary_issue": "分析置信度偏低", "next_action": "补充多源证据或启用大模型增强后重分析"}
+    return {"primary_issue": "质量稳定", "next_action": "继续观察"}
+
+
 def _risk_score(run: EventAnalysisRun | None, weak_count: int, reasons: list[str]) -> float:
     if run is None:
         return 100.0
@@ -91,6 +105,7 @@ def _display_quality_report(events: list[Event], limit: int) -> dict:
         reasons = [reason.strip() for reason in (event.display_quality_reason or "").split(",") if reason.strip()]
         reason_counter.update(reasons)
         if (event.status or "") in {"monitoring", "low_quality"}:
+            action = _display_action_advice(reasons)
             blocked_samples.append(
                 {
                     "event_id": event.id,
@@ -101,6 +116,8 @@ def _display_quality_report(events: list[Event], limit: int) -> dict:
                     "display_quality_score": event.display_quality_score or 0,
                     "display_quality_level": event.display_quality_level or "",
                     "display_quality_reasons": reasons,
+                    "primary_issue": action["primary_issue"],
+                    "next_action": action["next_action"],
                     "last_updated_at": event.last_updated_at.strftime("%Y-%m-%d %H:%M:%S") if event.last_updated_at else "",
                 }
             )
@@ -124,6 +141,23 @@ def _display_quality_report(events: list[Event], limit: int) -> dict:
         },
         "blocked_samples": blocked_samples[:limit],
     }
+
+
+def _display_action_advice(reasons: list[str]) -> dict:
+    reason_set = set(reasons)
+    if "mixed_unrelated_sources" in reason_set:
+        return {"primary_issue": "疑似错合并", "next_action": "执行事件重建预演并拆分错误来源"}
+    if "social_signal_without_fact_source" in reason_set:
+        return {"primary_issue": "社交热度缺事实源", "next_action": "等待媒体或官方事实源后刷新展示质量"}
+    if "single_weak_source" in reason_set:
+        return {"primary_issue": "单一弱来源", "next_action": "补充可用事实源后刷新展示质量"}
+    if "missing_complete_source" in reason_set or "missing_usable_source" in reason_set:
+        return {"primary_issue": "缺少可用来源", "next_action": "执行详情补偿或二跳检索"}
+    if "low_value_content" in reason_set:
+        return {"primary_issue": "内容价值偏低", "next_action": "归档低价值内容或等待高质量来源"}
+    if "empty_sources" in reason_set:
+        return {"primary_issue": "缺少来源", "next_action": "重新构建事件来源关系"}
+    return {"primary_issue": "展示质量不足", "next_action": "补充证据后刷新展示质量"}
 
 
 def build_event_analysis_quality_report(session, limit: int = 20) -> dict:
@@ -167,6 +201,7 @@ def build_event_analysis_quality_report(session, limit: int = 20) -> dict:
             weak_source_event_count += 1
 
         if reasons:
+            action = _action_advice(reasons, weak_count)
             risk_events.append(
                 {
                     "event_id": event.id,
@@ -176,6 +211,8 @@ def build_event_analysis_quality_report(session, limit: int = 20) -> dict:
                     "weak_source_count": weak_count,
                     "issue_reasons": reasons,
                     "governance_advice": _governance_advice(reasons, weak_count),
+                    "primary_issue": action["primary_issue"],
+                    "next_action": action["next_action"],
                     "risk_score": _risk_score(run, weak_count, reasons),
                     "run_id": run.id if run else None,
                     "mode": run.mode if run else "",

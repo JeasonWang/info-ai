@@ -40,6 +40,49 @@ def test_reuters_resolve_detail_prefers_article_api_paragraphs():
     assert "enterprise deployment plans" in result.content
 
 
+def test_reuters_article_api_extracts_nested_story_body_paragraphs():
+    crawler = ReutersCrawler()
+
+    class NestedApiResponse:
+        def json(self):
+            return {
+                "result": {
+                    "article": {
+                        "content_items": [
+                            {"type": "headline", "content": "Markets story"},
+                            {
+                                "type": "body",
+                                "items": [
+                                    {"type": "paragraph", "content": "Global markets rose after officials signaled further talks on trade and energy policy."},
+                                    {"type": "paragraph", "content": "Investors said the comments could affect bond yields, currency moves and corporate financing plans."},
+                                    {"type": "paragraph", "content": "Analysts said companies will watch implementation details before changing supply-chain or investment decisions."},
+                                    {"type": "paragraph", "content": "Reuters reported that policy uncertainty remains a risk for exporters, banks and commodity traders."},
+                                    {"type": "paragraph", "content": "Executives said they need clearer guidance on tariffs, permits and regional compliance rules."},
+                                    {"type": "paragraph", "content": "Economists added that the next data releases could influence central bank expectations, hiring plans and demand forecasts across major regions."},
+                                    {"type": "paragraph", "content": "Several companies said they would keep contingency plans in place until governments publish more detailed implementation schedules."},
+                                ],
+                            },
+                        ]
+                    }
+                }
+            }
+
+    crawler.session.post = lambda *args, **kwargs: NestedApiResponse()
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("should not use web fallback"))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "Global markets rise as officials meet",
+            "content": "Short summary",
+            "source_url": "https://www.reuters.com/world/example-2026-05-14/",
+        }
+    )
+
+    assert result.status == "complete"
+    assert result.strategy == "reuters_article_api"
+    assert "corporate financing plans" in result.content
+
+
 def test_reuters_resolve_detail_uses_json_ld_when_api_is_empty():
     crawler = ReutersCrawler()
 

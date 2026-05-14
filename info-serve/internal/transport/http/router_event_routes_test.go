@@ -69,6 +69,9 @@ func (s stubEventStore) GetEventDetail(ctx context.Context, id int64) (events.Ev
 			},
 		},
 		TechContext: events.TechContext{Entities: []string{"国产芯片"}, Keywords: []string{"芯片", "半导体"}},
+		RelatedEvents: []events.RelatedEvent{
+			{ID: 6, Title: "国产芯片此前进展", RelationType: "previous", EvolutionType: "expansion"},
+		},
 	}, nil
 }
 
@@ -138,6 +141,42 @@ func TestEventDetailRouteUsesFrontendCompatibleShape(t *testing.T) {
 	}
 	if len(body.Data.Timeline) != 1 {
 		t.Fatalf("timeline len = %d, want 1", len(body.Data.Timeline))
+	}
+	if body.Data.IntelligenceBrief.Stage == "" {
+		t.Fatal("expected intelligence brief stage")
+	}
+	if body.Data.IntelligenceBrief.ConfidenceReason == "" {
+		t.Fatal("expected intelligence brief confidence reason")
+	}
+	if len(body.Data.IntelligenceBrief.FollowUpQuestions) == 0 {
+		t.Fatal("expected intelligence brief follow-up questions")
+	}
+	if body.Data.EvidenceChain.UsableSourceCount == 0 {
+		t.Fatal("expected evidence chain usable source count")
+	}
+	if len(body.Data.EvidenceChain.EvidenceSources) == 0 {
+		t.Fatal("expected evidence chain sources")
+	}
+	if len(body.Data.EvidenceChain.PlatformViews) == 0 {
+		t.Fatal("expected evidence chain platform views")
+	}
+	if body.Data.ControversyBrief.Level == "" {
+		t.Fatal("expected controversy brief level")
+	}
+	if body.Data.ControversyBrief.ActionHint == "" {
+		t.Fatal("expected controversy brief action hint")
+	}
+	if body.Data.SourceViews[0].Focus == "" {
+		t.Fatal("expected source view focus")
+	}
+	if body.Data.SourceViews[0].Stance == "" {
+		t.Fatal("expected source view stance")
+	}
+	if len(body.Data.RelatedEvents) == 0 {
+		t.Fatal("expected related events")
+	}
+	if body.Data.RelatedEvents[0].RelationLabel == "" {
+		t.Fatal("expected related event relation label")
 	}
 }
 

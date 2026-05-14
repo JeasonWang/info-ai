@@ -83,6 +83,8 @@ def test_channel_quality_report_excludes_seed_and_surfaces_weak_samples(session,
     assert row["top_failure_reasons"][0] == {"reason": "anti_crawl_blocked", "count": 1}
     assert row["quality_rank_score"] > 0
     assert row["governance_advice"]
+    assert row["primary_issue"] == "缺少采集凭证"
+    assert row["next_action"] == "配置 WEIBO_COOKIE 后重抓低完整详情"
     assert any("WEIBO_COOKIE" in item for item in row["governance_advice"])
 
     core_sources = {item["channel_code"]: item for item in report["core_sources"]}
@@ -90,6 +92,9 @@ def test_channel_quality_report_excludes_seed_and_surfaces_weak_samples(session,
     assert core_sources["weibo"]["real_count"] == 2
     assert core_sources["weibo"]["usable_count"] == 1
     assert core_sources["weibo"]["usable_ratio"] == 50.0
+    assert core_sources["weibo"]["primary_issue"] == "缺少采集凭证"
+    assert core_sources["weibo"]["next_action"] == "配置 WEIBO_COOKIE 后重抓低完整详情"
     assert core_sources["weibo"]["top_failure_reasons"][0] == {"reason": "anti_crawl_blocked", "count": 1}
     assert core_sources["reuters"]["real_count"] == 0
     assert core_sources["reuters"]["governance_advice"]
+    assert core_sources["reuters"]["next_action"] == "确认核心信源采集任务是否启用"

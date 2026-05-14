@@ -15,9 +15,23 @@ def _provider_accepts_history_context(provider) -> bool:
     return "history_context" in signature.parameters
 
 
-def _analyze_with_provider(provider, items, chronological_items, history_context: str | None):
-    if _provider_accepts_history_context(provider):
+def _provider_accepts_tasks(provider) -> bool:
+    try:
+        signature = inspect.signature(provider.analyze)
+    except (TypeError, ValueError):
+        return True
+    return "tasks" in signature.parameters
+
+
+def _analyze_with_provider(provider, items, chronological_items, history_context: str | None, tasks=None):
+    accepts_history = _provider_accepts_history_context(provider)
+    accepts_tasks = _provider_accepts_tasks(provider)
+    if accepts_history and accepts_tasks:
+        return provider.analyze(items, chronological_items, history_context=history_context, tasks=tasks)
+    if accepts_history:
         return provider.analyze(items, chronological_items, history_context=history_context)
+    if accepts_tasks:
+        return provider.analyze(items, chronological_items, tasks=tasks)
     return provider.analyze(items, chronological_items)
 
 
@@ -28,13 +42,14 @@ def run_event_analysis_llm(
     history_context: str | None,
     title: str,
     retry_times: int,
+    tasks=None,
 ):
     """Run, normalize, and validate an LLM event-analysis provider."""
     max_attempts = max(1, retry_times)
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
-            result = _analyze_with_provider(provider, items, chronological_items, history_context)
+            result = _analyze_with_provider(provider, items, chronological_items, history_context, tasks=tasks)
             result = normalize_result(result, title=title)
             problems = validate_result(result)
             if problems:

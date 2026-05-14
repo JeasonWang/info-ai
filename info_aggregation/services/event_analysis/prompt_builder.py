@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from config import EVENT_ANALYSIS_MAX_INPUT_CHARS
 
+from .tasks import EventAnalysisTask, normalize_event_analysis_tasks
 from .text_utils import natural_clip
 
 
@@ -11,6 +12,7 @@ class EventAnalysisPrompt:
     user_prompt: str
     source_item_ids: list[int]
     source_count: int
+    task_codes: list[str] = field(default_factory=list)
     prompt_version: str = "event_analysis_v2"
 
 
@@ -19,8 +21,15 @@ class EventAnalysisPromptBuilder:
 
     system_prompt = "你是信息达人事件分析引擎，只输出严格JSON。"
 
-    def build(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisPrompt:
+    def build(
+        self,
+        items,
+        chronological_items=None,
+        history_context: str | None = None,
+        tasks=None,
+    ) -> EventAnalysisPrompt:
         chronological_items = chronological_items or items
+        analysis_tasks = normalize_event_analysis_tasks(tasks)
         source_blocks = self._source_blocks(items)
         output_contract = (
             "请基于真实来源生成事件分析，不要简单截取原文，不要编造没有证据的事实。\n"
@@ -33,6 +42,7 @@ class EventAnalysisPromptBuilder:
             "每个字段必须是通顺中文完整句子，不要输出Markdown，不要输出JSON之外的解释文字。\n\n"
         )
         user_prompt = output_contract
+        user_prompt += self._task_contract(analysis_tasks)
         if history_context:
             user_prompt += f"【历史背景】\n{history_context}\n\n"
         user_prompt += "【当前来源】\n" + "\n".join(source_blocks)
@@ -41,7 +51,16 @@ class EventAnalysisPromptBuilder:
             user_prompt=user_prompt,
             source_item_ids=[item.id for item in items if getattr(item, "id", None)],
             source_count=len(chronological_items),
+            task_codes=[task.code for task in analysis_tasks],
         )
+
+    def _task_contract(self, tasks: list[EventAnalysisTask]) -> str:
+        if not tasks:
+            return ""
+        lines = ["【分析任务】"]
+        for index, task in enumerate(tasks, start=1):
+            lines.append(f"{index}. {task.name}（{task.code} -> {task.target_field}）：{task.instruction}")
+        return "\n".join(lines) + "\n\n"
 
     def _source_blocks(self, items) -> list[str]:
         source_blocks: list[str] = []

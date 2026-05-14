@@ -61,6 +61,8 @@ def test_event_analysis_quality_report_surfaces_low_confidence_and_weak_sources(
     assert risk_event["event_id"] == event.id
     assert "low_confidence" in risk_event["issue_reasons"]
     assert "weak_sources" in risk_event["issue_reasons"]
+    assert risk_event["primary_issue"] == "来源质量不足"
+    assert risk_event["next_action"] == "先执行详情补偿，再重新分析该事件"
     assert any("详情补偿" in item for item in risk_event["governance_advice"])
 
 
@@ -83,6 +85,8 @@ def test_event_analysis_quality_report_surfaces_missing_analysis(session):
 
     assert report["summary"]["missing_analysis_count"] == 1
     assert report["risk_events"][0]["issue_reasons"] == ["missing_analysis"]
+    assert report["risk_events"][0]["primary_issue"] == "缺少事件分析"
+    assert report["risk_events"][0]["next_action"] == "执行事件重建或分析补偿"
 
 
 def test_event_analysis_quality_report_surfaces_display_quality_blocks(session):
@@ -127,3 +131,5 @@ def test_event_analysis_quality_report_surfaces_display_quality_blocks(session):
     assert display_quality["summary"]["top_block_reasons"][0] == {"reason": "single_weak_source", "count": 1}
     assert display_quality["blocked_samples"][0]["title"] == "弱热点线索"
     assert "low_value_content" in display_quality["blocked_samples"][0]["display_quality_reasons"]
+    assert display_quality["blocked_samples"][0]["primary_issue"] == "单一弱来源"
+    assert display_quality["blocked_samples"][0]["next_action"] == "补充可用事实源后刷新展示质量"

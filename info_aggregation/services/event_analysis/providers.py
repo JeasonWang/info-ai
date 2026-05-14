@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class LLMEventAnalysisProvider:
     provider = "llm"
 
-    def analyze(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisResult:
+    def analyze(self, items, chronological_items=None, history_context: str | None = None, tasks=None) -> EventAnalysisResult:
         raise NotImplementedError
 
 
@@ -60,9 +60,9 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
         self.prompt_builder = EventAnalysisPromptBuilder()
         self.result_parser = EventAnalysisResultParser()
 
-    def analyze(self, items, chronological_items=None, history_context: str | None = None) -> EventAnalysisResult:
+    def analyze(self, items, chronological_items=None, history_context: str | None = None, tasks=None) -> EventAnalysisResult:
         chronological_items = chronological_items or items
-        prompt = self.prompt_builder.build(items, chronological_items, history_context)
+        prompt = self.prompt_builder.build(items, chronological_items, history_context, tasks=tasks)
         request = LLMChatRequest(
             messages=[
                 LLMChatMessage(role="system", content=prompt.system_prompt),
@@ -76,6 +76,7 @@ class OpenAICompatibleEventAnalysisProvider(LLMEventAnalysisProvider):
                 "source": "event_analysis",
                 "prompt_version": prompt.prompt_version,
                 "source_item_ids": prompt.source_item_ids,
+                "task_codes": prompt.task_codes,
             },
         )
         self.last_request_payload = {

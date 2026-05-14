@@ -271,7 +271,7 @@ function progressTone(value: number | undefined) {
             <span>完整率</span>
             <span>可用率</span>
             <span>状态分布</span>
-            <span>主要问题</span>
+            <span>下一步动作</span>
           </div>
           <div v-for="item in coreSourceRows" :key="`core-${item.channel_code}`" class="ruoyi-table-row">
             <strong>{{ item.channel_name }} / {{ item.channel_code }}</strong>
@@ -288,7 +288,7 @@ function progressTone(value: number | undefined) {
               <em>{{ item.usable_ratio }}%</em>
             </div>
             <span>{{ sourceStatusText(item) }}</span>
-            <span>{{ topFailureText(item) }}</span>
+            <span>{{ item.primary_issue || topFailureText(item) }} · {{ item.next_action || '继续观察' }}</span>
           </div>
         </div>
 
@@ -337,6 +337,7 @@ function progressTone(value: number | undefined) {
             <div class="channel-quality-detail">
               <span>失败原因：{{ topFailureText(item) }}</span>
               <span>详情策略：{{ topStrategyText(item) }}</span>
+              <span>下一步：{{ item.primary_issue || '质量状态' }} · {{ item.next_action || '继续观察' }}</span>
               <span>治理建议：{{ item.governance_advice.join(' / ') }}</span>
             </div>
             <ul v-if="item.weak_samples.length" class="weak-sample-list">
@@ -440,6 +441,7 @@ function progressTone(value: number | undefined) {
               <StatusBadge :label="item.status" :tone="item.fallback_used ? 'warning' : 'success'" />
             </div>
             <div class="channel-quality-detail">
+              <span>下一步：{{ item.primary_issue || eventIssueText(item) }} · {{ item.next_action || item.governance_advice[0] || '继续观察' }}</span>
               <span>治理建议：{{ item.governance_advice.join(' / ') }}</span>
               <span v-if="item.failure_reason">失败原因：{{ item.failure_reason }}</span>
               <span v-if="item.last_analyzed_at">分析时间：{{ item.last_analyzed_at }}</span>
@@ -467,6 +469,9 @@ function progressTone(value: number | undefined) {
             <div class="channel-quality-badges">
               <StatusBadge :label="item.status" :tone="displayStatusTone(item.status)" />
               <StatusBadge :label="displayReasonText(item.display_quality_reasons)" tone="warning" />
+            </div>
+            <div class="channel-quality-detail">
+              <span>下一步：{{ item.primary_issue || displayReasonText(item.display_quality_reasons) }} · {{ item.next_action || '补充证据后刷新展示质量' }}</span>
             </div>
           </li>
         </ul>
