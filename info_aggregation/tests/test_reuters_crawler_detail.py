@@ -1,5 +1,7 @@
 import json
 
+import requests
+
 from crawlers.reuters import ReutersCrawler
 
 
@@ -263,3 +265,31 @@ def test_reuters_persisted_news_sitemap_metadata_is_used_after_save():
     assert result.strategy == "news_sitemap_metadata"
     assert result.content_length >= 300
     assert calls == {"post": 0, "fetch": 0}
+
+
+def test_reuters_blocked_article_detail_keeps_http_failure_reason():
+    crawler = ReutersCrawler()
+
+    class BlockedResponse:
+        status_code = 403
+
+        def raise_for_status(self):
+            raise requests.HTTPError("403 Client Error", response=self)
+
+        def json(self):
+            return {}
+
+    crawler.session.post = lambda *args, **kwargs: BlockedResponse()
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(requests.HTTPError("403 Client Error", response=BlockedResponse()))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "Global markets rise as officials meet",
+            "content": "Reuters reported market participants were watching policy signals.",
+            "source_url": "https://www.reuters.com/world/example/",
+        }
+    )
+
+    assert result.status == "list_only"
+    assert result.failure_reason == "http_403_blocked"
+    assert "http_403" in result.matched_rules

@@ -104,3 +104,53 @@ func TestBuildEventWhereUsesRequestedPublicStatus(t *testing.T) {
 		t.Fatalf("args = %+v, want first arg monitoring", args)
 	}
 }
+
+func TestBuildEventWhereShieldsActiveFeedFromWeakQualityRows(t *testing.T) {
+	whereSQL, args := buildEventWhere(events.ListEventsParams{Status: "active", CategoryCode: "all"})
+
+	for _, expected := range []string{
+		"e.display_quality_level",
+		"mixed_unrelated_sources",
+		"missing_usable_source",
+		"missing_complete_source",
+		"CHAR_LENGTH",
+		"one_line_summary",
+		"全家都爱",
+		"已出现相关信息",
+		"上头条",
+		"social_channel",
+		"nonsocial_channel",
+	} {
+		if !strings.Contains(whereSQL, expected) {
+			t.Fatalf("where sql missing %q guard: %s", expected, whereSQL)
+		}
+	}
+	if len(args) < 1 || args[0] != "active" {
+		t.Fatalf("args = %+v, want first arg active", args)
+	}
+}
+
+func TestBuildEventOrderPrioritizesPublicEventsOnAllFeed(t *testing.T) {
+	orderSQL := buildEventOrder(events.ListEventsParams{CategoryCode: "all", Sort: "composite"})
+
+	for _, expected := range []string{
+		"CASE c.code",
+		"WHEN 'international' THEN 0",
+		"WHEN 'hot' THEN 1",
+		"WHEN 'tech' THEN 4",
+		"e.source_count DESC",
+		"e.display_quality_score",
+	} {
+		if !strings.Contains(orderSQL, expected) {
+			t.Fatalf("order sql missing %q: %s", expected, orderSQL)
+		}
+	}
+}
+
+func TestBuildEventOrderLatestUsesRecency(t *testing.T) {
+	orderSQL := buildEventOrder(events.ListEventsParams{CategoryCode: "all", Sort: "latest"})
+
+	if !strings.HasPrefix(orderSQL, "ORDER BY e.last_updated_at DESC") {
+		t.Fatalf("latest order sql = %s", orderSQL)
+	}
+}

@@ -238,6 +238,8 @@ REDIS_DB=0
 AGGREGATION_COMMAND_STREAM=info_ai:aggregation:commands
 VITE_API_BASE_URL=/api
 
+ENABLE_PUBLIC_API=1
+EVENT_ANALYSIS_LLM_RETRY_TIMES=2
 EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD=3
 EVENT_ANALYSIS_LLM_COOLDOWN_MINUTES=30
 ```
@@ -258,7 +260,7 @@ VITE_API_BASE_URL
 
 ```bash
 cd info_aggregation
-./.venv/bin/python -m pytest -q
+ENABLE_PUBLIC_API=1 ./.venv/bin/python -m pytest -q
 ```
 
 ### info-serve
@@ -305,6 +307,7 @@ npm run verify:mp-weixin
 生产部署前必须确认：
 
 - 数据库脚本已执行。
+- 已有生产库升级时按顺序执行增量迁移：`migration_v1.1.0*` -> `migration_v1.2.0*` -> `migration_v1.3.0*` -> `migration_v1.4.0*` -> `migration_v1.5.0_event_display_quality.sql`。
 - `.env.prod` 或服务器环境变量已配置。
 - `info-serve` 默认端口为 `8085`。
 - `info-admin` 和 `info-mvp` 的 `/api` 代理指向 `info-serve`。

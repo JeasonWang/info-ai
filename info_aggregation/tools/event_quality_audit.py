@@ -11,6 +11,8 @@ if str(BACKEND_ROOT) not in sys.path:
 from database import Event, EventAnalysisRun, Info, LLMCallLog, get_session
 from services.quality.data_quality import is_low_value_content
 
+CORE_SOURCE_CHANNEL_CODES = ("weibo", "toutiao", "zhihu", "xiaohongshu", "reuters", "36kr")
+
 
 def _percent(part: int, total: int) -> float:
     return round(part * 100 / total, 2) if total else 0.0
@@ -40,6 +42,28 @@ def _channel_quality(infos: list[Info]) -> dict:
             "pending_count": status_counter.get("pending", 0),
             "avg_content_length": avg_len,
             "complete_ratio": _percent(status_counter.get("complete", 0), len(rows)),
+        }
+    return result
+
+
+def _core_source_quality(channels: dict) -> dict:
+    result = {}
+    for code in CORE_SOURCE_CHANNEL_CODES:
+        row = channels.get(code) or {
+            "total_count": 0,
+            "complete_count": 0,
+            "partial_count": 0,
+            "list_only_count": 0,
+            "failed_count": 0,
+            "pending_count": 0,
+            "avg_content_length": 0.0,
+            "complete_ratio": 0.0,
+        }
+        usable_count = row["complete_count"] + row["partial_count"]
+        result[code] = {
+            **row,
+            "usable_count": usable_count,
+            "usable_ratio": _percent(usable_count, row["total_count"]),
         }
     return result
 
@@ -90,8 +114,10 @@ def build_event_quality_audit(session) -> dict:
     events = session.query(Event).all()
     runs = session.query(EventAnalysisRun).all()
     llm_logs = session.query(LLMCallLog).all()
+    channels = _channel_quality(infos)
     return {
-        "channels": _channel_quality(infos),
+        "channels": channels,
+        "core_sources": _core_source_quality(channels),
         "events": _event_quality(events),
         "analysis": _analysis_quality(runs),
         "llm": _llm_quality(llm_logs),

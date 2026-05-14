@@ -71,3 +71,16 @@ def test_llm_runner_rejects_invalid_model_output(session):
 
     with pytest.raises(ValueError, match="invalid_llm_result"):
         run_event_analysis_llm(Provider(), [item], [item], "历史背景", item.title, retry_times=1)
+
+
+def test_llm_runner_rejects_fragmented_model_summary(session):
+    item = _info(session)
+
+    class Provider:
+        def analyze(self, items, chronological_items=None, history_context=None):
+            result = _result(items[0])
+            result.one_line_summary = "Agent 调用链路优化正在"
+            return result
+
+    with pytest.raises(ValueError, match="one_line_summary_fragment"):
+        run_event_analysis_llm(Provider(), [item], [item], "历史背景", item.title, retry_times=1)

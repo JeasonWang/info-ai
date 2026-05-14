@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 一键关闭本地个服务。
+# 一键关闭本地四个服务。
 # 本脚本不停止 MySQL，不操作 Docker。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

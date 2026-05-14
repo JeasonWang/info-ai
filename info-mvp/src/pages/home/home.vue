@@ -31,8 +31,8 @@ const feedStatus = ref<'active' | 'monitoring'>('active')
 const showBackToTop = ref(false)
 const nearBottomDistance = 180
 const feedOptions = [
-  { value: 'active' as const, label: '可信事件', meta: '可直接阅读' },
-  { value: 'monitoring' as const, label: '观察中', meta: '等待更多信源' },
+  { value: 'active' as const, label: '可信事件', meta: '有来源支撑' },
+  { value: 'monitoring' as const, label: '观察中', meta: '待核实线索' },
 ]
 const activeCategoryName = computed(() => {
   if (activeCategoryCode.value === 'all') return '全网热点'
@@ -47,8 +47,8 @@ const activeFeedName = computed(() => (feedStatus.value === 'monitoring' ? '观�
 const briefingTitle = computed(() => (feedStatus.value === 'monitoring' ? '重点观察' : '今日重点'))
 const briefingHint = computed(() =>
   feedStatus.value === 'monitoring'
-    ? '这些线索已有热度，但仍需要事实源补强。'
-    : '优先阅读可信度较高、来源更完整的事件。',
+    ? '已有热度但证据还不够，适合持续跟踪。'
+    : '优先展示来源更完整、判断更清晰的事件。',
 )
 const userInitial = computed(() => {
   const email = userStore.user?.email || ''
@@ -280,6 +280,14 @@ function goHistory() {
   uni.navigateTo({ url: '/pages/history/history' })
 }
 
+function confidenceText(item: EventListItem) {
+  const score = item.display_quality_score || item.composite_score || 0
+  if (item.status === 'monitoring' || item.display_quality_level === 'weak') return '待核实'
+  if (score >= 80) return '高可信'
+  if (score >= 60) return '可信'
+  return '需观察'
+}
+
 onLoad(() => {
   loadCategories()
   loadChannels()
@@ -358,14 +366,14 @@ onUnmounted(() => {
 // #ifdef MP-WEIXIN
 function onShareAppMessage() {
   return {
-    title: '热点事件聚合',
+    title: '信息达人 AI 情报台',
     path: '/pages/home/home',
   }
 }
 
 function onShareTimeline() {
   return {
-    title: '热点事件聚合',
+    title: '信息达人 AI 情报台',
     query: '',
   }
 }
@@ -379,7 +387,7 @@ function onShareTimeline() {
       <view class="brand">
         <text class="brand-name">信息达人</text>
         <text class="brand-count">{{ eventTotal }}</text>
-        <text class="brand-tag">{{ activeCategoryName }} · {{ eventTotal }} 条</text>
+        <text class="brand-tag">AI 情报台 · {{ activeCategoryName }}</text>
       </view>
       <view class="user-actions">
         <template v-if="userStore.isLoggedIn">
@@ -438,6 +446,7 @@ function onShareTimeline() {
             <view class="briefing-copy">
               <text class="briefing-event-title">{{ item.title }}</text>
               <text class="briefing-event-summary">{{ item.one_line_summary }}</text>
+              <text class="briefing-event-meta">{{ confidenceText(item) }} · {{ item.source_count }} 来源</text>
             </view>
             <text class="briefing-score">{{ item.display_quality_score || item.composite_score }}</text>
           </view>
@@ -733,6 +742,7 @@ function onShareTimeline() {
 .briefing-hint,
 .briefing-event-title,
 .briefing-event-summary,
+.briefing-event-meta,
 .briefing-empty {
   display: block;
 }
@@ -809,6 +819,16 @@ function onShareTimeline() {
   color: var(--text-secondary);
   font-size: 22rpx;
   line-height: 1.45;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.briefing-event-meta {
+  margin-top: 6rpx;
+  color: var(--text-muted);
+  font-size: 20rpx;
+  line-height: 1.35;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

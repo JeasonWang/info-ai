@@ -1,4 +1,5 @@
 from collections import Counter
+import re
 
 from services.collection.acquisition_quality import build_acquisition_quality_profile
 from services.quality.data_quality import is_low_value_content
@@ -12,6 +13,70 @@ TECH_TOPIC_LABELS = {
     "model_release": "模型发布",
     "dev_tool": "开发工具",
 }
+
+NOISY_SUMMARY_MARKERS = (
+    "#",
+    "全家都爱",
+    "巨巨",
+    "好喝",
+    "教会你",
+    "种草",
+    "我的观影报告",
+    "电影推荐",
+    "精彩片段",
+    "盘后，最大的",
+    "聊热点",
+    "划下红线",
+    "悲催了",
+    "快讯！",
+    "流言板",
+    "大利好",
+)
+
+PUBLIC_EVENT_MARKERS = (
+    "通报",
+    "辟谣",
+    "假的",
+    "事故",
+    "伤亡",
+    "出院",
+    "救援",
+    "坠海",
+    "坠落",
+    "失踪",
+    "爆炸",
+    "火灾",
+    "起诉",
+    "违法",
+    "偷拍",
+    "公务员",
+    "调查",
+    "回应",
+    "宣布",
+    "退出",
+    "访华",
+    "会晤",
+    "磋商",
+    "会议",
+    "政策",
+    "监管",
+    "法院",
+    "警方",
+    "消防",
+    "官方",
+    "公权力",
+    "下调",
+    "上涨",
+    "降雨",
+    "暴雨",
+    "存款利息",
+    "比赛",
+    "半决赛",
+    "季后赛",
+    "总分",
+    "大胜",
+    "转播",
+)
 
 
 def _split_csv(raw_value: str) -> list[str]:
@@ -41,6 +106,64 @@ def _source_count(items) -> int:
 
 def _item_count(items) -> int:
     return len({item.id for item in items if item.id}) or len(items)
+
+
+def _category_code(item) -> str:
+    return item.category.code if getattr(item, "category", None) else ""
+
+
+def _channel_name(item) -> str:
+    return item.channel.name if getattr(item, "channel", None) else "当前来源"
+
+
+def _looks_like_noisy_sentence(text: str) -> bool:
+    value = text or ""
+    if any(marker in value for marker in NOISY_SUMMARY_MARKERS):
+        return True
+    if re.search(r"[#＃][^#＃]{1,24}[#＃]?", value):
+        return True
+    if len(value) >= 80 and " " not in value and not any(punctuation in value for punctuation in "，。；：！？,.!?"):
+        return True
+    return False
+
+
+def _title_based_event_summary(item) -> str:
+    title = clean_source_text(item.title or "").rstrip("。！？!?")
+    if not title:
+        return ""
+    channel_name = _channel_name(item)
+
+    if any(marker in title for marker in ("辟谣", "假的")):
+        return ensure_sentence_end(f"{title}，相关传言正在被核验，后续应以官方和权威来源为准")
+    if any(marker in title for marker in ("事故", "伤亡", "出院", "救援", "坠", "失踪", "爆炸", "火灾", "消防", "暴雨", "降雨")):
+        return ensure_sentence_end(f"{title}，事件涉及公共安全和后续处置，需持续关注权威通报")
+    if any(marker in title for marker in ("起诉", "违法", "偷拍", "公务员", "法院", "警方")):
+        return ensure_sentence_end(f"{title}，事件涉及公共治理或法律处置，后续应以权威披露为准")
+    if any(marker in title for marker in ("访华", "会晤", "磋商", "会议", "台独", "经贸", "关税", "制裁", "政策")):
+        return ensure_sentence_end(f"{title}，事件涉及公共政策和外部关系变化，后续进展值得关注")
+    if any(marker in title for marker in ("存款利息", "下调", "上涨")):
+        return ensure_sentence_end(f"{title}，事件涉及民生经济或市场变化，后续影响仍需结合更多来源验证")
+    if any(marker in title for marker in ("退出", "转播", "比赛", "半决赛", "季后赛", "总分", "大胜", "男篮", "女足", "国乒", "马刺")):
+        return ensure_sentence_end(f"{title}，事件涉及体育赛程或队伍变化，后续安排仍需关注")
+    if any(marker in title for marker in ("AI", "芯片", "存储", "腾讯", "马化腾", "OpenAI", "模型")):
+        return ensure_sentence_end(f"{title}，事件涉及科技产业动态，后续影响仍需结合更多来源验证")
+    if title.startswith("媒体：") or title.startswith("媒体:"):
+        return ensure_sentence_end(f"{title}，这是媒体视角下的公共议题观察，仍需结合事实来源和后续回应验证")
+
+    if _category_code(item) == "hot":
+        return ensure_sentence_end(f"{title}，{channel_name}已出现相关信息，后续仍需更多来源交叉验证")
+    return ensure_sentence_end(f"{title}出现新进展，后续仍需结合更多来源持续验证")
+
+
+def _should_rewrite_single_source_summary(item, sentence: str) -> bool:
+    if _looks_like_noisy_sentence(sentence):
+        return True
+    title = item.title or ""
+    if title.startswith("媒体：") or title.startswith("媒体:"):
+        return True
+    if any(marker in title for marker in PUBLIC_EVENT_MARKERS):
+        return True
+    return False
 
 
 def _best_sentence(item) -> str:
@@ -79,8 +202,21 @@ def _build_one_line(items) -> str:
         return ensure_sentence_end(f"{topic_phrase}{heat_phrase}")
 
     sentence = _best_sentence(lead_item)
+    title = lead_item.title or ""
     if not sentence:
+        if title.startswith("媒体：") or title.startswith("媒体:") or any(marker in title for marker in PUBLIC_EVENT_MARKERS):
+            rewritten = _title_based_event_summary(lead_item)
+            if rewritten:
+                return rewritten
         return ensure_sentence_end(f"{entity}正在形成热度线索，但当前缺少完整事实来源")
+    if title.startswith("媒体：") or title.startswith("媒体:") or any(marker in title for marker in PUBLIC_EVENT_MARKERS):
+        rewritten = _title_based_event_summary(lead_item)
+        if rewritten:
+            return rewritten
+    if _should_rewrite_single_source_summary(lead_item, sentence):
+        rewritten = _title_based_event_summary(lead_item)
+        if rewritten:
+            return rewritten
     if text_similarity(sentence, lead_item.title or "") >= 0.86:
         if keywords:
             return ensure_sentence_end(f"{entity}相关内容开始升温，核心讨论集中在{'、'.join(keywords)}")

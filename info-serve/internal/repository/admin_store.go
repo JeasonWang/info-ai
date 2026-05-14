@@ -12,6 +12,8 @@ import (
 	"info-serve/internal/admin"
 )
 
+var coreSourceChannelCodes = []string{"weibo", "toutiao", "zhihu", "xiaohongshu", "reuters", "36kr"}
+
 func (s *MySQLStore) GetOverview(ctx context.Context) (admin.Overview, error) {
 	var overview admin.Overview
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM channel`).Scan(&overview.ChannelCount); err != nil {
@@ -242,6 +244,7 @@ func (s *MySQLStore) GetChannelQualityReport(ctx context.Context, sampleLimit in
 	return map[string]any{
 		"summary":  summary.toMap(channels),
 		"channels": channels,
+		"core_sources": coreSourceRows(channels),
 	}, nil
 }
 
@@ -366,6 +369,10 @@ func (s *MySQLStore) channelQualityRow(ctx context.Context, channelID int64, cha
 	var realCount int
 	var seedCount int
 	var completeCount int
+	var partialCount int
+	var listOnlyCount int
+	var failedCount int
+	var pendingCount int
 	var highValuePartialCount int
 	var needsAttentionCount int
 	var avgDetailScore float64
@@ -376,6 +383,10 @@ func (s *MySQLStore) channelQualityRow(ctx context.Context, channelID int64, cha
        COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' THEN 1 ELSE 0 END), 0),
        COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) = 'seed' THEN 1 ELSE 0 END), 0),
        COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND detail_fetch_status = 'complete' AND detail_score >= 60 THEN 1 ELSE 0 END), 0),
+       COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND detail_fetch_status = 'partial' THEN 1 ELSE 0 END), 0),
+       COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND detail_fetch_status = 'list_only' THEN 1 ELSE 0 END), 0),
+       COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND detail_fetch_status = 'failed' THEN 1 ELSE 0 END), 0),
+       COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND detail_fetch_status = 'pending' THEN 1 ELSE 0 END), 0),
        COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND detail_fetch_status = 'partial' AND detail_score >= 60 THEN 1 ELSE 0 END), 0),
        COALESCE(SUM(CASE WHEN LOWER(COALESCE(detail_strategy, '')) <> 'seed' AND (
          detail_fetch_status IN ('pending', 'list_only', 'failed')
@@ -392,6 +403,10 @@ WHERE channel_id = ? AND is_deleted = 0`,
 		&realCount,
 		&seedCount,
 		&completeCount,
+		&partialCount,
+		&listOnlyCount,
+		&failedCount,
+		&pendingCount,
 		&highValuePartialCount,
 		&needsAttentionCount,
 		&avgDetailScore,
@@ -410,6 +425,10 @@ WHERE channel_id = ? AND is_deleted = 0`,
 		"seed_count":                seedCount,
 		"complete_count":            completeCount,
 		"complete_ratio":            percentFloat(completeCount, realCount),
+		"partial_count":             partialCount,
+		"list_only_count":           listOnlyCount,
+		"failed_count":              failedCount,
+		"pending_count":             pendingCount,
 		"high_value_partial_count":  highValuePartialCount,
 		"usable_count":              usableCount,
 		"usable_ratio":              percentFloat(usableCount, realCount),
@@ -642,6 +661,74 @@ func (s channelQualitySummary) toMap(channels []map[string]any) map[string]any {
 		"usable_ratio":             percentFloat(s.usableCount, s.realCount),
 		"needs_attention_ratio":    percentFloat(s.needsAttentionCount, s.realCount),
 		"weak_channels":            weakChannels,
+	}
+}
+
+func coreSourceRows(channels []map[string]any) []map[string]any {
+	byCode := map[string]map[string]any{}
+	for _, row := range channels {
+		code, _ := row["channel_code"].(string)
+		if code != "" {
+			byCode[code] = row
+		}
+	}
+	result := []map[string]any{}
+	for _, code := range coreSourceChannelCodes {
+		if row, ok := byCode[code]; ok {
+			result = append(result, row)
+			continue
+		}
+		result = append(result, emptyCoreSourceRow(code))
+	}
+	return result
+}
+
+func emptyCoreSourceRow(code string) map[string]any {
+	return map[string]any{
+		"channel_id":                int64(0),
+		"channel_code":              code,
+		"channel_name":              coreSourceName(code),
+		"total_count":               0,
+		"real_count":                0,
+		"seed_count":                0,
+		"complete_count":            0,
+		"complete_ratio":            0.0,
+		"partial_count":             0,
+		"list_only_count":           0,
+		"failed_count":              0,
+		"pending_count":             0,
+		"high_value_partial_count":  0,
+		"usable_count":              0,
+		"usable_ratio":              0.0,
+		"needs_attention_count":     0,
+		"needs_attention_ratio":     0.0,
+		"quality_rank_score":        100.0,
+		"governance_advice":         []string{"核心信源尚未接入或暂无真实采集数据，建议确认采集任务是否启用。"},
+		"avg_detail_score":          0.0,
+		"avg_detail_content_length": 0.0,
+		"top_failure_reasons":       []map[string]any{},
+		"top_detail_strategies":     []map[string]any{},
+		"credential_health":         map[string]any{"channel_code": code, "health": "unknown", "missing_required": []string{}, "credentials": []any{}},
+		"weak_samples":              []map[string]any{},
+	}
+}
+
+func coreSourceName(code string) string {
+	switch code {
+	case "weibo":
+		return "微博"
+	case "toutiao":
+		return "今日头条"
+	case "zhihu":
+		return "知乎"
+	case "xiaohongshu":
+		return "小红书"
+	case "reuters":
+		return "Reuters"
+	case "36kr":
+		return "36氪"
+	default:
+		return code
 	}
 }
 
@@ -2117,6 +2204,7 @@ func (r llmModelConfigRow) toMap(maskSecret bool) map[string]any {
 		"last_failure_reason":       r.LastFailureReason,
 		"success_count":             r.SuccessCount,
 		"failure_count":             r.FailureCount,
+		"success_rate":              percentFloat(r.SuccessCount, r.SuccessCount+r.FailureCount),
 		"avg_latency_ms":            r.AvgLatencyMS,
 		"last_error_message":        r.LastErrorMessage,
 		"created_at":                r.CreatedAt,

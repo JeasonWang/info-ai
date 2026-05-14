@@ -18,10 +18,7 @@ func (s *MySQLStore) ListEvents(ctx context.Context, params events.ListEventsPar
 		return events.EventPage{}, err
 	}
 
-	orderSQL := "ORDER BY e.composite_score DESC, e.last_updated_at DESC"
-	if params.Sort == "latest" {
-		orderSQL = "ORDER BY e.last_updated_at DESC, e.composite_score DESC"
-	}
+	orderSQL := buildEventOrder(params)
 	offset := (params.Page - 1) * params.PageSize
 	listArgs := append(args, params.PageSize, offset)
 	rows, err := s.db.QueryContext(
@@ -159,6 +156,35 @@ func buildEventWhere(params events.ListEventsParams) (string, []any) {
 	}
 	clauses := []string{"e.status = ?"}
 	args := []any{status}
+	if status == "active" {
+		clauses = append(
+			clauses,
+			`COALESCE(e.display_quality_level, '') NOT IN ('weak', 'blocked')`,
+			`COALESCE(e.display_quality_reason, '') NOT LIKE '%mixed_unrelated_sources%'`,
+			`COALESCE(e.display_quality_reason, '') NOT LIKE '%missing_usable_source%'`,
+			`COALESCE(e.display_quality_reason, '') NOT LIKE '%missing_complete_source%'`,
+			`CHAR_LENGTH(TRIM(COALESCE(e.one_line_summary, ''))) >= 18`,
+			`COALESCE(e.one_line_summary, '') NOT REGEXP '^(互动：|哪些信息值得关注|上次|暂无|暂时还没有提炼)'`,
+			`COALESCE(e.one_line_summary, '') NOT REGEXP '(#|全家都爱|巨巨|好喝|教会你|种草|我的观影报告|电影推荐|上头条|盘后，最大的|聊热点|划下红线|悲催了|快讯！$|已出现相关信息)'`,
+			`NOT (
+				c.code = 'hot'
+				AND EXISTS (
+					SELECT 1
+					FROM event_item_link AS social_link
+					JOIN info AS social_info ON social_info.id = social_link.item_id
+					JOIN channel AS social_channel ON social_channel.id = social_info.channel_id
+					WHERE social_link.event_id = e.id AND social_channel.code IN ('weibo', 'xiaohongshu')
+				)
+				AND NOT EXISTS (
+					SELECT 1
+					FROM event_item_link AS nonsocial_link
+					JOIN info AS nonsocial_info ON nonsocial_info.id = nonsocial_link.item_id
+					JOIN channel AS nonsocial_channel ON nonsocial_channel.id = nonsocial_info.channel_id
+					WHERE nonsocial_link.event_id = e.id AND nonsocial_channel.code NOT IN ('weibo', 'xiaohongshu')
+				)
+			)`,
+		)
+	}
 	if params.CategoryCode != "" && params.CategoryCode != "all" {
 		clauses = append(clauses, "c.code = ?")
 		args = append(args, params.CategoryCode)
@@ -182,6 +208,28 @@ func buildEventWhere(params events.ListEventsParams) (string, []any) {
 		args = append(args, keyword, keyword)
 	}
 	return "WHERE " + strings.Join(clauses, " AND "), args
+}
+
+func buildEventOrder(params events.ListEventsParams) string {
+	if params.Sort == "latest" {
+		return "ORDER BY e.last_updated_at DESC, e.composite_score DESC"
+	}
+	if strings.TrimSpace(params.CategoryCode) == "" || strings.TrimSpace(params.CategoryCode) == "all" {
+		return `ORDER BY
+CASE c.code
+  WHEN 'international' THEN 0
+  WHEN 'hot' THEN 1
+  WHEN 'economy' THEN 2
+  WHEN 'sports' THEN 3
+  WHEN 'tech' THEN 4
+  ELSE 5
+END ASC,
+e.source_count DESC,
+COALESCE(e.display_quality_score, 0) DESC,
+e.composite_score DESC,
+e.last_updated_at DESC`
+	}
+	return "ORDER BY e.composite_score DESC, COALESCE(e.display_quality_score, 0) DESC, e.last_updated_at DESC"
 }
 
 func (s *MySQLStore) representativeInfoID(ctx context.Context, eventID int64) (*int64, error) {

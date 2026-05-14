@@ -84,6 +84,9 @@ def test_event_quality_audit_counts_channel_event_and_llm_risks(session):
 
     assert report["channels"]["weibo"]["total_count"] == 2
     assert report["channels"]["weibo"]["list_only_count"] == 1
+    assert report["core_sources"]["weibo"]["usable_count"] == 1
+    assert report["core_sources"]["weibo"]["usable_ratio"] == 50.0
+    assert report["core_sources"]["reuters"]["total_count"] == 0
     assert report["events"]["active_event_count"] == 1
     assert report["events"]["short_summary_count"] == 0
     assert report["events"]["low_value_summary_count"] == 1

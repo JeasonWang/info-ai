@@ -122,10 +122,11 @@ const intelligenceItems = computed(() => {
   ]
   return items.filter((item) => item.value && item.value.trim().length > 0).slice(0, 4)
 })
+const showDetailedSummarySections = computed(() => intelligenceItems.value.length === 0)
 const detailStatusText = computed(() => {
   const current = event.value?.event
   if (!current) return ''
-  if (current.status === 'monitoring' || current.display_quality_level === 'weak') return '观察中，等待更多事实源'
+  if (current.status === 'monitoring' || current.display_quality_level === 'weak') return '观察中，证据不足，不宜直接当作事实'
   if ((current.source_count || 0) >= 3) return '多来源交叉验证'
   return '可信事件'
 })
@@ -220,11 +221,13 @@ const eventQualityText = computed(() => {
 const eventQualityReason = computed(() => {
   const reason = event.value?.event.display_quality_reason || ''
   const labels: Record<string, string> = {
-    single_weak_source: '单一弱来源',
-    low_value_content: '低价值线索',
-    social_signal_without_fact_source: '社交热度缺事实源',
-    missing_complete_source: '缺完整来源',
-    missing_usable_source: '缺可用来源',
+    empty_sources: '暂缺可核验来源',
+    single_weak_source: '当前只有单一弱来源，建议观察',
+    low_value_content: '正文信息量偏低',
+    social_signal_without_fact_source: '已有热度，等待媒体/官方事实源确认',
+    missing_complete_source: '来源信息不完整，结论需谨慎',
+    missing_usable_source: '缺少可用事实来源',
+    mixed_unrelated_sources: '来源疑似串台，等待重新拆分核验',
   }
   return reason
     .split(',')
@@ -341,7 +344,7 @@ function onShareAppMessage() {
       </view>
 
       <!-- ========== 发生了什么 ========== -->
-      <view v-if="shouldShowPrimarySummary" class="section">
+      <view v-if="showDetailedSummarySections && shouldShowPrimarySummary" class="section">
         <view class="section-header">
           <view class="section-dot" />
           <text class="section-title">发生了什么</text>
@@ -352,7 +355,7 @@ function onShareAppMessage() {
       </view>
 
       <!-- ========== 为什么重要 ========== -->
-      <view v-if="hasWhyMatters" class="section">
+      <view v-if="showDetailedSummarySections && hasWhyMatters" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-purple);" />
           <text class="section-title">为什么重要</text>
@@ -374,7 +377,7 @@ function onShareAppMessage() {
       </view>
 
       <!-- ========== 最新进展 ========== -->
-      <view v-if="hasLatestUpdate && !isLatestUpdateRedundant" class="section">
+      <view v-if="showDetailedSummarySections && hasLatestUpdate && !isLatestUpdateRedundant" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-teal);" />
           <text class="section-title">最新进展</text>
@@ -385,7 +388,7 @@ function onShareAppMessage() {
       </view>
 
       <!-- ========== 风险提示 ========== -->
-      <view v-if="hasRiskNotice" class="section">
+      <view v-if="showDetailedSummarySections && hasRiskNotice" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-orange);" />
           <text class="section-title">风险提示</text>

@@ -113,6 +113,10 @@ export interface ChannelQualityItem {
   seed_count: number
   complete_count: number
   complete_ratio: number
+  partial_count?: number
+  list_only_count?: number
+  failed_count?: number
+  pending_count?: number
   high_value_partial_count: number
   usable_count: number
   usable_ratio: number
@@ -131,6 +135,7 @@ export interface ChannelQualityItem {
 export interface ChannelQualityReport {
   summary: ChannelQualitySummary
   channels: ChannelQualityItem[]
+  core_sources?: ChannelQualityItem[]
 }
 
 export interface EventAnalysisQualitySummary {
@@ -374,6 +379,7 @@ export interface LLMModelConfig {
   last_failure_reason: string
   success_count: number
   failure_count: number
+  success_rate?: number
   avg_latency_ms: number
   last_error_message: string
   created_at: string

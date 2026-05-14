@@ -59,22 +59,25 @@ def preview_event_rebuild(session, limit: int = 300) -> dict:
         if key in existing_events
     )
     sample_groups = []
+    risk_groups = []
     for (category_id, anchor), items in sorted(
         grouped_items.items(),
         key=lambda entry: (-len(entry[1]), entry[0][0], entry[0][1]),
-    )[:10]:
+    ):
         key = _build_event_key_value(category_id, anchor)
-        sample_groups.append(
-            {
-                "anchor": anchor,
-                "category_id": category_id,
-                "source_count": len(items),
-                "channel_count": len({_channel_code(item) for item in items}),
-                "channels": sorted({_channel_code(item) for item in items}),
-                "matched_event_status": existing_events[key].status if key in existing_events else "",
-                "titles": [item.title for item in items[:3]],
-            }
-        )
+        group = {
+            "anchor": anchor,
+            "category_id": category_id,
+            "source_count": len(items),
+            "channel_count": len({_channel_code(item) for item in items}),
+            "channels": sorted({_channel_code(item) for item in items}),
+            "matched_event_status": existing_events[key].status if key in existing_events else "",
+            "titles": [item.title for item in items[:3]],
+        }
+        if len(sample_groups) < 10:
+            sample_groups.append(group)
+        if _is_risky_group(group) and len(risk_groups) < 10:
+            risk_groups.append(group)
 
     return {
         "sampled_info_count": len(infos),
@@ -89,7 +92,16 @@ def preview_event_rebuild(session, limit: int = 300) -> dict:
         "matched_existing_event_count": sum(matched_statuses.values()),
         "matched_existing_event_statuses": dict(sorted(matched_statuses.items())),
         "sample_groups": sample_groups,
+        "risk_groups": risk_groups,
     }
+
+
+def _is_risky_group(group: dict) -> bool:
+    if group["source_count"] >= 4 and group["channel_count"] == 1:
+        return True
+    titles = group.get("titles") or []
+    normalized_titles = {"".join((title or "").split()) for title in titles}
+    return group["source_count"] >= 3 and len(normalized_titles) == len(titles)
 
 
 def main() -> None:

@@ -4,6 +4,16 @@ from database import Channel, Info
 from services.collection.acquisition_quality import build_acquisition_quality_profile
 from services.collection.credential_provider import build_credential_report
 
+CORE_SOURCE_CHANNEL_CODES = ("weibo", "toutiao", "zhihu", "xiaohongshu", "reuters", "36kr")
+CORE_SOURCE_NAMES = {
+    "weibo": "微博",
+    "toutiao": "今日头条",
+    "zhihu": "知乎",
+    "xiaohongshu": "小红书",
+    "reuters": "Reuters",
+    "36kr": "36氪",
+}
+
 
 def _percent(count: int, total: int) -> float:
     if total <= 0:
@@ -33,6 +43,10 @@ def _needs_attention(info: Info) -> bool:
     if _is_seed(info):
         return False
     return build_acquisition_quality_profile(info).needs_attention
+
+
+def _profile_status(info: Info) -> str:
+    return build_acquisition_quality_profile(info).status or "unknown"
 
 
 def _sample(info: Info) -> dict:
@@ -108,6 +122,7 @@ def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
             sum((info.detail_content_length or len(info.content or "")) for info in real_infos) / len(real_infos),
             1,
         ) if real_infos else 0
+        status_counter = Counter(_profile_status(info) for info in real_infos)
 
         usable_count = complete_count + high_value_partial_count
         row = {
@@ -119,6 +134,10 @@ def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
             "seed_count": len(infos) - len(real_infos),
             "complete_count": complete_count,
             "complete_ratio": _percent(complete_count, len(real_infos)),
+            "partial_count": status_counter.get("partial", 0),
+            "list_only_count": status_counter.get("list_only", 0),
+            "failed_count": status_counter.get("failed", 0),
+            "pending_count": status_counter.get("pending", 0),
             "high_value_partial_count": high_value_partial_count,
             "usable_count": usable_count,
             "usable_ratio": _percent(usable_count, len(real_infos)),
@@ -148,9 +167,11 @@ def build_channel_quality_report(session, sample_limit: int = 5) -> dict:
         rows.append(row)
 
     summary = _build_summary(rows)
+    sorted_rows = sorted(rows, key=lambda item: (item["quality_rank_score"], item["usable_ratio"]))
     return {
         "summary": summary,
-        "channels": sorted(rows, key=lambda item: (item["quality_rank_score"], item["usable_ratio"])),
+        "channels": sorted_rows,
+        "core_sources": _build_core_sources(sorted_rows),
     }
 
 
@@ -190,3 +211,41 @@ def _build_summary(rows: list[dict]) -> dict:
         "needs_attention_ratio": _percent(totals["needs_attention_count"], totals["real_count"]),
         "weak_channels": weak_channels,
     }
+
+
+def _empty_core_source(code: str) -> dict:
+    return {
+        "channel_id": 0,
+        "channel_code": code,
+        "channel_name": CORE_SOURCE_NAMES.get(code, code),
+        "total_count": 0,
+        "real_count": 0,
+        "seed_count": 0,
+        "complete_count": 0,
+        "complete_ratio": 0.0,
+        "partial_count": 0,
+        "list_only_count": 0,
+        "failed_count": 0,
+        "pending_count": 0,
+        "high_value_partial_count": 0,
+        "usable_count": 0,
+        "usable_ratio": 0.0,
+        "needs_attention_count": 0,
+        "needs_attention_ratio": 0.0,
+        "quality_rank_score": 100.0,
+        "governance_advice": ["核心信源尚未接入或暂无真实采集数据，建议确认采集任务是否启用。"],
+        "avg_detail_score": 0.0,
+        "avg_detail_content_length": 0.0,
+        "top_failure_reasons": [],
+        "top_detail_strategies": [],
+        "credential_health": {"channel_code": code, "health": "unknown", "missing_required": [], "credentials": []},
+        "weak_samples": [],
+    }
+
+
+def _build_core_sources(rows: list[dict]) -> list[dict]:
+    by_code = {row["channel_code"]: row for row in rows}
+    result = []
+    for code in CORE_SOURCE_CHANNEL_CODES:
+        result.append(by_code.get(code) or _empty_core_source(code))
+    return result

@@ -261,6 +261,8 @@ def run_detail_pipeline(
     for candidate in strategy_results:
         normalized = normalize_content(candidate.content)
         status, reason, matched_rules = validate_content(title, normalized, profile)
+        if status == "failed" and candidate.failure_reason:
+            reason = candidate.failure_reason
         matched_rules = list(dict.fromkeys([*candidate.matched_rules, *matched_rules]))
         score = score_content(title, normalized, matched_rules, profile)
         result = DetailPipelineResult(
@@ -297,7 +299,7 @@ def run_detail_pipeline(
             strategy="list_fallback",
             score=10,
             content_length=len(fallback),
-            failure_reason="detail_unavailable",
-            matched_rules=[],
+            failure_reason=last_failed.failure_reason or "detail_unavailable",
+            matched_rules=last_failed.matched_rules,
         )
     return last_failed

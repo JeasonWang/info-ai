@@ -122,6 +122,8 @@ def _items_related(left: Info, right: Info) -> bool:
     shared_title_terms = left_title_terms.intersection(right_title_terms)
     if not shared_title_terms:
         return False
+    if len(shared_title_terms) < 2:
+        return False
     left_terms = _event_terms(left_text)
     right_terms = _event_terms(right_text)
     shared_terms = left_terms.intersection(right_terms)
@@ -828,7 +830,6 @@ def _reanalyze_event_items(session, event: Event, all_event_items: list[Info]) -
     analysis_group = _analysis_ready_items(all_event_items)
     latest_item = chronological_group[-1]
     event.source_count = len(prioritized_group)
-    event.one_line_summary = _build_one_line(prioritized_group)
     if latest_item.event_time and latest_item.event_time > (event.last_updated_at or datetime.min):
         event.last_updated_at = latest_item.event_time
     analysis = analyze_event_sources(
@@ -837,6 +838,7 @@ def _reanalyze_event_items(session, event: Event, all_event_items: list[Info]) -
         session=session,
         history_context=_build_history_context_for_event(event),
     )
+    event.one_line_summary = analysis.one_line_summary
     _apply_display_quality(event, prioritized_group, analysis)
     _replace_event_analysis_outputs(session, event, analysis, analysis_group)
     return True

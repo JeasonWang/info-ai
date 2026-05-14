@@ -656,6 +656,30 @@ def test_related_grouping_does_not_merge_unrelated_social_titles():
     assert len(grouped) == 5
 
 
+def test_related_grouping_does_not_merge_unrelated_developer_titles():
+    items = [
+        Info(
+            category_id=4,
+            title="2026 Android 开发，现在还能入行吗？",
+            content="Android 开发者讨论职业路径和移动端岗位变化。",
+        ),
+        Info(
+            category_id=4,
+            title="Next.js + wagmi v2 踩坑实录：开发 NFT 交易市场时，我如何处理离线签名和链下元数据",
+            content="Web3 项目开发中需要处理离线签名、链下元数据和交易流程。",
+        ),
+        Info(
+            category_id=4,
+            title="别让 Claude Code 果奔，用 Claude Code MCP 与 Skills 打造自动化开发",
+            content="AI 编程工具开发流程可以通过 MCP 和 Skills 管理权限与自动化任务。",
+        ),
+    ]
+
+    grouped = _group_related_items(items)
+
+    assert len(grouped) == 3
+
+
 def test_list_events_supports_latest_sort(session):
     tech = Category(name="科技", code="tech", description="科技事件")
     session.add(tech)

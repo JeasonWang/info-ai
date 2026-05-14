@@ -33,6 +33,8 @@ def test_event_analysis_prompt_builder_separates_task_prompt_and_log_context(ses
     assert prompt.source_item_ids == [item.id]
     assert "只输出严格JSON" in prompt.system_prompt
     assert "不要把社交热度当作事实" in prompt.user_prompt
+    assert "35-90个中文字符" in prompt.user_prompt
+    assert "不能照抄标题" in prompt.user_prompt
     assert "上一轮模型发布带来价格变化" in prompt.user_prompt
     assert "OpenAI 发布新模型能力" in prompt.user_prompt
 

@@ -28,12 +28,45 @@ const form = reactive<LLMModelConfigPayload>({
 })
 
 const enabledConfigs = computed(() => configs.value.filter((item) => item.is_enabled === 1))
+const totalRecentCalls = computed(() => configs.value.reduce((sum, item) => sum + (item.success_count || 0) + (item.failure_count || 0), 0))
+const totalRecentSuccess = computed(() => configs.value.reduce((sum, item) => sum + (item.success_count || 0), 0))
+const llmSuccessRate = computed(() => {
+  if (!totalRecentCalls.value) return 0
+  return Math.round((totalRecentSuccess.value * 1000) / totalRecentCalls.value) / 10
+})
+const circuitOpenCount = computed(() => configs.value.filter((item) => Boolean(item.circuit_open_until)).length)
+const llmHealthRows = computed(() => [
+  { label: '可用模型', count: enabledConfigs.value.length, tone: enabledConfigs.value.length ? 'success' : 'danger' },
+  { label: '近百次成功率', count: `${llmSuccessRate.value}%`, tone: llmSuccessRate.value >= 80 ? 'success' : llmSuccessRate.value >= 50 ? 'warning' : 'danger' },
+  { label: '熔断中', count: circuitOpenCount.value, tone: circuitOpenCount.value ? 'danger' : 'success' },
+])
 const selectedChatConfig = computed(() => {
   if (selectedChatConfigId.value === '') return null
   return configs.value.find((item) => item.id === selectedChatConfigId.value) || null
 })
 const canSendChat = computed(() => chatInput.value.trim().length > 0 && chattingId.value === null)
 const chatAnswer = computed(() => chatResult.value?.answer || chatResult.value?.content || chatResult.value?.message || '')
+
+function modelSuccessRate(item: LLMModelConfig) {
+  const total = (item.success_count || 0) + (item.failure_count || 0)
+  if (!total) return item.success_rate ?? 0
+  return item.success_rate ?? Math.round(((item.success_count || 0) * 1000) / total) / 10
+}
+
+function modelHealthTone(item: LLMModelConfig) {
+  if (item.circuit_open_until) return 'error'
+  if (item.is_enabled !== 1) return 'muted'
+  const rate = modelSuccessRate(item)
+  if (rate >= 80 || ((item.success_count || 0) + (item.failure_count || 0)) === 0) return 'success'
+  if (rate >= 50) return 'warning'
+  return 'error'
+}
+
+function modelHealthLabel(item: LLMModelConfig) {
+  if (item.circuit_open_until) return '熔断中'
+  if (item.is_enabled !== 1) return '停用'
+  return `成功率 ${modelSuccessRate(item)}%`
+}
 
 async function refreshData() {
   configs.value = await getLLMModelConfigs()
@@ -125,6 +158,13 @@ onMounted(refreshData)
 <template>
   <section class="page-stack">
     <DataPanel title="大模型配置" status="事件分析增强">
+      <div v-if="configs.length" class="analysis-board">
+        <div class="analysis-board-item" v-for="item in llmHealthRows" :key="item.label">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.count }}</strong>
+          <i :class="`analysis-board-mark ${item.tone}`" />
+        </div>
+      </div>
       <form class="inline-form channel-form" @submit.prevent="submitConfig">
         <input v-model="form.provider_name" required placeholder="供应商，例如 千问 / DeepSeek" />
         <input v-model="form.provider_code" required placeholder="编码，例如 qwen / deepseek" />
@@ -190,7 +230,7 @@ onMounted(refreshData)
             </small>
             <small>
               近100次 成功 {{ item.success_count || 0 }} / 失败 {{ item.failure_count || 0 }} ·
-              平均耗时 {{ item.avg_latency_ms || 0 }}ms · 连续失败 {{ item.consecutive_failure_count || 0 }}
+              成功率 {{ modelSuccessRate(item) }}% · 平均耗时 {{ item.avg_latency_ms || 0 }}ms · 连续失败 {{ item.consecutive_failure_count || 0 }}
             </small>
             <small v-if="item.circuit_open_until || item.last_failure_reason">
               {{ item.circuit_open_until ? `熔断至 ${item.circuit_open_until}` : '未熔断' }}
@@ -199,6 +239,7 @@ onMounted(refreshData)
           </div>
           <div class="channel-quality-badges">
             <StatusBadge :label="item.is_enabled === 1 ? '启用' : '停用'" :tone="item.is_enabled === 1 ? 'success' : 'muted'" />
+            <StatusBadge :label="modelHealthLabel(item)" :tone="modelHealthTone(item)" />
             <button type="button" class="button--ghost" :disabled="item.is_enabled !== 1" @click="useConfigForChat(item)">
               选为聊天模型
             </button>

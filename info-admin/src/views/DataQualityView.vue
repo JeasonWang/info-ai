@@ -59,6 +59,7 @@ const blockedEventSamples = computed(() => displayQuality.value?.blocked_samples
 const pagedSnapshots = computed(() => pageSlice(snapshots.value, snapshotPage.value))
 const pagedLowQualityInfos = computed(() => pageSlice(lowQualityInfos.value, lowQualityPage.value))
 const channelStatusRows = computed(() => (channelQuality.value?.channels || []).slice(0, 8))
+const coreSourceRows = computed(() => channelQuality.value?.core_sources || [])
 const analysisRiskRows = computed(() => {
   const summary = eventAnalysisQuality.value?.summary
   if (!summary) return []
@@ -138,6 +139,16 @@ function topFailureText(item: ChannelQualityItem) {
   return item.top_failure_reasons.map((reason) => `${reason.reason} ${reason.count}`).join(' / ')
 }
 
+function sourceStatusText(item: ChannelQualityItem) {
+  return [
+    `完整 ${item.complete_count}`,
+    `部分 ${item.partial_count ?? item.high_value_partial_count ?? 0}`,
+    `列表 ${item.list_only_count ?? 0}`,
+    `失败 ${item.failed_count ?? 0}`,
+    `待抓 ${item.pending_count ?? 0}`,
+  ].join(' / ')
+}
+
 function topStrategyText(item: ChannelQualityItem) {
   if (!item.top_detail_strategies.length) return '暂无详情策略'
   return item.top_detail_strategies.map((strategy) => `${strategy.strategy} ${strategy.count}`).join(' / ')
@@ -174,6 +185,7 @@ function displayReasonText(reasons: string[]) {
     social_signal_without_fact_source: '社交热度缺事实源',
     missing_complete_source: '缺完整来源',
     missing_usable_source: '缺可用来源',
+    mixed_unrelated_sources: '疑似错合并串台',
   }
   return reasons.length ? reasons.map((reason) => labels[reason] || reason).join(' / ') : '暂无拦截原因'
 }
@@ -253,6 +265,33 @@ function progressTone(value: number | undefined) {
       </DataPanel>
 
       <DataPanel v-if="section === 'report'" title="渠道质量报告" :status="`${channelQuality?.channels.length ?? 0} 个渠道`">
+        <div v-if="coreSourceRows.length" class="ruoyi-table">
+          <div class="ruoyi-table-row ruoyi-table-head">
+            <span>核心信源</span>
+            <span>完整率</span>
+            <span>可用率</span>
+            <span>状态分布</span>
+            <span>主要问题</span>
+          </div>
+          <div v-for="item in coreSourceRows" :key="`core-${item.channel_code}`" class="ruoyi-table-row">
+            <strong>{{ item.channel_name }} / {{ item.channel_code }}</strong>
+            <div class="progress-cell">
+              <span class="progress-track">
+                <i :class="`progress-bar ${progressTone(item.complete_ratio)}`" :style="{ width: percentWidth(item.complete_ratio) }" />
+              </span>
+              <em>{{ item.complete_ratio }}%</em>
+            </div>
+            <div class="progress-cell">
+              <span class="progress-track">
+                <i :class="`progress-bar ${progressTone(item.usable_ratio)}`" :style="{ width: percentWidth(item.usable_ratio) }" />
+              </span>
+              <em>{{ item.usable_ratio }}%</em>
+            </div>
+            <span>{{ sourceStatusText(item) }}</span>
+            <span>{{ topFailureText(item) }}</span>
+          </div>
+        </div>
+
         <div v-if="channelStatusRows.length" class="ruoyi-table">
           <div class="ruoyi-table-row ruoyi-table-head">
             <span>渠道</span>

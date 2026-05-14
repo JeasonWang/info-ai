@@ -57,6 +57,9 @@ def _mask_api_key(api_key: str) -> str:
 
 def _to_dict(config: LLMModelConfig, mask_secret: bool = True) -> dict:
     recent_logs = getattr(config, "_recent_call_stats", None) or {}
+    success_count = recent_logs.get("success_count", 0)
+    failure_count = recent_logs.get("failure_count", 0)
+    total_count = success_count + failure_count
     return {
         "id": config.id,
         "provider_name": config.provider_name,
@@ -72,8 +75,9 @@ def _to_dict(config: LLMModelConfig, mask_secret: bool = True) -> dict:
         "consecutive_failure_count": config.consecutive_failure_count or 0,
         "circuit_open_until": config.circuit_open_until.strftime("%Y-%m-%d %H:%M:%S") if config.circuit_open_until else "",
         "last_failure_reason": config.last_failure_reason or "",
-        "success_count": recent_logs.get("success_count", 0),
-        "failure_count": recent_logs.get("failure_count", 0),
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "success_rate": round(success_count * 100 / total_count, 1) if total_count else 0,
         "avg_latency_ms": recent_logs.get("avg_latency_ms", 0),
         "last_error_message": recent_logs.get("last_error_message", ""),
         "created_at": config.created_at.strftime("%Y-%m-%d %H:%M:%S") if config.created_at else "",

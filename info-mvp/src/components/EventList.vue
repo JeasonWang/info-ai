@@ -60,6 +60,15 @@ function qualityText(item: EventListItem): string {
   return ''
 }
 
+function confidenceLabel(item: EventListItem): string {
+  const score = item.display_quality_score ?? item.composite_score ?? 0
+  if (item.status === 'monitoring' || item.display_quality_level === 'weak') return `待核实 ${Math.round(score)}`
+  if (score >= 80) return `高可信 ${Math.round(score)}`
+  if (score >= 60) return `可信 ${Math.round(score)}`
+  if (score > 0) return `需观察 ${Math.round(score)}`
+  return '需观察'
+}
+
 function qualityClass(item: EventListItem): string {
   const level = item.display_quality_level || ''
   if (level === 'excellent' || level === 'good') return 'quality-chip--good'
@@ -72,6 +81,32 @@ function insightLabel(item: EventListItem): string {
   if ((item.source_count || 0) >= 3) return '多源确认'
   if ((item.display_quality_score || 0) >= 70) return '优先看'
   return '线索'
+}
+
+function reasonText(item: EventListItem): string {
+  const labels: Record<string, string> = {
+    empty_sources: '暂缺可核验来源',
+    single_weak_source: '当前只有单一弱来源，建议观察',
+    low_value_content: '正文信息量偏低',
+    social_signal_without_fact_source: '已有热度，等待媒体/官方事实源确认',
+    missing_complete_source: '来源信息不完整，结论需谨慎',
+    missing_usable_source: '缺少可用事实来源',
+    mixed_unrelated_sources: '来源疑似串台，等待重新拆分核验',
+  }
+  const rawReasons = String(item.display_quality_reason || '')
+    .split(',')
+    .map((reason) => reason.trim())
+    .filter(Boolean)
+  const mapped = rawReasons.map((reason) => labels[reason] || reason)
+  if (mapped.length) return mapped.join(' / ')
+  if (item.status === 'monitoring') return '等待更多事实源补充'
+  return ''
+}
+
+function latestSignal(item: EventListItem): string {
+  if (item.new_update_count > 0) return `新增 ${item.new_update_count} 条变化`
+  const time = formatEventTime(item.last_updated_at)
+  return time ? `最近更新 ${time}` : '等待下一轮更新'
 }
 
 // #ifdef H5
@@ -136,8 +171,14 @@ onUnmounted(() => {
 
         <text class="summary">{{ item.one_line_summary }}</text>
 
-        <view v-if="item.status === 'monitoring' || item.display_quality_reason" class="reason-line">
-          <text>{{ item.status === 'monitoring' ? '观察原因' : '判断依据' }}：{{ item.display_quality_reason || '等待更多事实源补充' }}</text>
+        <view class="intel-row">
+          <text class="intel-chip" :class="qualityClass(item)">{{ confidenceLabel(item) }}</text>
+          <text class="intel-text">{{ latestSignal(item) }}</text>
+          <text class="intel-text">{{ item.source_count }} 个来源</text>
+        </view>
+
+        <view v-if="reasonText(item)" class="reason-line">
+          <text>{{ item.status === 'monitoring' ? '观察原因' : '判断依据' }}：{{ reasonText(item) }}</text>
         </view>
 
         <view class="footer">
@@ -327,13 +368,43 @@ onUnmounted(() => {
   display: block;
   font-size: var(--text-base);
   color: var(--text-secondary);
-  margin-bottom: 20rpx;
+  margin-bottom: 16rpx;
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.intel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 18rpx;
+}
+
+.intel-chip,
+.intel-text {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 34rpx;
+  padding: 4rpx 10rpx;
+  border-radius: var(--radius-sm);
+  font-size: 22rpx;
+  line-height: 1.25;
+  box-sizing: border-box;
+}
+
+.intel-chip {
+  font-weight: 800;
+}
+
+.intel-text {
+  color: var(--text-muted);
+  background: var(--surface-elevated);
 }
 
 .reason-line {
@@ -553,7 +624,19 @@ onUnmounted(() => {
 
   .summary {
     font-size: 14px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+  }
+
+  .intel-row {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .intel-chip,
+  .intel-text {
+    min-height: 24px;
+    padding: 3px 7px;
+    font-size: 12px;
   }
 
   .reason-line {

@@ -26,9 +26,11 @@ class EventAnalysisPromptBuilder:
             "请基于真实来源生成事件分析，不要简单截取原文，不要编造没有证据的事实。\n"
             "优先完成四类任务：1. 一句话总结；2. 事实经过；3. 影响与价值；4. 最新进展与风险。\n"
             "如果来源不足，请明确写出不确定性，不要把社交热度当作事实。\n"
+            "一句话总结必须是35-90个中文字符的完整判断句，不能照抄标题，不能以逗号、顿号、连接词或未完成短语结尾。\n"
+            "事实经过、最新进展、风险提示必须能被来源支撑；缺证据时写明“仍需核实”或“暂无可靠来源”。\n"
             "输出JSON字段：one_line_summary, what_happened, why_it_matters, latest_update, "
             "heat_reason, risk_notice, source_compare, analysis_confidence, evolution_summary, history_context。\n"
-            "每个字段必须是通顺中文完整句子。\n\n"
+            "每个字段必须是通顺中文完整句子，不要输出Markdown，不要输出JSON之外的解释文字。\n\n"
         )
         user_prompt = output_contract
         if history_context:

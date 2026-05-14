@@ -137,6 +137,7 @@ fi
 
 start_service "info_aggregation" "$ROOT_DIR/info_aggregation" env \
   APP_ENV=local \
+  ENABLE_PUBLIC_API="${ENABLE_PUBLIC_API:-1}" \
   DB_TYPE=mysql \
   DB_HOST="$MYSQL_HOST" \
   DB_PORT="$MYSQL_PORT" \
@@ -183,7 +184,7 @@ start_service "info-mvp" "$ROOT_DIR/info-mvp" env \
   npm run dev:h5 -- --host 127.0.0.1 --port "$INFO_MVP_PORT"
 
 log_step "等待服务就绪"
-wait_for_url "http://127.0.0.1:${AGGREGATION_PORT}/" "采集 API"
+wait_for_url "http://127.0.0.1:${AGGREGATION_PORT}/health" "采集 API"
 wait_for_url "http://127.0.0.1:${INFO_SERVE_PORT}/health" "业务 API"
 wait_for_url "http://127.0.0.1:${INFO_ADMIN_PORT}/" "管理端"
 wait_for_url "http://127.0.0.1:${INFO_MVP_PORT}/" "h5端"
@@ -201,4 +202,10 @@ h5端:  http://localhost:${INFO_MVP_PORT}
 
 日志目录: $LOG_DIR
 关闭服务: ./scripts/stop-local.sh
+
+建议验收入口:
+  采集健康: curl http://localhost:${AGGREGATION_PORT}/health
+  业务健康: curl http://localhost:${INFO_SERVE_PORT}/health
+  后台质量: http://localhost:${INFO_ADMIN_PORT}/data-quality/report
+  用户首页: http://localhost:${INFO_MVP_PORT}
 EOF

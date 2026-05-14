@@ -9,6 +9,8 @@ import re
 from datetime import datetime
 from xml.etree import ElementTree
 
+import requests
+
 from .base import BaseCrawler
 from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 from services.collection.html_article_extractor import HtmlArticleExtractor
@@ -379,6 +381,8 @@ class ReutersCrawler(BaseCrawler):
                 headers=post_headers,
                 timeout=15,
             )
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
             article = response.json().get("result", {})
             texts = []
             for part in article.get("content_items", []) or []:
@@ -393,6 +397,10 @@ class ReutersCrawler(BaseCrawler):
             combined = self._merge_distinct_parts(texts)
             if len(combined) >= 50:
                 return DetailStrategyResult(strategy="reuters_article_api", content=limit_detail_content(combined))
+        except requests.HTTPError as e:
+            result = self._http_failure_result("reuters_article_api", e)
+            self.logger.warning(f"路透社详情 API 被阻断: {result.failure_reason}")
+            return result
         except Exception as e:
             self.logger.warning(f"路透社详情爬取失败: {e}")
         return None
@@ -421,6 +429,10 @@ class ReutersCrawler(BaseCrawler):
                     body = self._clean_detail_text(node.get("articleBody", ""))
                     if len(body) >= 50:
                         return DetailStrategyResult(strategy="reuters_json_ld", content=limit_detail_content(body))
+        except requests.HTTPError as e:
+            result = self._http_failure_result("reuters_json_ld", e)
+            self.logger.warning(f"路透社JSON-LD详情请求被阻断: {result.failure_reason}")
+            return result
         except Exception as e:
             self.logger.warning(f"路透社JSON-LD详情解析失败: {e}")
         return None
@@ -436,9 +448,23 @@ class ReutersCrawler(BaseCrawler):
             text = HtmlArticleExtractor().extract(html)
             if len(text) >= 50:
                 return DetailStrategyResult(strategy="html_article", content=limit_detail_content(text))
+        except requests.HTTPError as e:
+            result = self._http_failure_result("html_article", e)
+            self.logger.warning(f"路透社HTML正文请求被阻断: {result.failure_reason}")
+            return result
         except Exception as e:
             self.logger.warning(f"路透社HTML正文兜底失败: {e}")
         return None
+
+    def _http_failure_result(self, strategy: str, error: requests.HTTPError) -> DetailStrategyResult:
+        status_code = error.response.status_code if error.response is not None else 0
+        if status_code in (401, 403):
+            reason = f"http_{status_code}_blocked"
+        elif status_code == 404:
+            reason = "http_404_not_found"
+        else:
+            reason = f"http_{status_code}_error" if status_code else "http_error"
+        return DetailStrategyResult(strategy=strategy, content="", failure_reason=reason, matched_rules=[f"http_{status_code}"] if status_code else ["http_error"])
 
     def _clean_detail_text(self, value: str) -> str:
         text = re.sub(r"<[^>]+>", " ", value or "")

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from collections import Counter
+from difflib import SequenceMatcher
 
 from database import Event, EventItemLink, Info
 from services.collection.acquisition_quality import build_acquisition_quality_profile
@@ -17,18 +18,25 @@ SOCIAL_FACT_MARKERS = (
     "应急",
     "救援",
     "伤亡",
-    "事故",
     "调查",
     "声明",
-    "回应",
-    "发布",
-    "宣布",
-    "记者",
-    "媒体",
+    "新华社",
+    "央视新闻",
+    "央视财经",
+    "央视网",
+    "央广",
+    "财联社",
+    "澎湃",
+    "路透",
+    "Reuters",
     "报道称",
     "数据显示",
-    "报告",
-    "根据",
+    "调查报告",
+)
+
+LOW_VALUE_HOT_TITLE_MARKERS = (
+    "鲜花接机",
+    "接机爸爸",
 )
 
 
@@ -55,6 +63,73 @@ def _has_social_fact_signal(item: Info) -> bool:
     return any(marker in text for marker in SOCIAL_FACT_MARKERS)
 
 
+def _has_low_value_hot_title(item: Info) -> bool:
+    category_code = item.category.code if getattr(item, "category", None) else ""
+    if category_code != "hot":
+        return False
+    title = item.title or ""
+    return any(marker in title for marker in LOW_VALUE_HOT_TITLE_MARKERS)
+
+
+def _normalize_title_for_consistency(value: str) -> str:
+    normalized = "".join((value or "").lower().split())
+    for word in ("微博热搜", "热搜", "话题", "回应", "发布", "宣布", "相关", "事件", "讨论"):
+        normalized = normalized.replace(word, "")
+    return normalized.strip(" #，。:：-—_")
+
+
+def _shared_title_anchor_count(left: str, right: str) -> int:
+    ignored = {"进展", "后续", "关注", "正在", "持续", "情况", "原因", "事故", "救援"}
+    left_anchors = {
+        left[index : index + 2]
+        for index in range(max(len(left) - 1, 0))
+        if left[index : index + 2] not in ignored
+    }
+    right_anchors = {
+        right[index : index + 2]
+        for index in range(max(len(right) - 1, 0))
+        if right[index : index + 2] not in ignored
+    }
+    return len(left_anchors & right_anchors)
+
+
+def _title_similarity(left: str, right: str) -> float:
+    left_normalized = _normalize_title_for_consistency(left)
+    right_normalized = _normalize_title_for_consistency(right)
+    if not left_normalized or not right_normalized:
+        return 0.0
+    if left_normalized in right_normalized or right_normalized in left_normalized:
+        return 1.0
+    if _shared_title_anchor_count(left_normalized, right_normalized) >= 2:
+        return 0.36
+    return SequenceMatcher(None, left_normalized, right_normalized).ratio()
+
+
+def _has_mixed_unrelated_sources(items: list[Info]) -> bool:
+    """识别历史错合并导致的同一事件内无关来源串台。"""
+
+    meaningful_titles = [
+        item.title or ""
+        for item in items
+        if len(_normalize_title_for_consistency(item.title or "")) >= 4
+    ]
+    unique_titles = list(dict.fromkeys(meaningful_titles))
+    if len(unique_titles) < 2:
+        return False
+
+    unrelated_pairs = 0
+    pair_count = 0
+    for index, left in enumerate(unique_titles):
+        for right in unique_titles[index + 1 :]:
+            pair_count += 1
+            if _title_similarity(left, right) < 0.35:
+                unrelated_pairs += 1
+
+    if pair_count == 0:
+        return False
+    return unrelated_pairs / pair_count >= 0.45
+
+
 def evaluate_event_display_quality(items: list[Info], analysis_quality_score: float = 0.0) -> EventDisplayQuality:
     """判断事件是否足够可信，可进入用户端信息流。"""
 
@@ -74,10 +149,15 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
         for item, profile in zip(items, profiles)
         if profile.status == "complete" or ((item.detail_fetch_status or "") == "complete" and (item.detail_score or 0) >= 70)
     )
-    low_value_count = sum(1 for item in items if is_low_value_content(item.title or "", item.content or ""))
+    low_value_count = sum(
+        1
+        for item in items
+        if is_low_value_content(item.title or "", item.content or "") or _has_low_value_hot_title(item)
+    )
     social_only = all(_channel_code(item) in SOCIAL_SIGNAL_CHANNELS for item in items)
     social_fact_count = sum(1 for item in items if _has_social_fact_signal(item))
     social_without_fact_source = social_only and social_fact_count == 0
+    mixed_unrelated_sources = _has_mixed_unrelated_sources(items)
     avg_completeness = int(sum(profile.completeness_score for profile in profiles) / max(len(profiles), 1))
 
     score = 20
@@ -101,6 +181,8 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
         reasons.append("low_value_content")
     if social_without_fact_source:
         reasons.append("social_signal_without_fact_source")
+    if mixed_unrelated_sources:
+        reasons.append("mixed_unrelated_sources")
     if complete_count == 0:
         reasons.append("missing_complete_source")
     if usable_count == 0:
@@ -112,7 +194,11 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
         and any(len((item.content or "").strip()) >= 20 for item in items)
     )
 
-    if social_without_fact_source:
+    if mixed_unrelated_sources:
+        status = "monitoring"
+    elif complete_count == 0:
+        status = "monitoring"
+    elif social_without_fact_source:
         status = "monitoring"
     elif complete_count >= 1 and (source_count >= 2 or usable_count >= 1) and low_value_count == 0:
         status = "active"

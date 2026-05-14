@@ -14,6 +14,31 @@ SUMMARY_FIELDS = [
     "analysis_confidence",
 ]
 
+FRAGMENT_ENDINGS = (
+    "正在",
+    "已经",
+    "由于",
+    "因为",
+    "包括",
+    "涉及",
+    "对于",
+    "关于",
+    "以及",
+    "并",
+    "和",
+    "但",
+    "将",
+    "向",
+    "在",
+)
+
+
+def _looks_like_fragment(text: str) -> bool:
+    value = (text or "").strip().rstrip("。！？!?.,，、；;：:")
+    if not value:
+        return True
+    return value.endswith(FRAGMENT_ENDINGS)
+
 
 def normalize_result(result: EventAnalysisResult, title: str = "") -> EventAnalysisResult:
     for field_name in SUMMARY_FIELDS:
@@ -34,6 +59,8 @@ def validate_result(result: EventAnalysisResult) -> list[str]:
             problems.append(f"{field_name}_too_short")
         if value.endswith(("，", "、", "；", "：", ",")):
             problems.append(f"{field_name}_broken_sentence")
+        if field_name != "analysis_confidence" and _looks_like_fragment(value):
+            problems.append(f"{field_name}_fragment")
         if field_name != "analysis_confidence" and is_low_value_content("", value):
             problems.append(f"{field_name}_low_value")
     if result.what_happened == result.one_line_summary:
