@@ -173,18 +173,11 @@ info-ai/
 
 ## 本地开发
 
-本地开发使用本机 MySQL `3306`，不启动 Docker MySQL。你需要先确保 MySQL 可用，并已创建数据库：
-
-```sql
-CREATE DATABASE IF NOT EXISTS `info-max` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-初始化数据库：
+本地开发使用本机 MySQL `3306`，不启动 Docker MySQL。你需要先确保 MySQL 8 可用，然后执行首版单文件初始化脚本：
 
 ```bash
 cd info-ai
-mysql -uroot -proot1234 info-max < info_aggregation/sql/mysql_schema_pro.sql
-mysql -uroot -proot1234 info-max < info_aggregation/sql/mysql_migration_max.sql
+mysql -uroot -proot1234 < info_aggregation/sql/mysql8_init.sql
 ```
 
 一键启动四个本地服务：
@@ -307,8 +300,7 @@ npm run verify:mp-weixin
 
 生产部署前必须确认：
 
-- 数据库脚本已执行。
-- 已有生产库升级时按顺序执行增量迁移：`migration_v1.1.0*` -> `migration_v1.2.0*` -> `migration_v1.3.0*` -> `migration_v1.4.0*` -> `migration_v1.5.0_event_display_quality.sql`。
+- 数据库已执行 `info_aggregation/sql/mysql8_init.sql`，脚本会创建 `info-max` 并初始化必要基础数据。
 - `.env.prod` 或服务器环境变量已配置。
 - `info-serve` 默认端口为 `8085`。
 - `info-admin` 和 `info-mvp` 的 `/api` 代理指向 `info-serve`。

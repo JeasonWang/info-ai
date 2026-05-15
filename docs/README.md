@@ -32,6 +32,6 @@
 
 1. 新上线事实写入正式文档，不再新增散落的阶段记录。
 2. 临时排查、一次性计划、旧版本评审放入 `archive/`。
-3. 数据库当前事实以 `info_aggregation/sql/mysql_schema_pro.sql` 为准。
+3. 数据库当前事实以 `info_aggregation/sql/mysql8_init.sql` 为准。
 4. 部署当前事实以 [部署上线手册](ops/部署上线手册.md)、`docker-compose.yml`、`deploy.sh` 为准。
 5. 每份正式文档顶部保留更新时间和适用版本。

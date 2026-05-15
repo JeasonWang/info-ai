@@ -113,7 +113,7 @@ EOF
 1. 拉取代码。
 2. 构建 `info-aggregation`、`info-serve`、`info-mvp`、`info-admin` 镜像。
 3. 导出镜像包 `images/info-ai-images.tar.gz`。
-4. 上传镜像包、`docker-compose.yml`、`deploy.sh`、`mysql_schema_pro.sql`、`mysql_migration_max.sql` 到服务器。
+4. 上传镜像包、`docker-compose.yml`、`deploy.sh`、`mysql8_init.sql` 到服务器。
 5. 在服务器执行：
 
 ```bash
@@ -150,38 +150,27 @@ curl http://127.0.0.1:18000/health
 
 `info-aggregation` 和 MySQL 默认只绑定服务器本机地址，不应该直接从公网访问。
 
-## 7. 数据库初始化和迁移说明
+## 7. 数据库初始化说明
 
-数据库脚本分工：
-
-```text
-info_aggregation/sql/mysql_schema_pro.sql      创建数据库和完整表结构
-info_aggregation/sql/mysql_migration_max.sql   初始化必要数据
-```
-
-如果是全新生产库，首次初始化时应按顺序执行：
+首版上线只保留一个 MySQL 8 初始化入口：
 
 ```text
-mysql_schema_pro.sql
-mysql_migration_max.sql
+info_aggregation/sql/mysql8_init.sql
 ```
 
-如果是已有生产库升级，先备份数据库，再按版本顺序执行增量迁移：
+如果是全新生产库，首次初始化时执行：
 
-```text
-migration_v1.1.0_channel_credentials.sql
-migration_v1.1.0_event_analysis_source.sql
-migration_v1.2.0_event_evolution.sql
-migration_v1.3.0_database_cleanup.sql
-migration_v1.4.0_incremental_rebuild.sql
-migration_v1.5.0_event_display_quality.sql
+```bash
+mysql -h 127.0.0.1 -uroot -p < info_aggregation/sql/mysql8_init.sql
 ```
+
+该脚本会创建 `info-max`、27 张核心表，并初始化基础分类、12 个渠道、采集任务、默认管理员、质量快照和默认 LLM 配置。开发期拆分 SQL 已归档到 `docs/archive/数据库历史材料/sql开发期迁移脚本/`，不作为首版生产部署入口。
 
 注意：
 
-- 当前 compose 不创建 MySQL 容器，也不自动执行数据库迁移。
+- 当前 compose 不创建 MySQL 容器，也不自动执行数据库初始化。
 - 全新生产库需要先初始化表结构和必要数据，再启动应用。
-- 已有生产库升级必须先备份，再手动执行增量迁移脚本。
+- `mysql8_init.sql` 默认不删除已有库和已有数据；如需重建，必须先备份并由运维明确执行 `DROP DATABASE`。
 
 备份示例：
 

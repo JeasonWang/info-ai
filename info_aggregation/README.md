@@ -115,8 +115,7 @@ info_aggregation/
     session.py                    # engine/session/init_db
 
   sql/                            # 数据库脚本
-    mysql_schema_pro.sql          # 完整建表脚本
-    mysql_migration_max.sql       # 初始化必要数据
+    mysql8_init.sql               # MySQL 8 首版一键初始化脚本
     init_data.py                  # 本地启动初始化入口
 
   tools/                          # 本地审计与运维工具
@@ -239,8 +238,7 @@ info_aggregation/
 
 - `database/models.py` 定义 ORM。
 - `database/session.py` 定义数据库连接和 session 生命周期。
-- `sql/mysql_schema_pro.sql` 是完整表结构来源。
-- `sql/mysql_migration_max.sql` 初始化必要业务数据。
+- `sql/mysql8_init.sql` 是 MySQL 8 完整表结构和首版初始化数据来源。
 
 项目约定：不再使用数据库外键约束，跨表一致性由代码和索引维护。
 

@@ -1,12 +1,11 @@
 from pathlib import Path
 
 
-SCHEMA_PATH = Path(__file__).resolve().parents[1] / "sql" / "mysql_schema_pro.sql"
-MAX_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "sql" / "mysql_migration_max.sql"
+MYSQL8_INIT_PATH = Path(__file__).resolve().parents[1] / "sql" / "mysql8_init.sql"
 
 
 def test_pro_mysql_schema_contains_core_tables_and_comments():
-    schema = SCHEMA_PATH.read_text(encoding="utf-8")
+    schema = MYSQL8_INIT_PATH.read_text(encoding="utf-8")
     lowered = schema.lower()
 
     required_tables = [
@@ -54,7 +53,7 @@ def test_pro_mysql_schema_contains_core_tables_and_comments():
 
 
 def test_pro_mysql_schema_uses_utf8mb4_and_innodb():
-    schema = SCHEMA_PATH.read_text(encoding="utf-8").lower()
+    schema = MYSQL8_INIT_PATH.read_text(encoding="utf-8").lower()
 
     assert "engine=innodb" in schema
     assert "default charset=utf8mb4" in schema
@@ -62,10 +61,9 @@ def test_pro_mysql_schema_uses_utf8mb4_and_innodb():
 
 
 def test_max_mysql_migration_contains_initial_data_and_tasks():
-    migration = MAX_MIGRATION_PATH.read_text(encoding="utf-8")
+    migration = MYSQL8_INIT_PATH.read_text(encoding="utf-8")
 
-    assert "表结构请先执行 mysql_schema_pro.sql" in migration
-    assert "CREATE TABLE" not in migration
+    assert "CREATE TABLE IF NOT EXISTS `category`" in migration
     assert "INSERT INTO `category`" in migration
     assert "INSERT INTO `channel`" in migration
     assert "INSERT INTO `crawl_task`" in migration

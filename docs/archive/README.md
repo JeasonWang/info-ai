@@ -17,5 +17,5 @@
 
 - 当前正式产品用户端是 `info-mvp`，历史文档中大量 `info-max` 描述只代表当时状态。
 - 历史文档中的旧路径，如 `docs/开发文档`、`docs/数据库`、`D:\ai-coding`，不再作为当前路径使用。
-- 当前数据库完整结构以 `info_aggregation/sql/mysql_schema_pro.sql` 为准。
+- 当前数据库完整结构和初始化数据以 `info_aggregation/sql/mysql8_init.sql` 为准。
 - 当前上线部署以 [../ops/部署上线手册.md](../ops/部署上线手册.md) 为准。
