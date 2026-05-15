@@ -15,7 +15,7 @@
 
 > 把全网热点噪声压缩成可验证、可追踪、可决策的事件情报。
 
-当前正式版本为 **v1.0.0 / max 线上版**。产品重点是建设三项核心能力：高质量数据采集、可信事件分析、大模型情报增强。
+当前正式版本为 **v1.0.0 / AI 情报台上线候选版**。产品重点是建设三项核心能力：高质量数据采集、可信事件分析、大模型情报增强。
 
 > `info-max` 已正式废弃，不再维护。用户端统一维护 `info-mvp`。
 
@@ -71,7 +71,7 @@ info-ai/
   info-admin/            # Vue3 管理后台
   info-mvp/              # uni-app 用户端，支持 H5/小程序/后续 App
   scripts/               # 本地一键启动/关闭脚本
-  docs/                  # 开发文档、数据库脚本、评审记录
+  docs/                  # 正式文档和历史归档
   docker-compose.yml     # 生产容器编排，不包含 MySQL 的部署方式可单独调整
   deploy.sh              # 自动化部署入口
 ```
@@ -300,6 +300,7 @@ npm run verify:mp-weixin
 
 自动化部署说明见：
 
+- [部署上线手册](docs/ops/部署上线手册.md)
 - [GITHUB_AUTOMATED_DEPLOYMENT.md](GITHUB_AUTOMATED_DEPLOYMENT.md)
 - [deploy.sh](deploy.sh)
 - [docker-compose.yml](docker-compose.yml)
@@ -317,12 +318,17 @@ npm run verify:mp-weixin
 
 ## 文档入口
 
+- [文档地图](docs/README.md)
+- [产品说明](docs/product/产品说明.md)
+- [页面与产品设计](docs/product/页面与产品设计.md)
+- [系统架构总览](docs/architecture/系统架构总览.md)
+- [部署上线手册](docs/ops/部署上线手册.md)
+- [2026-05-15 上线验收报告](docs/release/2026-05-15上线验收报告.md)
 - [info_aggregation 架构文档](info_aggregation/README.md)
 - [info-serve README](info-serve/README.md)
 - [info-admin README](info-admin/README.md)
 - [info-mvp README](info-mvp/README.md)
-- [开发文档](docs/开发文档)
-- [数据库脚本](docs/数据库)
+- [历史归档](docs/archive/README.md)
 
 ---
 
@@ -335,6 +341,6 @@ npm run verify:mp-weixin
 - 用户端不做普通热榜，要始终围绕“可信热点情报台”设计。
 - 管理端只做运营治理，不直接连接数据库。
 - 用户端只维护 `info-mvp`。
-- 数据库变更必须同步 `info_aggregation/sql/` 和必要的 `docs/数据库/` 增量脚本。
+- 数据库变更必须同步 `info_aggregation/sql/`，正式部署说明同步更新 `docs/ops/部署上线手册.md`。
 - 不再新增数据库外键约束，跨表一致性由代码和索引维护。
 - 新增能力要有测试，采集渠道优化要尽量使用真实线上数据验证。

@@ -1,6 +1,6 @@
-# 信息达人 Max GitHub 自动化部署指南
+# 信息达人 GitHub 自动化部署指南
 
-本文档说明如何通过 GitHub Actions 将信息达人 Max 部署到远程服务器。当前生产用户端使用 `info-mvp`，不再部署 `info-max`。
+本文档说明如何通过 GitHub Actions 将信息达人部署到远程服务器。当前生产用户端使用 `info-mvp`，不再部署 `info-max`。完整上线流程、数据库初始化、迁移顺序、回滚和脚本教程以 [docs/ops/部署上线手册.md](docs/ops/部署上线手册.md) 为准。
 
 ## 1. 部署架构
 
