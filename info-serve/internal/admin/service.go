@@ -470,6 +470,40 @@ func (s *Service) RebuildStaleEventAnalysis(ctx context.Context, limit int) (Act
 	return s.runner.RebuildStaleEventAnalysis(ctx, limit)
 }
 
+func (s *Service) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	retryResult, err := s.runner.RetryLowQualityDetails(ctx, limit)
+	if err != nil {
+		return ActionResult{}, err
+	}
+	enqueueResult, err := s.runner.EnqueueEventAnalysisDetailJobs(ctx, limit)
+	if err != nil {
+		return ActionResult{}, err
+	}
+	rebuildResult, err := s.runner.RebuildStaleEventAnalysis(ctx, limit)
+	if err != nil {
+		return ActionResult{}, err
+	}
+
+	data := map[string]any{
+		"limit":                       limit,
+		"retry_low_quality_details":    retryResult.Data,
+		"enqueue_event_analysis_jobs":  enqueueResult.Data,
+		"rebuild_stale_event_analysis": rebuildResult.Data,
+	}
+	return ActionResult{
+		Action:  "prioritize_weak_source_governance",
+		Message: "已优先治理弱来源事件，完成详情重抓、分析补偿和过期重建。",
+		Data:    data,
+	}, nil
+}
+
 func (s *Service) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
 	if limit < 1 {
 		limit = 8

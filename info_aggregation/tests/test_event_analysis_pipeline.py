@@ -240,6 +240,37 @@ def test_rule_analysis_rewrites_hot_accident_summary_from_title_marker(session):
     assert "公共安全" in result.one_line_summary
 
 
+def test_rule_analysis_gives_medium_confidence_for_complete_single_tech_article(session):
+    category, channel = _seed_channel(session)
+    content = (
+        "OpenClaw 发布新的 Agent 编排方案，重点改进工具调用、上下文压缩、失败重试和任务规划能力。"
+        "开发者可以通过插件机制接入内部知识库、代码仓库和自动化测试流水线，从而减少重复提示词配置。"
+        "文章进一步说明了模型调用成本、权限隔离、执行审计和灰度发布策略，适合企业团队评估工程落地。"
+        "这些信息能够支撑对 Agent 工程化趋势的判断，而不只是列表标题或营销话术。"
+    )
+    item = Info(
+        title="OpenClaw Agent 编排方案发布",
+        content=content,
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="complete-single-tech",
+        source_url="https://example.com/complete-single-tech",
+        event_time=datetime(2026, 5, 15, 9, 0, 0),
+        core_entity="OpenClaw",
+        tech_entities="OpenClaw,Agent",
+        tech_keywords="工具调用,上下文压缩,失败重试",
+        detail_fetch_status="complete",
+        detail_score=90,
+        detail_content_length=len(content),
+    )
+
+    result = analyze_event_sources([item])
+
+    assert result.confidence >= 0.6
+    assert result.quality_score >= 60
+    assert "分析可信度：中" in result.analysis_confidence
+
+
 def test_rule_analysis_rewrites_hot_sports_summary_from_title_marker(session):
     category = Category(name="热点事件", code="hot", description="热点")
     session.add(category)

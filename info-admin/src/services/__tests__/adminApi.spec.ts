@@ -16,6 +16,7 @@ import {
   getDetailJobReport,
   getEventAnalysisQualityReport,
   getLowQualityInfos,
+  prioritizeWeakSourceGovernance,
   rebuildEvents,
   rebuildStaleEventAnalysis,
   retryDetailJob,
@@ -156,6 +157,12 @@ describe('admin API versioned paths', () => {
     await rebuildStaleEventAnalysis(300)
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/admin/rebuild-stale-event-analysis?limit=300',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await prioritizeWeakSourceGovernance(17)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/prioritize-weak-source-governance?limit=17',
       expect.objectContaining({ method: 'POST' }),
     )
 

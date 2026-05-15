@@ -90,6 +90,15 @@ func (h *AdminHandler) RebuildStaleEventAnalysis(w http.ResponseWriter, r *http.
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) PrioritizeWeakSourceGovernance(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.PrioritizeWeakSourceGovernance(r.Context(), queryLimit(r))
+	if err != nil {
+		writeAdminActionError(w, err, "弱来源优先治理失败")
+		return
+	}
+	response.OK(w, result)
+}
+
 func (h *AdminHandler) QualitySnapshots(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ListQualitySnapshots(r.Context(), queryLimit(r))
 	if err != nil {

@@ -319,6 +319,8 @@ def _confidence_text(items) -> tuple[str, float, float]:
         level, confidence = "高", 0.86
     elif count >= 2 and usable >= 1:
         level, confidence = "中", 0.68
+    elif complete >= 1 and usable >= 1 and avg >= 80:
+        level, confidence = "中", 0.62
     else:
         level, confidence = "低", 0.45
     return f"分析可信度：{level}。当前平均完整度分为{avg}，来源数量为{count}。", confidence, float(avg)

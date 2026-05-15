@@ -110,6 +110,7 @@ func registerAPIRoutes(
 	mux.HandleFunc("POST "+prefix+"/admin/retry-low-quality-details", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.RetryLowQualityDetails))
 	mux.HandleFunc("POST "+prefix+"/admin/event-analysis-detail-jobs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.EnqueueEventAnalysisDetailJobs))
 	mux.HandleFunc("POST "+prefix+"/admin/rebuild-stale-event-analysis", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.RebuildStaleEventAnalysis))
+	mux.HandleFunc("POST "+prefix+"/admin/prioritize-weak-source-governance", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.PrioritizeWeakSourceGovernance))
 	mux.HandleFunc("POST "+prefix+"/admin/detail-jobs/retry", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.BatchRetryDetailJobs))
 	mux.HandleFunc("POST "+prefix+"/admin/detail-jobs/cancel", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.BatchCancelDetailJobs))
 	mux.HandleFunc("POST "+prefix+"/admin/detail-jobs/{id}/retry", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.RetryDetailJob))

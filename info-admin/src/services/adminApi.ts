@@ -188,6 +188,12 @@ export function rebuildStaleEventAnalysis(limit = 200) {
   })
 }
 
+export function prioritizeWeakSourceGovernance(limit = 20) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/prioritize-weak-source-governance?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
 export function retryDetailJob(id: number) {
   return apiRequest<AdminActionResult>(apiV1(`/admin/detail-jobs/${id}/retry`), {
     method: 'POST',

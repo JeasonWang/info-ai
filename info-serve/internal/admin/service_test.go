@@ -492,6 +492,17 @@ func TestServiceRunsAdminActions(t *testing.T) {
 		t.Fatalf("stale event analysis limit = %d, want 1000", runner.limit)
 	}
 
+	result, err = service.PrioritizeWeakSourceGovernance(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("PrioritizeWeakSourceGovernance returned error: %v", err)
+	}
+	if result.Action != "prioritize_weak_source_governance" {
+		t.Fatalf("action = %q, want prioritize_weak_source_governance", result.Action)
+	}
+	if runner.limit != 100 {
+		t.Fatalf("weak source governance limit = %d, want 100", runner.limit)
+	}
+
 	llmResult, err := service.TestLLMChat(context.Background(), LLMChatTestPayload{
 		ConfigID:       7,
 		Prompt:         " ping ",

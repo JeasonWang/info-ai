@@ -19,6 +19,7 @@ from services import (
     archive_duplicate_title_infos,
     archive_low_quality_infos,
     enqueue_event_analysis_detail_jobs,
+    mark_low_confidence_complete_events_stale,
     rebuild_events,
     rebuild_stale_event_analysis,
     refresh_info_semantics,
@@ -41,6 +42,7 @@ class AggregationCommandHandler:
             "refresh_quality": self.refresh_quality,
             "retry_low_quality_details": self.retry_low_quality_details,
             "enqueue_event_analysis_detail_jobs": self.enqueue_event_analysis_detail_jobs,
+            "mark_low_confidence_event_analysis_stale": self.mark_low_confidence_event_analysis_stale,
             "rebuild_stale_event_analysis": self.rebuild_stale_event_analysis,
             "archive_low_quality": self.archive_low_quality,
             "archive_duplicate_titles": self.archive_duplicate_titles,
@@ -175,6 +177,14 @@ class AggregationCommandHandler:
         session = get_session()
         try:
             return rebuild_stale_event_analysis(session, limit=limit)
+        finally:
+            session.close()
+
+    def mark_low_confidence_event_analysis_stale(self, payload: dict[str, Any]) -> dict[str, Any]:
+        limit = _bounded_int(payload.get("limit"), default=100, minimum=1, maximum=1000)
+        session = get_session()
+        try:
+            return mark_low_confidence_complete_events_stale(session, limit=limit)
         finally:
             session.close()
 

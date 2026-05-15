@@ -463,6 +463,7 @@ func TestAdminActionRoutesReturnResultForAdmin(t *testing.T) {
 		{path: "/api/v1/admin/rebuild-events", action: "rebuild_events"},
 		{path: "/api/v1/admin/refresh-quality", action: "refresh_quality"},
 		{path: "/api/v1/admin/retry-low-quality-details?limit=5", action: "retry_low_quality_details"},
+		{path: "/api/v1/admin/prioritize-weak-source-governance?limit=5", action: "prioritize_weak_source_governance"},
 		{path: "/api/v1/admin/detail-jobs/retry?channel_code=36kr&failure_reason=empty_content&limit=20", action: "batch_retry_detail_jobs"},
 		{path: "/api/v1/admin/detail-jobs/cancel?channel_code=36kr&failure_reason=empty_content&limit=20", action: "batch_cancel_detail_jobs"},
 		{path: "/api/v1/admin/detail-jobs/11/retry", action: "retry_detail_job"},

@@ -126,6 +126,67 @@ func TestServiceRewritesMetadataLikeListSummaries(t *testing.T) {
 	}
 }
 
+func TestServiceNormalizesTruncatedEnglishTitles(t *testing.T) {
+	service := NewService(fakeEventStore{listResult: EventPage{
+		Total:    1,
+		Page:     1,
+		PageSize: 10,
+		Items: []EventListItem{
+			{
+				ID:             12,
+				Title:          "OpenAI chief Altman to take stand in Ope",
+				OneLineSummary: "Reuters category: technology. Reuters Published at 2026-05-14T07:00:58.011Z according to its official news sitemap.",
+				PrimaryCategory: CategoryBrief{
+					Code: "international",
+					Name: "国际大事",
+				},
+				SourceBadges: []string{"路透社"},
+			},
+		},
+	}})
+
+	page, err := service.ListEvents(context.Background(), ListEventsParams{Page: 1, PageSize: 10})
+
+	if err != nil {
+		t.Fatalf("ListEvents returned error: %v", err)
+	}
+	if page.Items[0].Title != "OpenAI chief Altman to take stand..." {
+		t.Fatalf("title = %q, want readable truncated title", page.Items[0].Title)
+	}
+	if strings.Contains(page.Items[0].OneLineSummary, "in Ope") {
+		t.Fatalf("summary still exposes half word: %q", page.Items[0].OneLineSummary)
+	}
+}
+
+func TestServiceNormalizesTruncatedChineseTitles(t *testing.T) {
+	service := NewService(fakeEventStore{detailResult: EventDetail{
+		Event: EventCore{
+			ID:             13,
+			Title:          "2026最新！低延迟高吞吐带你OpenClaw接入QQ飞书全攻略：10分钟打造你",
+			OneLineSummary: "相关讨论正在升温",
+			PrimaryCategory: CategoryBrief{
+				Code: "technology",
+				Name: "科技",
+			},
+		},
+	}})
+
+	detail, err := service.GetEventDetail(context.Background(), 13)
+
+	if err != nil {
+		t.Fatalf("GetEventDetail returned error: %v", err)
+	}
+	if !strings.HasSuffix(detail.Event.Title, "...") {
+		t.Fatalf("title = %q, want ellipsis for likely truncated title", detail.Event.Title)
+	}
+	if strings.HasSuffix(detail.Event.Title, "你...") {
+		t.Fatalf("title = %q, still keeps dangling Chinese tail", detail.Event.Title)
+	}
+	if !strings.HasSuffix(detail.Event.OneLineSummary, "。") {
+		t.Fatalf("summary = %q, want complete sentence", detail.Event.OneLineSummary)
+	}
+}
+
 func TestServiceBuildsEvidenceChainFromRepresentativeSources(t *testing.T) {
 	service := NewService(fakeEventStore{detailResult: EventDetail{
 		Event: EventCore{ID: 9, Status: "active", SourceCount: 2},

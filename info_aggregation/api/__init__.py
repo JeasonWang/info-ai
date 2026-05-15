@@ -35,6 +35,7 @@ from services import (
 	build_data_quality_report,
 	build_event_analysis_quality_report,
 	enqueue_event_analysis_detail_jobs,
+	mark_low_confidence_complete_events_stale,
 	rebuild_stale_event_analysis,
 	create_llm_model_config,
 	list_llm_model_configs,
@@ -1286,6 +1287,23 @@ def admin_rebuild_stale_event_analysis(
         return {
             "code": 0,
             "message": "过期事件分析已处理",
+            "data": result,
+        }
+    finally:
+        session.close()
+
+
+@public_api_route("post", "/api/admin/mark-low-confidence-event-analysis-stale")
+def admin_mark_low_confidence_event_analysis_stale(
+    limit: int = Query(100, ge=1, le=1000, description="本次最多标记的低置信完整来源事件数量"),
+):
+    """将低置信但来源已完整可用的事件标记为过期，供后续重分析。"""
+    session = get_session()
+    try:
+        result = mark_low_confidence_complete_events_stale(session, limit=limit)
+        return {
+            "code": 0,
+            "message": "低置信完整来源事件已标记为待重分析",
             "data": result,
         }
     finally:

@@ -1,6 +1,6 @@
 from .analysis.event_analysis_quality_actions import enqueue_event_analysis_detail_jobs
 from .analysis.event_analysis_quality_report import build_event_analysis_quality_report
-from .analysis.event_analysis_reanalysis import rebuild_stale_event_analysis
+from .analysis.event_analysis_reanalysis import mark_low_confidence_complete_events_stale, rebuild_stale_event_analysis
 from .analysis.event_builder import rebuild_events
 from .analysis.llm_model_config import create_llm_model_config, list_llm_model_configs, update_llm_model_config
 from .collection.credential_provider import build_credential_report
@@ -21,6 +21,7 @@ __all__ = [
     "build_credential_report",
     "build_event_analysis_quality_report",
     "enqueue_event_analysis_detail_jobs",
+    "mark_low_confidence_complete_events_stale",
     "rebuild_stale_event_analysis",
     "create_llm_model_config",
     "list_llm_model_configs",

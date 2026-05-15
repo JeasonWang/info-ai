@@ -15,6 +15,7 @@ import {
   getEventAnalysisQualityReport,
   getLowQualityInfos,
   getQualitySnapshots,
+  prioritizeWeakSourceGovernance,
   rebuildStaleEventAnalysis,
   refreshQuality,
   retryLowQualityDetails,
@@ -248,6 +249,7 @@ function progressTone(value: number | undefined) {
           <button type="button" :disabled="isRunning" @click="runAction(refreshQuality)">刷新质量</button>
           <button type="button" :disabled="isRunning" @click="runAction(() => retryLowQualityDetails(20))">重抓低完整详情</button>
           <button type="button" :disabled="isRunning" @click="runAction(() => enqueueEventAnalysisDetailJobs(20))">补偿分析弱来源</button>
+          <button type="button" :disabled="isRunning" @click="runAction(() => prioritizeWeakSourceGovernance(20))">优先治理弱来源</button>
           <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(archiveLowQualityInfos)">归档低质量</button>
           <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(archiveDuplicateTitles)">归档重复标题</button>
         </div>
@@ -386,6 +388,9 @@ function progressTone(value: number | undefined) {
         <div class="action-strip action-strip--compact">
           <button type="button" :disabled="isRunning" @click="runAction(() => enqueueEventAnalysisDetailJobs(20))">
             入队弱来源补偿
+          </button>
+          <button type="button" :disabled="isRunning" @click="runAction(() => prioritizeWeakSourceGovernance(20))">
+            优先治理弱来源
           </button>
           <button type="button" class="button--ghost" :disabled="isRunning" @click="runAction(refreshQuality)">
             重建分析质量

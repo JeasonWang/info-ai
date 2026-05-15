@@ -237,6 +237,7 @@ func (s *Service) ListEvents(ctx context.Context, params ListEventsParams) (Even
 		if page.Items[index].SourceBadges == nil {
 			page.Items[index].SourceBadges = []string{}
 		}
+		page.Items[index].Title = displayTitle(page.Items[index].Title)
 		page.Items[index].OneLineSummary = displayOneLineSummary(
 			page.Items[index].Title,
 			page.Items[index].OneLineSummary,
@@ -252,6 +253,7 @@ func (s *Service) GetEventDetail(ctx context.Context, id int64) (EventDetail, er
 	if err != nil {
 		return EventDetail{}, err
 	}
+	detail.Event.Title = displayTitle(detail.Event.Title)
 	detail.Event.OneLineSummary = displayOneLineSummary(
 		detail.Event.Title,
 		detail.Event.OneLineSummary,
@@ -264,6 +266,93 @@ func (s *Service) GetEventDetail(ctx context.Context, id int64) (EventDetail, er
 	detail.ControversyBrief = buildControversyBrief(detail)
 	detail.RelatedEvents = enrichRelatedEvents(detail.RelatedEvents)
 	return detail, nil
+}
+
+func displayTitle(title string) string {
+	cleanTitle := strings.Join(strings.Fields(strings.TrimSpace(title)), " ")
+	if cleanTitle == "" {
+		return cleanTitle
+	}
+	cleanTitle = strings.TrimSuffix(cleanTitle, "...")
+	if !isLikelyTruncatedTitle(cleanTitle) {
+		return cleanTitle
+	}
+	trimmed := trimTruncatedTitleTail(cleanTitle)
+	if trimmed == "" {
+		return cleanTitle + "..."
+	}
+	return strings.TrimSpace(trimmed) + "..."
+}
+
+func isLikelyTruncatedTitle(title string) bool {
+	runes := []rune(title)
+	if len(runes) < 38 || len(runes) > 90 {
+		return false
+	}
+	last := runes[len(runes)-1]
+	if strings.ContainsRune("。！？.!?」』）)]", last) {
+		return false
+	}
+	if isMostlyASCII(title) {
+		fields := strings.Fields(title)
+		if len(fields) == 0 {
+			return false
+		}
+		lastWord := strings.Trim(fields[len(fields)-1], ",;:-")
+		if len([]rune(lastWord)) <= 4 || isEnglishTrailingStopWord(strings.ToLower(lastWord)) {
+			return true
+		}
+		return len(runes) >= 40 && len([]rune(lastWord)) <= 6
+	}
+	return len(runes) >= 40
+}
+
+func trimTruncatedTitleTail(title string) string {
+	if !isMostlyASCII(title) {
+		runes := []rune(title)
+		if len(runes) <= 4 {
+			return title
+		}
+		return strings.TrimRight(string(runes[:len(runes)-1]), "，,、：:；;的了和与及在")
+	}
+	fields := strings.Fields(title)
+	if len(fields) <= 1 {
+		return title
+	}
+	for len(fields) > 1 {
+		last := strings.Trim(fields[len(fields)-1], ",;:-")
+		if len([]rune(last)) > 4 && !isEnglishTrailingStopWord(strings.ToLower(last)) {
+			break
+		}
+		fields = fields[:len(fields)-1]
+	}
+	for len(fields) > 1 && isEnglishTrailingStopWord(strings.ToLower(strings.Trim(fields[len(fields)-1], ",;:-"))) {
+		fields = fields[:len(fields)-1]
+	}
+	return strings.Join(fields, " ")
+}
+
+func isMostlyASCII(text string) bool {
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return true
+	}
+	ascii := 0
+	for _, char := range runes {
+		if char <= 127 {
+			ascii++
+		}
+	}
+	return float64(ascii)/float64(len(runes)) >= 0.8
+}
+
+func isEnglishTrailingStopWord(word string) bool {
+	switch word {
+	case "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to", "with", "after", "before", "under", "over":
+		return true
+	default:
+		return false
+	}
 }
 
 func displayOneLineSummary(title string, summary string, categoryCode string, sourceBadges []string) string {
