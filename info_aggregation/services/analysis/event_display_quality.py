@@ -2,7 +2,9 @@ from dataclasses import dataclass, field
 from collections import Counter
 from difflib import SequenceMatcher
 
-from database import Event, EventItemLink, Info
+from sqlalchemy import or_
+
+from database import Event, EventAnalysisRun, EventItemLink, Info
 from services.collection.acquisition_quality import build_acquisition_quality_profile
 from services.quality.data_quality import is_low_value_content
 
@@ -16,9 +18,6 @@ SOCIAL_FACT_MARKERS = (
     "医院",
     "法院",
     "应急",
-    "救援",
-    "伤亡",
-    "调查",
     "声明",
     "新华社",
     "央视新闻",
@@ -130,6 +129,12 @@ def _has_mixed_unrelated_sources(items: list[Info]) -> bool:
     return unrelated_pairs / pair_count >= 0.45
 
 
+def _is_social_without_fact(items: list[Info]) -> bool:
+    return bool(items) and all(_channel_code(item) in SOCIAL_SIGNAL_CHANNELS for item in items) and not any(
+        _has_social_fact_signal(item) for item in items
+    )
+
+
 def evaluate_event_display_quality(items: list[Info], analysis_quality_score: float = 0.0) -> EventDisplayQuality:
     """判断事件是否足够可信，可进入用户端信息流。"""
 
@@ -149,11 +154,21 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
         for item, profile in zip(items, profiles)
         if profile.status == "complete" or ((item.detail_fetch_status or "") == "complete" and (item.detail_score or 0) >= 70)
     )
-    low_value_count = sum(
-        1
+    low_value_flags = [
+        is_low_value_content(item.title or "", item.content or "") or _has_low_value_hot_title(item)
         for item in items
-        if is_low_value_content(item.title or "", item.content or "") or _has_low_value_hot_title(item)
+    ]
+    low_value_count = sum(1 for value in low_value_flags if value)
+    has_complete_fact_source = any(
+        _channel_code(item) not in SOCIAL_SIGNAL_CHANNELS
+        and not is_low_value
+        and (
+            profile.status == "complete"
+            or ((item.detail_fetch_status or "") == "complete" and (item.detail_score or 0) >= 70)
+        )
+        for item, profile, is_low_value in zip(items, profiles, low_value_flags)
     )
+    blocking_low_value_count = 0 if has_complete_fact_source else low_value_count
     social_only = all(_channel_code(item) in SOCIAL_SIGNAL_CHANNELS for item in items)
     social_fact_count = sum(1 for item in items if _has_social_fact_signal(item))
     social_without_fact_source = social_only and social_fact_count == 0
@@ -167,9 +182,9 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
     score += min(10, channel_count * 4)
     score += min(10, int(max(analysis_quality_score, 0) / 10))
     score += min(10, int(avg_completeness / 10))
-    if complete_count >= 1 and low_value_count == 0:
+    if complete_count >= 1 and blocking_low_value_count == 0:
         score += 5
-    score -= low_value_count * 30
+    score -= blocking_low_value_count * 30
     if social_without_fact_source:
         score -= 20
     score = max(0, min(100, score))
@@ -177,7 +192,7 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
     reasons: list[str] = []
     if source_count <= 1 and usable_count == 0:
         reasons.append("single_weak_source")
-    if low_value_count:
+    if blocking_low_value_count:
         reasons.append("low_value_content")
     if social_without_fact_source:
         reasons.append("social_signal_without_fact_source")
@@ -190,7 +205,7 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
 
     has_meaningful_non_social_source = (
         not social_only
-        and low_value_count == 0
+        and blocking_low_value_count == 0
         and any(len((item.content or "").strip()) >= 20 for item in items)
     )
 
@@ -200,11 +215,11 @@ def evaluate_event_display_quality(items: list[Info], analysis_quality_score: fl
         status = "monitoring"
     elif social_without_fact_source:
         status = "monitoring"
-    elif complete_count >= 1 and (source_count >= 2 or usable_count >= 1) and low_value_count == 0:
+    elif complete_count >= 1 and (source_count >= 2 or usable_count >= 1) and blocking_low_value_count == 0:
         status = "active"
     elif has_meaningful_non_social_source:
         status = "active"
-    elif score >= 70 and usable_count >= 1 and low_value_count == 0:
+    elif score >= 70 and usable_count >= 1 and blocking_low_value_count == 0:
         status = "active"
     elif "low_value_content" in reasons or "single_weak_source" in reasons:
         status = "monitoring"
@@ -231,6 +246,112 @@ def _load_event_items(session, event_id: int) -> list[Info]:
         .order_by(EventItemLink.is_primary.desc(), EventItemLink.weight.desc(), EventItemLink.id.asc())
         .all()
     )
+
+
+def _fact_source_match_score(target_titles: list[str], candidate: Info) -> float:
+    candidate_title = candidate.title or ""
+    title_score = max((_title_similarity(title, candidate_title) for title in target_titles if title), default=0.0)
+    content = f"{candidate.title or ''} {candidate.content or ''}"
+    fact_bonus = 0.08 if any(marker in content for marker in SOCIAL_FACT_MARKERS) else 0.0
+    profile = build_acquisition_quality_profile(candidate)
+    quality_bonus = 0.06 if profile.usable else 0.0
+    return min(1.0, title_score + fact_bonus + quality_bonus)
+
+
+def _find_secondary_fact_sources(session, items: list[Info], limit: int = 2) -> list[Info]:
+    if not _is_social_without_fact(items):
+        return []
+    existing_ids = {item.id for item in items if item.id}
+    target_titles = [item.title or "" for item in items]
+    candidates = (
+        session.query(Info)
+        .filter(or_(Info.is_deleted == 0, Info.is_deleted.is_(None)), ~Info.id.in_(existing_ids))
+        .order_by(Info.event_time.desc(), Info.id.desc())
+        .limit(300)
+        .all()
+    )
+    scored: list[tuple[float, Info]] = []
+    for candidate in candidates:
+        if _channel_code(candidate) in SOCIAL_SIGNAL_CHANNELS:
+            continue
+        profile = build_acquisition_quality_profile(candidate)
+        if not profile.usable and not (
+            (candidate.detail_fetch_status or "") in {"complete", "partial"} and (candidate.detail_score or 0) >= 70
+        ):
+            continue
+        score = _fact_source_match_score(target_titles, candidate)
+        if score >= 0.62:
+            scored.append((score, candidate))
+    scored.sort(key=lambda item: (-item[0], -(item[1].detail_score or 0), item[1].id))
+    return [candidate for _, candidate in scored[:limit]]
+
+
+def _mark_event_analysis_stale(session, event_id: int, reason: str) -> int:
+    latest_run = (
+        session.query(EventAnalysisRun)
+        .filter(EventAnalysisRun.event_id == event_id)
+        .order_by(EventAnalysisRun.created_at.desc(), EventAnalysisRun.id.desc())
+        .first()
+    )
+    if not latest_run or latest_run.status == "stale":
+        return 0
+    latest_run.status = "stale"
+    latest_run.failure_reason = reason
+    return 1
+
+
+def link_secondary_fact_sources_for_social_events(session, limit: int = 50) -> dict:
+    """为纯社交线索补充库内已采到的事实源，降低观察中事件的来源缺口。"""
+
+    limit = max(1, min(limit, 200))
+    events = (
+        session.query(Event)
+        .filter(Event.status.in_(("active", "monitoring")))
+        .order_by(Event.last_updated_at.desc(), Event.id.desc())
+        .limit(limit)
+        .all()
+    )
+    linked_count = 0
+    updated_event_count = 0
+    samples: list[dict] = []
+
+    for event in events:
+        items = _load_event_items(session, event.id)
+        if not _is_social_without_fact(items):
+            continue
+        existing_ids = {item.id for item in items if item.id}
+        candidates = _find_secondary_fact_sources(session, items)
+        added: list[Info] = []
+        for candidate in candidates:
+            if candidate.id in existing_ids:
+                continue
+            session.add(EventItemLink(event_id=event.id, item_id=candidate.id, role="fact_source", is_primary=0, weight=85))
+            existing_ids.add(candidate.id)
+            added.append(candidate)
+            linked_count += 1
+        if not added:
+            continue
+        _mark_event_analysis_stale(session, event.id, reason="fact_source_linked_for_source_quality_governance")
+        updated_items = [*items, *added]
+        quality = evaluate_event_display_quality(updated_items)
+        event.source_count = len(existing_ids)
+        event.display_quality_score = quality.score
+        event.display_quality_level = quality.level
+        event.display_quality_reason = quality.reason_text
+        event.status = quality.status
+        updated_event_count += 1
+        samples.append(
+            {
+                "event_id": event.id,
+                "title": event.title,
+                "linked_info_ids": [item.id for item in added],
+                "status": event.status,
+                "display_quality_score": event.display_quality_score,
+            }
+        )
+
+    session.commit()
+    return {"processed_count": len(events), "updated_event_count": updated_event_count, "linked_count": linked_count, "samples": samples}
 
 
 def backfill_event_display_quality(

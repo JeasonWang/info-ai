@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from database import Category, Channel, Event, EventItemLink, Info
+from database import Category, Channel, Event, EventAnalysisRun, EventItemLink, Info
 from services.analysis.event_display_quality import (
     backfill_event_display_quality,
     evaluate_event_display_quality,
+    link_secondary_fact_sources_for_social_events,
     _title_similarity,
 )
 
@@ -350,3 +351,131 @@ def test_backfill_event_display_quality_updates_existing_events(session):
     assert "low_value_content" in weak_event.display_quality_reason
     assert good_event.status == "active"
     assert good_event.display_quality_score >= 70
+
+
+def test_link_secondary_fact_sources_for_social_events_adds_matching_fact_source(session):
+    category, weibo = _seed_category_channel(session, "weibo")
+    toutiao = Channel(
+        name="今日头条",
+        code="toutiao",
+        base_url="https://example.com/toutiao",
+        category_id=category.id,
+        is_active=1,
+    )
+    session.add(toutiao)
+    session.flush()
+
+    social_info = Info(
+        title="某地山火救援进展",
+        content="网友持续讨论现场视频，相关话题热度升高。",
+        category_id=category.id,
+        channel_id=weibo.id,
+        channel=weibo,
+        source_id="weibo-fire-social",
+        source_url="https://example.com/weibo-fire-social",
+        event_time=datetime(2026, 5, 15, 8, 0, 0),
+        detail_fetch_status="complete",
+        detail_score=88,
+        detail_content_length=24,
+    )
+    fact_info = Info(
+        title="某地山火救援进展 官方通报",
+        content="当地应急部门通报山火救援进展，消防力量正在处置，起火原因仍在调查。",
+        category_id=category.id,
+        channel_id=toutiao.id,
+        channel=toutiao,
+        source_id="toutiao-fire-fact",
+        source_url="https://example.com/toutiao-fire-fact",
+        event_time=datetime(2026, 5, 15, 8, 5, 0),
+        detail_fetch_status="complete",
+        detail_score=92,
+        detail_content_length=39,
+    )
+    event = Event(
+        title="某地山火救援进展",
+        one_line_summary="某地山火救援进展正在被讨论。",
+        primary_category_id=category.id,
+        status="monitoring",
+        source_count=1,
+    )
+    session.add_all([social_info, fact_info, event])
+    session.flush()
+    session.add(EventItemLink(event_id=event.id, item_id=social_info.id, role="primary", is_primary=1, weight=30))
+    run = EventAnalysisRun(
+        event_id=event.id,
+        analysis_version="v1",
+        mode="rule",
+        provider="rule",
+        status="succeeded",
+        input_item_count=1,
+        quality_score=72,
+        confidence=0.65,
+        fallback_used=0,
+        started_at=datetime(2026, 5, 15, 8, 1, 0),
+        finished_at=datetime(2026, 5, 15, 8, 1, 1),
+    )
+    session.add(run)
+    session.commit()
+
+    result = link_secondary_fact_sources_for_social_events(session, limit=10)
+    session.refresh(event)
+    session.refresh(run)
+
+    assert result["linked_count"] == 1
+    assert event.source_count == 2
+    assert event.status == "active"
+    assert run.status == "stale"
+    assert run.failure_reason == "fact_source_linked_for_source_quality_governance"
+    linked_info_ids = {
+        item_id
+        for (item_id,) in session.query(EventItemLink.item_id).filter(EventItemLink.event_id == event.id).all()
+    }
+    assert linked_info_ids == {social_info.id, fact_info.id}
+
+
+def test_link_secondary_fact_sources_for_social_events_ignores_unrelated_fact_source(session):
+    category, weibo = _seed_category_channel(session, "weibo")
+    toutiao = Channel(name="今日头条", code="toutiao", category_id=category.id, is_active=1)
+    session.add(toutiao)
+    session.flush()
+
+    social_info = Info(
+        title="某地山火救援进展",
+        content="网友持续讨论现场视频，相关话题热度升高。",
+        category_id=category.id,
+        channel_id=weibo.id,
+        channel=weibo,
+        source_id="weibo-fire-social-unmatched",
+        source_url="https://example.com/weibo-fire-social-unmatched",
+        detail_fetch_status="complete",
+        detail_score=88,
+        detail_content_length=24,
+    )
+    unrelated_fact = Info(
+        title="某公司发布新款手机",
+        content="某公司发布新款手机，包含配置、价格和上市计划。",
+        category_id=category.id,
+        channel_id=toutiao.id,
+        channel=toutiao,
+        source_id="toutiao-phone",
+        source_url="https://example.com/toutiao-phone",
+        detail_fetch_status="complete",
+        detail_score=92,
+        detail_content_length=30,
+    )
+    event = Event(
+        title="某地山火救援进展",
+        one_line_summary="某地山火救援进展正在被讨论。",
+        primary_category_id=category.id,
+        status="monitoring",
+        source_count=1,
+    )
+    session.add_all([social_info, unrelated_fact, event])
+    session.flush()
+    session.add(EventItemLink(event_id=event.id, item_id=social_info.id, role="primary", is_primary=1, weight=30))
+    session.commit()
+
+    result = link_secondary_fact_sources_for_social_events(session, limit=10)
+
+    assert result["linked_count"] == 0
+    assert session.query(EventItemLink).filter(EventItemLink.event_id == event.id).count() == 1

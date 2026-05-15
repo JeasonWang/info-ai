@@ -71,6 +71,10 @@ func (r *RedisActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context, 
 	return r.submitAsync(ctx, "enqueue_event_analysis_detail_jobs", map[string]any{"limit": limit}, "事件分析弱来源已提交处理")
 }
 
+func (r *RedisActionRunner) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	return r.submitAsync(ctx, "prioritize_source_quality_governance", map[string]any{"limit": limit}, "来源质量风险已提交优先治理")
+}
+
 func (r *RedisActionRunner) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
 	return r.submitAsync(ctx, "rebuild_stale_event_analysis", map[string]any{"limit": limit}, "过期事件分析已提交处理")
 }

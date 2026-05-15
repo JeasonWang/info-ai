@@ -186,7 +186,10 @@ class WeiboCrawler(BaseCrawler):
         if topic_search:
             candidates.append(topic_search)
             topic_result = self._run_detail_pipeline(item, candidates)
-            if self._is_good_enough_without_mobile_search(topic_result):
+            if self._is_good_enough_without_mobile_search(
+                topic_result,
+                require_rich_partial=bool(self._get_weibo_cookie()),
+            ):
                 return topic_result
 
         # 登录态可用时，移动搜索通常能拿到多条真实微博正文，比热榜上下文更有分析价值。
@@ -224,8 +227,14 @@ class WeiboCrawler(BaseCrawler):
             channel_code=self.channel_code,
         )
 
-    def _is_good_enough_without_mobile_search(self, result) -> bool:
-        return result.status in {"complete", "partial"}
+    def _is_good_enough_without_mobile_search(self, result, require_rich_partial: bool = False) -> bool:
+        if result.status == "complete":
+            return True
+        if result.status != "partial":
+            return False
+        if not require_rich_partial:
+            return True
+        return result.score >= 70 and result.content_length >= 120
 
     def _clean_weibo_text(self, text: str) -> str:
         """清洗微博正文文本，去掉标签和多余空白。"""

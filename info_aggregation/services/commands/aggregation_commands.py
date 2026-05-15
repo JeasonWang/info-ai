@@ -20,6 +20,7 @@ from services import (
     archive_low_quality_infos,
     enqueue_event_analysis_detail_jobs,
     mark_low_confidence_complete_events_stale,
+    prioritize_source_quality_governance,
     rebuild_events,
     rebuild_stale_event_analysis,
     refresh_info_semantics,
@@ -42,6 +43,7 @@ class AggregationCommandHandler:
             "refresh_quality": self.refresh_quality,
             "retry_low_quality_details": self.retry_low_quality_details,
             "enqueue_event_analysis_detail_jobs": self.enqueue_event_analysis_detail_jobs,
+            "prioritize_source_quality_governance": self.prioritize_source_quality_governance,
             "mark_low_confidence_event_analysis_stale": self.mark_low_confidence_event_analysis_stale,
             "rebuild_stale_event_analysis": self.rebuild_stale_event_analysis,
             "archive_low_quality": self.archive_low_quality,
@@ -169,6 +171,14 @@ class AggregationCommandHandler:
         session = get_session()
         try:
             return enqueue_event_analysis_detail_jobs(session, limit=limit)
+        finally:
+            session.close()
+
+    def prioritize_source_quality_governance(self, payload: dict[str, Any]) -> dict[str, Any]:
+        limit = _bounded_int(payload.get("limit"), default=20, minimum=1, maximum=100)
+        session = get_session()
+        try:
+            return prioritize_source_quality_governance(session, limit=limit)
         finally:
             session.close()
 

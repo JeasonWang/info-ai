@@ -89,6 +89,72 @@ def test_event_analysis_quality_report_surfaces_missing_analysis(session):
     assert report["risk_events"][0]["next_action"] == "执行事件重建或分析补偿"
 
 
+def test_event_analysis_quality_report_does_not_treat_minor_weak_tail_as_event_risk(session):
+    category = Category(name="国际", code="international")
+    weak_channel = Channel(name="微博", code="weibo", category_rel=category)
+    good_channel = Channel(name="路透社", code="reuters", category_rel=category)
+    session.add_all([category, weak_channel, good_channel])
+    session.flush()
+
+    weak_info = Info(
+        title="OpenAI chief Altman to take stand",
+        content="短",
+        category_id=category.id,
+        channel_id=weak_channel.id,
+        source_id="openai-weak",
+        source_url="https://example.com/openai-weak",
+        detail_fetch_status="pending",
+        detail_score=10,
+        detail_content_length=2,
+    )
+    good_info = Info(
+        title="OpenAI chief Altman to take stand",
+        content="Reuters 完整披露 OpenAI 相关审理进展，包含主体、时间和主要争议。" * 6,
+        category_id=category.id,
+        channel_id=good_channel.id,
+        source_id="openai-good",
+        source_url="https://example.com/openai-good",
+        detail_fetch_status="complete",
+        detail_score=92,
+        detail_content_length=288,
+    )
+    event = Event(
+        title="OpenAI chief Altman to take stand",
+        one_line_summary="OpenAI 相关审理进展已有完整来源支撑。",
+        primary_category_id=category.id,
+        status="active",
+        source_count=2,
+    )
+    session.add_all([weak_info, good_info, event])
+    session.flush()
+    session.add_all(
+        [
+            EventItemLink(event_id=event.id, item_id=weak_info.id, role="social", is_primary=0, weight=10),
+            EventItemLink(event_id=event.id, item_id=good_info.id, role="media", is_primary=1, weight=90),
+            EventAnalysisRun(
+                event_id=event.id,
+                analysis_version="v1",
+                mode="rule",
+                provider="rule",
+                status="succeeded",
+                input_item_count=2,
+                quality_score=98,
+                confidence=0.62,
+                fallback_used=0,
+                started_at=datetime(2026, 5, 15, 10, 0, 0),
+                finished_at=datetime(2026, 5, 15, 10, 0, 1),
+            ),
+        ]
+    )
+    session.commit()
+
+    report = build_event_analysis_quality_report(session, limit=10)
+
+    assert report["summary"]["weak_source_event_count"] == 1
+    assert report["summary"]["risk_event_count"] == 0
+    assert report["risk_events"] == []
+
+
 def test_event_analysis_quality_report_surfaces_display_quality_blocks(session):
     category = Category(name="热点事件", code="hot")
     session.add(category)

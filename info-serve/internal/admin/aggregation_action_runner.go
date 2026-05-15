@@ -75,6 +75,17 @@ func (r *AggregationActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Con
 	return r.post(ctx, "event_analysis_detail_jobs", path)
 }
 
+func (r *AggregationActionRunner) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	path := fmt.Sprintf("/api/admin/prioritize-source-quality-governance?limit=%d", limit)
+	return r.post(ctx, "prioritize_weak_source_governance", path)
+}
+
 func (r *AggregationActionRunner) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
 	if limit < 1 {
 		limit = 200

@@ -80,6 +80,28 @@ def test_credential_provider_reads_and_clears_database_credentials(monkeypatch, 
     assert provider.get_channel_credential_info("weibo").cookie_configured is False
 
 
+def test_get_credential_reads_database_credentials_by_default(monkeypatch, session):
+    from services.collection import credential_provider
+
+    monkeypatch.delenv("WEIBO_COOKIE", raising=False)
+    category = Category(name="热点事件", code="hot", description="热点")
+    session.add(category)
+    session.flush()
+    session.add(
+        Channel(
+            name="微博",
+            code="weibo",
+            base_url="https://weibo.com",
+            category_id=category.id,
+            cookies='{"cookie": "db-cookie", "status": "active"}',
+            is_active=1,
+        )
+    )
+    session.commit()
+
+    assert credential_provider.get_credential("WEIBO_COOKIE") == "db-cookie"
+
+
 def test_credential_provider_prefers_database_over_legacy_env(monkeypatch, session):
     monkeypatch.setenv("WEIBO_COOKIE", "env-cookie")
     category = Category(name="热点事件", code="hot", description="热点")

@@ -34,9 +34,10 @@ from services import (
 	build_credential_report,
 	build_data_quality_report,
 	build_event_analysis_quality_report,
-	enqueue_event_analysis_detail_jobs,
-	mark_low_confidence_complete_events_stale,
-	rebuild_stale_event_analysis,
+    enqueue_event_analysis_detail_jobs,
+    mark_low_confidence_complete_events_stale,
+    prioritize_source_quality_governance,
+    rebuild_stale_event_analysis,
 	create_llm_model_config,
 	list_llm_model_configs,
 	rebuild_events,
@@ -1270,6 +1271,23 @@ def admin_enqueue_event_analysis_detail_jobs(
         return {
             "code": 0,
             "message": "事件分析弱来源已加入详情补偿队列",
+            "data": result,
+        }
+    finally:
+        session.close()
+
+
+@public_api_route("post", "/api/admin/prioritize-source-quality-governance")
+def admin_prioritize_source_quality_governance(
+    limit: int = Query(20, ge=1, le=100, description="本次最多治理的风险来源数量"),
+):
+    """一键治理来源质量风险：定向补偿弱来源、补事实源、重分析并刷新展示质量。"""
+    session = get_session()
+    try:
+        result = prioritize_source_quality_governance(session, limit=limit)
+        return {
+            "code": 0,
+            "message": "来源质量风险已完成优先治理",
             "data": result,
         }
     finally:

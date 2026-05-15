@@ -34,7 +34,25 @@ def _weak_source_count(infos: list[Info]) -> int:
     return sum(1 for info in infos if build_acquisition_quality_profile(info).needs_attention)
 
 
-def _issue_reasons(event: Event, run: EventAnalysisRun | None, weak_count: int) -> list[str]:
+def _source_quality_is_actionable(infos: list[Info], weak_count: int) -> bool:
+    if weak_count <= 0:
+        return False
+    source_count = len({info.id for info in infos if info.id}) or len(infos)
+    usable_count = 0
+    complete_count = 0
+    for info in infos:
+        profile = build_acquisition_quality_profile(info)
+        if profile.usable or ((info.detail_fetch_status or "") in {"complete", "partial"} and (info.detail_score or 0) >= 60):
+            usable_count += 1
+        if profile.status == "complete" or ((info.detail_fetch_status or "") == "complete" and (info.detail_score or 0) >= 70):
+            complete_count += 1
+    weak_ratio = weak_count / max(source_count, 1)
+    if complete_count == 0 or usable_count == 0:
+        return True
+    return weak_count >= 2 and weak_ratio >= 0.5
+
+
+def _issue_reasons(event: Event, run: EventAnalysisRun | None, weak_count: int, source_quality_risk: bool) -> list[str]:
     reasons: list[str] = []
     if run is None:
         return ["missing_analysis"]
@@ -46,7 +64,7 @@ def _issue_reasons(event: Event, run: EventAnalysisRun | None, weak_count: int) 
         reasons.append("low_quality_score")
     if run.fallback_used:
         reasons.append("fallback_used")
-    if weak_count:
+    if source_quality_risk:
         reasons.append("weak_sources")
     if not (event.one_line_summary or "").strip():
         reasons.append("empty_one_line_summary")
@@ -185,7 +203,8 @@ def build_event_analysis_quality_report(session, limit: int = 20) -> dict:
         run = latest_runs.get(event.id)
         infos = linked_infos.get(event.id, [])
         weak_count = _weak_source_count(infos)
-        reasons = _issue_reasons(event, run, weak_count)
+        source_quality_risk = _source_quality_is_actionable(infos, weak_count)
+        reasons = _issue_reasons(event, run, weak_count, source_quality_risk)
 
         if run is None:
             missing_analysis_count += 1

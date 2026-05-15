@@ -650,7 +650,7 @@ class CredentialProvider:
 
 def get_credential(name: str) -> str:
     """便捷函数：获取单个凭证值。"""
-    provider = CredentialProvider.get_instance()
+    provider = CredentialProvider.get_instance(session_factory=_default_session_factory())
     return provider.get(name)
 
 

@@ -368,7 +368,51 @@ func displayOneLineSummary(title string, summary string, categoryCode string, so
 	if categoryCode == "international" || hasSourceBadge(sourceBadges, "路透社") {
 		prefix = "路透社披露"
 	}
-	return ensureSentence(prefix + "「" + truncateRunes(cleanTitle, 48) + "」，仍需结合后续可靠来源持续跟进")
+	return ensureSentence(prefix + "「" + titleSnippetForSummary(cleanTitle, 48) + "」，仍需结合后续可靠来源持续跟进")
+}
+
+func titleSnippetForSummary(title string, limit int) string {
+	cleanTitle := strings.TrimSpace(title)
+	runes := []rune(cleanTitle)
+	if limit <= 0 || len(runes) <= limit {
+		return cleanTitle
+	}
+	snippet := strings.TrimSpace(string(runes[:limit]))
+	if isMostlyASCII(snippet) {
+		if cutsASCIIWord(runes, limit) {
+			snippet = dropLastField(snippet)
+		}
+		trimmed := trimTruncatedTitleTail(snippet)
+		if trimmed != "" {
+			snippet = trimmed
+		}
+	} else {
+		snippet = strings.TrimRight(snippet, "，,、：:；;的了和与及在")
+	}
+	snippet = strings.TrimSuffix(strings.TrimSpace(snippet), "...")
+	if snippet == "" {
+		return cleanTitle
+	}
+	return snippet + "..."
+}
+
+func cutsASCIIWord(runes []rune, limit int) bool {
+	if limit <= 0 || limit >= len(runes) {
+		return false
+	}
+	return isASCIIWordRune(runes[limit-1]) && isASCIIWordRune(runes[limit])
+}
+
+func isASCIIWordRune(char rune) bool {
+	return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '\''
+}
+
+func dropLastField(text string) string {
+	fields := strings.Fields(strings.TrimSpace(text))
+	if len(fields) <= 1 {
+		return strings.TrimSpace(text)
+	}
+	return strings.Join(fields[:len(fields)-1], " ")
 }
 
 func isWeakDisplaySummary(summary string, title string) bool {

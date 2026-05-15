@@ -160,6 +160,23 @@ def test_toutiao_profile_accepts_data_rich_event_context():
     assert "low_channel_value_density" not in result.matched_rules
 
 
+def test_toutiao_profile_accepts_compact_media_context():
+    result = run_detail_pipeline(
+        title="媒体：别让高价彩礼绊住婚姻幸福",
+        list_content="列表摘要",
+        strategy_results=[
+            DetailStrategyResult(
+                strategy="rendered_page",
+                content="媒体：别让高价彩礼绊住婚姻幸福。多地围绕彩礼、婚姻成本和移风易俗出台倡议，基层部门提醒理性消费。",
+            )
+        ],
+        channel_code="toutiao",
+    )
+
+    assert result.status == "complete"
+    assert result.score >= 80
+
+
 def test_zhihu_profile_accepts_financial_analysis_context():
     result = run_detail_pipeline(
         title="五粮液 2026年Q1净利同比大增82.57%，如何解读？",

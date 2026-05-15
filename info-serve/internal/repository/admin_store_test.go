@@ -51,6 +51,31 @@ func TestEventAnalysisActionAdvicePrioritizesWeakSources(t *testing.T) {
 	}
 }
 
+func TestEventAnalysisIssueReasonsIgnoreMinorWeakTail(t *testing.T) {
+	reasons := eventAnalysisIssueReasons(true, "succeeded", "", 98, 0.72, false, 2, 1, "已有完整来源支撑。")
+
+	for _, reason := range reasons {
+		if reason == "weak_sources" {
+			t.Fatalf("reasons = %+v, want minor weak tail ignored", reasons)
+		}
+	}
+}
+
+func TestEventAnalysisIssueReasonsKeepHighWeakRatioRisk(t *testing.T) {
+	reasons := eventAnalysisIssueReasons(true, "succeeded", "", 98, 0.72, false, 6, 5, "已有多平台讨论。")
+
+	found := false
+	for _, reason := range reasons {
+		if reason == "weak_sources" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("reasons = %+v, want weak_sources", reasons)
+	}
+}
+
 func TestDisplayQualityActionAdvicePrioritizesSingleWeakSource(t *testing.T) {
 	advice := displayQualityActionAdvice([]string{"single_weak_source", "low_value_content"})
 

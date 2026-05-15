@@ -40,6 +40,12 @@ func (r *fakeActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context, l
 	return ActionResult{Action: r.action, Message: "已入队事件分析弱来源", Data: map[string]any{"limit": limit}}, nil
 }
 
+func (r *fakeActionRunner) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "prioritize_weak_source_governance"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已优先治理弱来源", Data: map[string]any{"limit": limit}}, nil
+}
+
 func (r *fakeActionRunner) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
 	r.action = "rebuild_stale_event_analysis"
 	r.limit = limit

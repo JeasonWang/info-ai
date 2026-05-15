@@ -94,7 +94,7 @@ DEFAULT_DETAIL_PROFILE = ChannelDetailProfile(
 
 CHANNEL_DETAIL_PROFILES = {
     "weibo": ChannelDetailProfile("weibo", "hot_topic", 80, 30, 180, value_markers=("热搜", "话题", "回应", "通报", "讨论")),
-    "toutiao": ChannelDetailProfile("toutiao", "hot_topic", 120, 50, 300, value_markers=("热点", "事件", "回应", "通报", "原因", "数据", "交通", "出行", "游客", "比赛", "小组赛", "选手", "冠军", "夺冠", "去世", "影响", "提醒")),
+    "toutiao": ChannelDetailProfile("toutiao", "hot_topic", 45, 35, 180, value_markers=("热点", "事件", "回应", "通报", "原因", "数据", "交通", "出行", "游客", "比赛", "小组赛", "选手", "冠军", "夺冠", "去世", "影响", "提醒", "媒体", "价格", "消费", "市场", "旅游", "退款", "彩礼", "婚姻", "政策")),
     "zhihu": ChannelDetailProfile("zhihu", "qa", 150, 20, 600, value_markers=("回答", "问题", "观点", "认为", "讨论", "如何", "解读", "报告", "数据", "同比", "分析", "影响", "事件")),
     "xiaohongshu": ChannelDetailProfile("xiaohongshu", "social_note", 120, 20, 260, value_markers=("笔记", "体验", "分享", "建议")),
     "cnblogs": ChannelDetailProfile("cnblogs", "article", 500, 20, 1000, paragraph_min_count=2, value_markers=("代码", "实现", "架构", "配置", "问题", "方案")),

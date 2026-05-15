@@ -286,6 +286,42 @@ def test_weibo_with_cookie_prefers_richer_mobile_search_over_hot_band(monkeypatc
     assert "最后弯道完成超越" in result.content
 
 
+def test_weibo_with_cookie_continues_after_short_topic_partial(monkeypatch):
+    monkeypatch.setenv("WEIBO_COOKIE", "SUB=session-token")
+    crawler = WeiboCrawler()
+
+    def fake_fetch_json(url, headers=None):
+        if "ajax/search/topic" in url:
+            return {"data": {"statuses": [{"text": "OpenAI 发布新模型，讨论继续。"}]}}
+        if "m.weibo.cn/api/container/getIndex" in url:
+            return {
+                "data": {
+                    "cards": [
+                        {"mblog": {"text": "OpenAI 发布新模型，发布会重点包括推理能力、价格方案、API 接入计划和企业部署节奏。"}},
+                        {"mblog": {"text": "开发者继续补充上下文长度、工具调用、成本变化和开放时间表等细节。"}},
+                    ]
+                }
+            }
+        if "ajax/statuses/hot_band" in url:
+            return {"data": {"band_list": []}}
+        return {}
+
+    crawler.fetch_json = fake_fetch_json
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("should not hit web fallback"))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "OpenAI 发布新模型",
+            "content": "列表摘要",
+            "source_url": "https://s.weibo.com/weibo?q=%23OpenAI 发布新模型%23",
+        }
+    )
+
+    assert result.strategy == "mobile_search"
+    assert result.status in {"complete", "partial"}
+    assert "企业部署节奏" in result.content
+
+
 def test_weibo_web_fallback_rejects_template_shell():
     crawler = WeiboCrawler()
 

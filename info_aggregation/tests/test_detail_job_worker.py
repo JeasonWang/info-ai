@@ -1,5 +1,6 @@
 from database import Category, Channel, DetailJob, Info
 from crawlers.registry import crawler_registry
+from services.collection import detail_job_worker
 from services.collection.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
 from services.collection.detail_pipeline import DetailPipelineResult
 
@@ -142,6 +143,35 @@ def test_crawler_detail_runner_uses_registered_crawler(session):
     assert result.status == "complete"
     assert result.strategy == "fake_crawler"
     assert result.score == 91
+
+
+def test_crawler_detail_runner_bootstraps_registry_when_empty(session, monkeypatch):
+    info_id, _ = _seed_detail_job(session)
+    original_crawlers = crawler_registry._crawlers.copy()
+    original_locks = crawler_registry._locks.copy()
+    crawler_registry._crawlers.clear()
+    crawler_registry._locks.clear()
+    detail_job_worker._CRAWLER_REGISTRY_BOOTSTRAPPED = False
+
+    def fake_register_all_crawlers():
+        crawler_registry.register("36kr", FakeCrawler())
+
+    monkeypatch.setattr(
+        "application.crawler_bootstrap.register_all_crawlers",
+        fake_register_all_crawlers,
+    )
+
+    try:
+        result = crawler_detail_runner(session.get(Info, info_id))
+    finally:
+        crawler_registry._crawlers.clear()
+        crawler_registry._crawlers.update(original_crawlers)
+        crawler_registry._locks.clear()
+        crawler_registry._locks.update(original_locks)
+        detail_job_worker._CRAWLER_REGISTRY_BOOTSTRAPPED = False
+
+    assert result.status == "complete"
+    assert result.strategy == "fake_crawler"
 
 
 class FailingCrawler:

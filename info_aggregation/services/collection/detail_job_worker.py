@@ -25,6 +25,27 @@ STRICT_DETAIL_STRATEGY_HINTS = {
 }
 
 
+_CRAWLER_REGISTRY_BOOTSTRAPPED = False
+
+
+def _ensure_crawler_registry_bootstrapped() -> None:
+    """详情补偿 worker 可能由命令入口直接调用，需要自愈式注册爬虫。"""
+
+    global _CRAWLER_REGISTRY_BOOTSTRAPPED
+    if crawler_registry.list_channels():
+        _CRAWLER_REGISTRY_BOOTSTRAPPED = True
+        return
+    if _CRAWLER_REGISTRY_BOOTSTRAPPED:
+        return
+    try:
+        from application.crawler_bootstrap import register_all_crawlers
+
+        register_all_crawlers()
+        _CRAWLER_REGISTRY_BOOTSTRAPPED = True
+    except Exception:
+        _CRAWLER_REGISTRY_BOOTSTRAPPED = False
+
+
 def _mark_strategy_hint(result: DetailPipelineResult, strategy_hint: str) -> DetailPipelineResult:
     if strategy_hint and f"strategy_hint:{strategy_hint}" not in result.matched_rules:
         result.matched_rules.append(f"strategy_hint:{strategy_hint}")
@@ -85,6 +106,7 @@ def crawler_detail_runner(
     if diagnostic_result:
         return diagnostic_result
 
+    _ensure_crawler_registry_bootstrapped()
     crawler = crawler_registry.get(channel_code)
     if not crawler:
         return _mark_strategy_hint(

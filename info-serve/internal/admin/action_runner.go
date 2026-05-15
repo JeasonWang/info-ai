@@ -13,6 +13,7 @@ type ActionResult struct {
 type ActionRunner interface {
 	TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error)
 	EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error)
+	PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error)
 	RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error)
 	RebuildEvents(ctx context.Context) (ActionResult, error)
 	RefreshQuality(ctx context.Context) (ActionResult, error)
@@ -76,6 +77,14 @@ func (r *MemoryActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context,
 		Action:  "event_analysis_detail_jobs",
 		Message: "本地测试模式已模拟入队事件分析弱来源",
 		Data:    map[string]any{"limit": limit, "created_count": 0, "skipped_count": 0},
+	}, nil
+}
+
+func (r *MemoryActionRunner) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	return ActionResult{
+		Action:  "prioritize_weak_source_governance",
+		Message: "本地测试模式已模拟优先治理弱来源事件",
+		Data:    map[string]any{"limit": limit, "enqueue": map[string]any{}, "process": map[string]any{}, "fact_source": map[string]any{}},
 	}, nil
 }
 

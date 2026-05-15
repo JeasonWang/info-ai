@@ -863,7 +863,7 @@ func scanEventAnalysisQualityRow(rows *sql.Rows) (map[string]any, []string, erro
 	); err != nil {
 		return nil, nil, err
 	}
-	reasons := eventAnalysisIssueReasons(runID.Valid, status.String, failureReason.String, qualityScore.Float64, confidence.Float64, fallbackUsed.Int64 == 1, weakSourceCount, oneLineSummary)
+	reasons := eventAnalysisIssueReasons(runID.Valid, status.String, failureReason.String, qualityScore.Float64, confidence.Float64, fallbackUsed.Int64 == 1, sourceCount, weakSourceCount, oneLineSummary)
 	riskScore := eventAnalysisRiskScore(runID.Valid, qualityScore.Float64, confidence.Float64, fallbackUsed.Int64 == 1, status.String, weakSourceCount, reasons)
 	row := map[string]any{
 		"event_id":          eventID,
@@ -952,7 +952,7 @@ func displayQualityActionAdvice(reasons []string) map[string]any {
 	return map[string]any{"primary_issue": "展示质量不足", "next_action": "补充证据后刷新展示质量"}
 }
 
-func eventAnalysisIssueReasons(hasRun bool, status string, failureReason string, qualityScore float64, confidence float64, fallbackUsed bool, weakSourceCount int, oneLineSummary string) []string {
+func eventAnalysisIssueReasons(hasRun bool, status string, failureReason string, qualityScore float64, confidence float64, fallbackUsed bool, sourceCount int, weakSourceCount int, oneLineSummary string) []string {
 	if !hasRun {
 		return []string{"missing_analysis"}
 	}
@@ -969,13 +969,23 @@ func eventAnalysisIssueReasons(hasRun bool, status string, failureReason string,
 	if fallbackUsed {
 		reasons = append(reasons, "fallback_used")
 	}
-	if weakSourceCount > 0 {
+	if actionableWeakSourceRisk(sourceCount, weakSourceCount) {
 		reasons = append(reasons, "weak_sources")
 	}
 	if strings.TrimSpace(oneLineSummary) == "" {
 		reasons = append(reasons, "empty_one_line_summary")
 	}
 	return reasons
+}
+
+func actionableWeakSourceRisk(sourceCount int, weakSourceCount int) bool {
+	if weakSourceCount <= 0 {
+		return false
+	}
+	if sourceCount <= 1 {
+		return true
+	}
+	return weakSourceCount >= 2 && weakSourceCount*2 >= sourceCount
 }
 
 func eventAnalysisGovernanceAdvice(reasons []string, weakSourceCount int) []string {
@@ -1006,7 +1016,13 @@ func eventAnalysisRiskScore(hasRun bool, qualityScore float64, confidence float6
 	}
 	score := maxFloat(0, 60-qualityScore)
 	score += maxFloat(0, 0.6-confidence) * 100
-	score += minFloat(30, float64(weakSourceCount)*12)
+	for _, reason := range reasons {
+		if reason != "weak_sources" {
+			continue
+		}
+		score += minFloat(30, float64(weakSourceCount)*12)
+		break
+	}
 	if fallbackUsed {
 		score += 15
 	}

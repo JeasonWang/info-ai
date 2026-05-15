@@ -158,6 +158,72 @@ func TestServiceNormalizesTruncatedEnglishTitles(t *testing.T) {
 	}
 }
 
+func TestServiceUsesWordSafeEnglishTitleSnippetInFallbackSummary(t *testing.T) {
+	service := NewService(fakeEventStore{listResult: EventPage{
+		Total:    1,
+		Page:     1,
+		PageSize: 10,
+		Items: []EventListItem{
+			{
+				ID:             14,
+				Title:          "Trump and Xi set for second day of talks after Taiwan warning",
+				OneLineSummary: "Reuters category: world. Reuters Published at 2026-05-14T07:00:58.011Z according to its official news sitemap.",
+				PrimaryCategory: CategoryBrief{
+					Code: "international",
+					Name: "国际大事",
+				},
+				SourceBadges: []string{"路透社"},
+			},
+		},
+	}})
+
+	page, err := service.ListEvents(context.Background(), ListEventsParams{Page: 1, PageSize: 10})
+
+	if err != nil {
+		t.Fatalf("ListEvents returned error: %v", err)
+	}
+	summary := page.Items[0].OneLineSummary
+	if strings.Contains(summary, "after T") {
+		t.Fatalf("summary still cuts an English word: %q", summary)
+	}
+	if !strings.Contains(summary, "talks...") {
+		t.Fatalf("summary = %q, want word-safe title ellipsis", summary)
+	}
+}
+
+func TestServiceDoesNotKeepPartiallyCutLongEnglishWordInFallbackSummary(t *testing.T) {
+	service := NewService(fakeEventStore{listResult: EventPage{
+		Total:    1,
+		Page:     1,
+		PageSize: 10,
+		Items: []EventListItem{
+			{
+				ID:             15,
+				Title:          "Japan considering missile exports to the Philippines, NHK reports",
+				OneLineSummary: "Reuters category: world. Reuters Published at 2026-05-14T07:00:58.011Z according to its official news sitemap.",
+				PrimaryCategory: CategoryBrief{
+					Code: "international",
+					Name: "国际大事",
+				},
+				SourceBadges: []string{"路透社"},
+			},
+		},
+	}})
+
+	page, err := service.ListEvents(context.Background(), ListEventsParams{Page: 1, PageSize: 10})
+
+	if err != nil {
+		t.Fatalf("ListEvents returned error: %v", err)
+	}
+	summary := page.Items[0].OneLineSummary
+	if strings.Contains(summary, "Philipp") {
+		t.Fatalf("summary still keeps a partially cut English word: %q", summary)
+	}
+	if !strings.Contains(summary, "exports...") {
+		t.Fatalf("summary = %q, want fallback to previous complete word", summary)
+	}
+}
+
 func TestServiceNormalizesTruncatedChineseTitles(t *testing.T) {
 	service := NewService(fakeEventStore{detailResult: EventDetail{
 		Event: EventCore{
