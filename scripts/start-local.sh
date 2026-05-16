@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 # 一键启动本地四个服务。
 # 注意：本脚本不启动 MySQL、不启动 Docker；默认使用本机 MySQL 3306。
+# 某个服务启动失败不会阻断其他服务，最终会汇总报告所有失败项。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/logs/local"
 mkdir -p "$LOG_DIR"
+
+FAILED_SERVICES=()
 
 MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
@@ -69,7 +72,7 @@ start_service() {
   shift 2
 
   log_step "启动 $name"
-  "$ROOT_DIR/info_aggregation/.venv/bin/python" - "$workdir" "$LOG_DIR/$name.log" "$LOG_DIR/$name.pid" "$@" <<'PY'
+  if ! "$ROOT_DIR/info_aggregation/.venv/bin/python" - "$workdir" "$LOG_DIR/$name.log" "$LOG_DIR/$name.pid" "$@" <<'PY'
 import subprocess
 import sys
 
@@ -89,9 +92,14 @@ process = subprocess.Popen(
 with open(pid_path, "w", encoding="utf-8") as pid_file:
     pid_file.write(str(process.pid))
 PY
+  then
+    echo "⚠ $name 启动失败，跳过。详情见日志: ${LOG_DIR}/${name}.log" >&2
+    FAILED_SERVICES+=("$name")
+    return 1
+  fi
 
   local pid
-  pid="$(tr -d '[:space:]' <"$LOG_DIR/$name.pid")"
+  pid="$(tr -d '[:space:]' <"$LOG_DIR/$name.pid" 2>/dev/null || echo "?")"
   echo "${name} 已启动，PID: ${pid}，日志: ${LOG_DIR}/${name}.log"
 }
 
@@ -108,6 +116,42 @@ wait_for_url() {
     sleep 1
   done
   echo "警告: $name 暂未就绪，请查看日志。" >&2
+}
+
+print_summary() {
+  local exit_code=0
+
+  if [[ ${#FAILED_SERVICES[@]} -gt 0 ]]; then
+    echo
+    echo "==> 以下服务启动失败:"
+    for svc in "${FAILED_SERVICES[@]}"; do
+      echo "  ✗ $svc"
+    done
+    exit_code=1
+  fi
+
+  cat <<EOF
+
+本地服务启动完成。
+
+MySQL:   ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}
+Redis:   ${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}
+采集 API: http://localhost:${AGGREGATION_PORT}
+业务 API: http://localhost:${INFO_SERVE_PORT}
+管理端:   http://localhost:${INFO_ADMIN_PORT}
+h5端:  http://localhost:${INFO_MVP_PORT}
+
+日志目录: $LOG_DIR
+关闭服务: ./scripts/stop-local.sh
+
+建议验收入口:
+  采集健康: curl http://localhost:${AGGREGATION_PORT}/health
+  业务健康: curl http://localhost:${INFO_SERVE_PORT}/health
+  后台质量: http://localhost:${INFO_ADMIN_PORT}/data-quality/report
+  用户首页: http://localhost:${INFO_MVP_PORT}
+EOF
+
+  return $exit_code
 }
 
 log_step "检查依赖"
@@ -158,7 +202,7 @@ start_service "info_aggregation" "$ROOT_DIR/info_aggregation" env \
   AGGREGATION_COMMAND_CONSUMER_GROUP="$AGGREGATION_COMMAND_CONSUMER_GROUP" \
   AGGREGATION_COMMAND_CONSUMER_NAME="${AGGREGATION_COMMAND_CONSUMER_NAME:-}" \
   AGGREGATION_RESULT_TTL_SECONDS="${AGGREGATION_RESULT_TTL_SECONDS:-86400}" \
-  ./.venv/bin/python main.py
+  ./.venv/bin/python main.py || true
 
 start_service "info-serve" "$ROOT_DIR/info-serve" env \
   GOCACHE=/tmp/info-serve-go-build-cache \
@@ -173,15 +217,15 @@ start_service "info-serve" "$ROOT_DIR/info-serve" env \
   AGGREGATION_RESULT_WAIT_MS="${AGGREGATION_RESULT_WAIT_MS:-5000}" \
   AGGREGATION_HTTP_BASE_URL="${AGGREGATION_HTTP_BASE_URL:-http://127.0.0.1:${AGGREGATION_PORT}}" \
   AGGREGATION_LLM_TIMEOUT_MS="${AGGREGATION_LLM_TIMEOUT_MS:-240000}" \
-  go run ./cmd/server
+  go run ./cmd/server || true
 
 start_service "info-admin" "$ROOT_DIR/info-admin" env \
   VITE_API_BASE_URL="/api" \
-  npm run dev -- --host 127.0.0.1 --port "$INFO_ADMIN_PORT"
-  
+  npm run dev -- --host 127.0.0.1 --port "$INFO_ADMIN_PORT" || true
+
 start_service "info-mvp" "$ROOT_DIR/info-mvp" env \
   VITE_API_BASE_URL="/api" \
-  npm run dev:h5 -- --host 127.0.0.1 --port "$INFO_MVP_PORT"
+  npm run dev:h5 -- --host 127.0.0.1 --port "$INFO_MVP_PORT" || true
 
 log_step "等待服务就绪"
 wait_for_url "http://127.0.0.1:${AGGREGATION_PORT}/health" "采集 API"
@@ -189,23 +233,4 @@ wait_for_url "http://127.0.0.1:${INFO_SERVE_PORT}/health" "业务 API"
 wait_for_url "http://127.0.0.1:${INFO_ADMIN_PORT}/" "管理端"
 wait_for_url "http://127.0.0.1:${INFO_MVP_PORT}/" "h5端"
 
-cat <<EOF
-
-本地服务启动完成。
-
-MySQL:   ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}
-Redis:   ${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}
-采集 API: http://localhost:${AGGREGATION_PORT}
-业务 API: http://localhost:${INFO_SERVE_PORT}
-管理端:   http://localhost:${INFO_ADMIN_PORT}
-h5端:  http://localhost:${INFO_MVP_PORT}
-
-日志目录: $LOG_DIR
-关闭服务: ./scripts/stop-local.sh
-
-建议验收入口:
-  采集健康: curl http://localhost:${AGGREGATION_PORT}/health
-  业务健康: curl http://localhost:${INFO_SERVE_PORT}/health
-  后台质量: http://localhost:${INFO_ADMIN_PORT}/data-quality/report
-  用户首页: http://localhost:${INFO_MVP_PORT}
-EOF
+print_summary

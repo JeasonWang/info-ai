@@ -229,11 +229,37 @@ async function handleRetry() { await refresh() }
 async function handleLoadMoreRetry() { await loadMore() }
 
 let lastScrollTop = 0
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
-function handleScroll(scrollTop: number) {
-  showBackToTop.value = scrollTop > 200
-  dockVisible.value = !(scrollTop > 200 && scrollTop > lastScrollTop)
-  lastScrollTop = scrollTop
+function getScrollTop(): number {
+  if (typeof document === 'undefined') return 0
+  // Check multiple scroll sources - uni-app H5 may use various containers
+  const pageBody = document.querySelector('uni-page-body') as HTMLElement | null
+  const pageWrapper = document.querySelector('uni-page-wrapper') as HTMLElement | null
+  for (const el of [pageBody, pageWrapper]) {
+    if (el && el.scrollTop > 0) return el.scrollTop
+  }
+  return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0
+}
+
+function isNearBottom(): boolean {
+  if (typeof document === 'undefined') return false
+  const pageBody = document.querySelector('uni-page-body') as HTMLElement | null
+  if (pageBody && pageBody.clientHeight > 0) {
+    return pageBody.scrollHeight - pageBody.scrollTop - pageBody.clientHeight < 300
+  }
+  const scrollH = document.documentElement.scrollHeight || document.body.scrollHeight
+  return scrollH - getScrollTop() - window.innerHeight < 300
+}
+
+function syncScrollState() {
+  const y = getScrollTop()
+  showBackToTop.value = y > 200
+  dockVisible.value = !(y > 200 && y > lastScrollTop)
+  lastScrollTop = y
+  if (isNearBottom() && hasMore.value && !loading.value && events.value.length > 0) {
+    loadMore()
+  }
 }
 
 onLoad(async () => {
@@ -250,17 +276,20 @@ onPullDownRefresh(async () => {
 
 onReachBottom(() => { loadMore() })
 
-onPageScroll((e) => {
-  handleScroll(e.scrollTop)
-})
+onPageScroll(() => { syncScrollState() })
 
 onMounted(() => {
-  // #ifdef H5
-  window.addEventListener('scroll', () => {
-    const y = window.scrollY || document.documentElement.scrollTop || 0
-    handleScroll(y)
-  }, { passive: true })
-  // #endif
+  if (typeof window === 'undefined') return
+  // Primary: scroll events with capture phase
+  document.addEventListener('scroll', syncScrollState, { passive: true, capture: true })
+  // Fallback: polling every 300ms (guaranteed to work regardless of scroll event delivery)
+  pollTimer = setInterval(syncScrollState, 300)
+})
+
+onUnmounted(() => {
+  if (typeof window === 'undefined') return
+  document.removeEventListener('scroll', syncScrollState, { capture: true } as EventListenerOptions)
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 })
 
 watch(events, () => { loadSpotlightDetail() })
@@ -424,7 +453,7 @@ watch(events, () => { loadSpotlightDetail() })
     </view>
 
     <!-- Back to Top -->
-    <view v-show="showBackToTop" class="back-to-top" @click="scrollToTop">
+    <view v-if="showBackToTop" class="back-to-top" @click="scrollToTop">
       <view class="back-to-top-arrow" />
     </view>
 
@@ -657,20 +686,19 @@ watch(events, () => { loadSpotlightDetail() })
 
 /* Back to Top */
 .back-to-top {
-  position: fixed; right: 24rpx; bottom: 200rpx;
-  width: 80rpx; height: 80rpx; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.12);
+  position: fixed; right: 32rpx; bottom: 220rpx;
+  width: 88rpx; height: 88rpx; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.15);
   display: flex; align-items: center; justify-content: center;
   z-index: 999;
-  transition: opacity 0.3s, transform 0.3s;
 }
 .back-to-top:active { transform: scale(0.9); }
 .back-to-top-arrow {
-  width: 20rpx; height: 20rpx;
-  border-left: 4rpx solid var(--text-primary);
-  border-top: 4rpx solid var(--text-primary);
-  transform: rotate(45deg) translateY(4rpx);
+  width: 24rpx; height: 24rpx;
+  border-left: 5rpx solid #333;
+  border-top: 5rpx solid #333;
+  transform: rotate(45deg) translateY(6rpx);
 }
 
 /* Dock */
@@ -746,8 +774,8 @@ watch(events, () => { loadSpotlightDetail() })
   .filter-panel { margin: 10px 16px 0; padding: 14px; }
   .pill { padding: 6px 12px; font-size: 12px; }
 
-  .back-to-top { right: 16px; bottom: 100px; width: 40px; height: 40px; }
-  .back-to-top-arrow { width: 10px; height: 10px; border-width: 2px; }
+  .back-to-top { right: 20px; bottom: 110px; width: 44px; height: 44px; }
+  .back-to-top-arrow { width: 12px; height: 12px; border-width: 2.5px; }
 }
 
 /* #ifdef H5 */
