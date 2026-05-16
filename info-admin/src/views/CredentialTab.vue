@@ -241,52 +241,54 @@ function getStatusTone(status: string): 'success' | 'warning' | 'error' | 'muted
 
 <style scoped>
 .credential-tab {
-  padding: 16px;
+  padding: 0;
 }
 
 .credential-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .credential-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .channel-selector {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 13px;
 }
 
 .channel-selector select {
-  padding: 6px 12px;
-  border: 1px solid #dcdfe6;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .credential-content {
   background: #f5f7fa;
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 4px;
+  padding: 12px;
 }
 
 .credential-status {
-  background: white;
-  border-radius: 6px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
+  background: #fff;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
 }
 
 .status-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
 }
 
 .status-item:last-child {
@@ -295,29 +297,29 @@ function getStatusTone(status: string): 'success' | 'warning' | 'error' | 'muted
 
 .status-item .label {
   font-weight: 500;
-  color: #606266;
+  color: var(--muted);
 }
 
 .status-item .preview {
   font-family: monospace;
-  color: #909399;
+  color: var(--subtle);
   font-size: 12px;
 }
 
 .status-item .by {
-  color: #909399;
+  color: var(--subtle);
   font-size: 12px;
 }
 
 .form-section {
-  background: white;
-  border-radius: 6px;
-  padding: 16px;
-  margin-bottom: 16px;
+  background: #fff;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
 }
 
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .form-group:last-child {
@@ -326,61 +328,62 @@ function getStatusTone(status: string): 'success' | 'warning' | 'error' | 'muted
 
 .form-group label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-weight: 500;
-  color: #303133;
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .form-group textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #dcdfe6;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
   font-family: monospace;
-  font-size: 13px;
+  font-size: 12px;
   resize: vertical;
   box-sizing: border-box;
 }
 
 .form-group textarea:focus {
   outline: none;
-  border-color: #409eff;
+  border-color: var(--primary);
 }
 
 .hint {
-  margin: 6px 0 0;
-  color: #909399;
+  margin: 4px 0 0;
+  color: var(--subtle);
   font-size: 12px;
 }
 
 .message {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 4px;
-  margin-bottom: 16px;
-  font-size: 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
 }
 
 .message.success {
-  background: #f0f9ff;
-  color: #67c23a;
+  background: var(--success-soft);
+  color: var(--success);
   border: 1px solid #e1f3d8;
 }
 
 .message.error {
   background: #fef0f0;
-  color: #f56c6c;
+  color: var(--danger);
   border: 1px solid #fde2e2;
 }
 
 .action-buttons {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 button {
-  padding: 8px 16px;
+  padding: 6px 14px;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   border: none;
   transition: all 0.2s;
@@ -392,8 +395,8 @@ button:disabled {
 }
 
 .btn-primary {
-  background: #409eff;
-  color: white;
+  background: var(--primary);
+  color: #fff;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -401,19 +404,19 @@ button:disabled {
 }
 
 .btn-secondary {
-  background: white;
-  color: #606266;
-  border: 1px solid #dcdfe6;
+  background: #fff;
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: #409eff;
-  color: #409eff;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .btn-danger {
-  background: #f56c6c;
-  color: white;
+  background: var(--danger);
+  color: #fff;
 }
 
 .btn-danger:hover:not(:disabled) {
@@ -422,17 +425,19 @@ button:disabled {
 
 .loading {
   text-align: center;
-  padding: 40px;
-  color: #909399;
+  padding: 20px;
+  color: var(--subtle);
+  font-size: 13px;
 }
 
 .empty-state {
   text-align: center;
-  padding: 40px;
-  color: #909399;
+  padding: 20px;
+  color: var(--subtle);
+  font-size: 13px;
 }
 
 .empty-state .hint {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 </style>

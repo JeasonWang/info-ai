@@ -80,6 +80,18 @@ export function getCrawlTasks() {
   return apiRequest<CrawlTask[]>(apiV1('/admin/crawl-tasks'))
 }
 
+export interface CrawlTaskConfigPayload {
+  effective_interval_minutes: number
+  is_active: number
+}
+
+export function updateCrawlTaskConfig(channelCode: string, payload: CrawlTaskConfigPayload) {
+  return apiRequest<{ message: string }>(apiV1(`/admin/crawl-tasks/${encodeURIComponent(channelCode)}/config`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function getAuditLogs(limit = 30) {
   return apiRequest<AuditLog[]>(apiV1(`/admin/audit-logs?limit=${limit}`))
 }

@@ -28,6 +28,7 @@ type Store interface {
 	BatchRetryDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error)
 	BatchCancelDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error)
 	ListCrawlTasks(ctx context.Context) ([]CrawlTask, error)
+	UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error
 	ListCategories(ctx context.Context) ([]Category, error)
 	CreateCategory(ctx context.Context, payload CategoryPayload) (Category, error)
 	UpdateCategory(ctx context.Context, id int64, payload CategoryPayload) (Category, error)
@@ -181,15 +182,23 @@ type DetailJobFilter struct {
 }
 
 type CrawlTask struct {
-	TaskCode      string `json:"task_code"`
-	TaskName      string `json:"task_name"`
-	ChannelCode   string `json:"channel_code"`
-	ChannelName   string `json:"channel_name"`
-	ScheduleType  string `json:"schedule_type"`
-	ScheduleValue string `json:"schedule_value"`
-	Status        string `json:"status"`
-	LastRunAt     string `json:"last_run_at"`
-	NextRunAt     string `json:"next_run_at"`
+	TaskCode                 string `json:"task_code"`
+	TaskName                 string `json:"task_name"`
+	ChannelID                int64  `json:"channel_id"`
+	ChannelCode              string `json:"channel_code"`
+	ChannelName              string `json:"channel_name"`
+	ScheduleType             string `json:"schedule_type"`
+	ScheduleValue            string `json:"schedule_value"`
+	Status                   string `json:"status"`
+	EffectiveIntervalMinutes int    `json:"effective_interval_minutes"`
+	IsActive                 int    `json:"is_active"`
+	LastRunAt                string `json:"last_run_at"`
+	NextRunAt                string `json:"next_run_at"`
+}
+
+type CrawlTaskConfigPayload struct {
+	EffectiveIntervalMinutes int `json:"effective_interval_minutes"`
+	IsActive                 int `json:"is_active"`
 }
 
 type Category struct {
@@ -225,6 +234,8 @@ type Channel struct {
 	IsActive                 int    `json:"is_active"`
 	CreatedAt                string `json:"created_at"`
 	UpdatedAt                string `json:"updated_at"`
+	CookieStatus             string `json:"cookie_status"`
+	RequiresCredential       bool   `json:"requires_credential"`
 }
 
 type ChannelPayload struct {
@@ -556,6 +567,20 @@ func normalizeDetailJobFilter(filter DetailJobFilter) DetailJobFilter {
 
 func (s *Service) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
 	return s.store.ListCrawlTasks(ctx)
+}
+
+func (s *Service) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" {
+		return ErrInvalidInput
+	}
+	if payload.EffectiveIntervalMinutes < 1 {
+		return ErrInvalidInput
+	}
+	if payload.IsActive != 0 && payload.IsActive != 1 {
+		return ErrInvalidInput
+	}
+	return s.store.UpdateCrawlTaskConfig(ctx, channelCode, payload)
 }
 
 func (s *Service) ListCategories(ctx context.Context) ([]Category, error) {

@@ -309,11 +309,14 @@ export interface DetailJobDetail extends DetailJobSample {
 export interface CrawlTask {
   task_code: string
   task_name: string
+  channel_id: number
   channel_code: string
   channel_name: string
   schedule_type: string
   schedule_value: string
   status: string
+  effective_interval_minutes: number
+  is_active: number
   last_run_at: string
   next_run_at: string
 }
@@ -351,6 +354,8 @@ export interface AdminChannel {
   is_active: number
   created_at: string
   updated_at: string
+  cookie_status: string
+  requires_credential: boolean
 }
 
 export interface ChannelPayload {

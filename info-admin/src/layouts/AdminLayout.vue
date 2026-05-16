@@ -74,7 +74,11 @@ async function logout() {
     <section class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">首页 / {{ currentTitle }}</p>
+          <nav class="breadcrumb">
+            <RouterLink to="/dashboard" class="breadcrumb-link">首页</RouterLink>
+            <span class="breadcrumb-sep">/</span>
+            <span>{{ currentTitle }}</span>
+          </nav>
           <h2>{{ currentTitle }}</h2>
         </div>
         <button class="ghost-button" type="button" @click="logout">

@@ -1,3 +1,5 @@
+import time
+import random
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
@@ -228,6 +230,7 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
     )
     succeeded_count = 0
     failed_count = 0
+    xhs_consecutive_count = 0
 
     for job in jobs:
         info = session.get(Info, job.info_id)
@@ -246,6 +249,15 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
         else:
             _apply_failure(session, job, result)
             failed_count += 1
+
+        # Rate-limit: add longer delay for xiaohongshu to avoid rendering failures
+        if job.channel_code == "xiaohongshu":
+            xhs_consecutive_count += 1
+            delay = random.uniform(3.0, 6.0) if xhs_consecutive_count % 3 == 0 else random.uniform(1.5, 3.0)
+            time.sleep(delay)
+        else:
+            xhs_consecutive_count = 0
+            time.sleep(random.uniform(0.3, 1.0))
 
         session.add(
             InfoAcquisitionLog(

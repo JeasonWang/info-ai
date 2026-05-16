@@ -91,7 +91,11 @@ func (s stubAdminStore) BatchCancelDetailJobs(ctx context.Context, filter admin.
 }
 
 func (s stubAdminStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
-	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"}}, nil
+	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", ChannelID: 1, EffectiveIntervalMinutes: 30, IsActive: 1, Status: "active"}}, nil
+}
+
+func (s stubAdminStore) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload admin.CrawlTaskConfigPayload) error {
+	return nil
 }
 
 func (s stubAdminStore) ListCategories(ctx context.Context) ([]admin.Category, error) {

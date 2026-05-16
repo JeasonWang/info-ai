@@ -362,6 +362,28 @@ func (h *AdminHandler) TriggerCrawl(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, result)
 }
 
+func (h *AdminHandler) UpdateCrawlTaskConfig(w http.ResponseWriter, r *http.Request) {
+	channelCode := r.PathValue("channel_code")
+	var payload admin.CrawlTaskConfigPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.BadRequest(w, "请求体不是有效JSON")
+		return
+	}
+	if err := h.service.UpdateCrawlTaskConfig(r.Context(), channelCode, payload); err != nil {
+		if errors.Is(err, admin.ErrInvalidInput) {
+			response.BadRequest(w, "参数不合法")
+			return
+		}
+		if errors.Is(err, admin.ErrNotFound) {
+			response.NotFound(w, "渠道不存在")
+			return
+		}
+		response.InternalServerError(w, "更新采集配置失败")
+		return
+	}
+	response.OK(w, map[string]string{"message": "配置已更新"})
+}
+
 func (h *AdminHandler) RebuildEvents(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.RebuildEvents(r.Context())
 	if err != nil {

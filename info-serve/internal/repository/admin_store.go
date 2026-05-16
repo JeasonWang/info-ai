@@ -1652,8 +1652,10 @@ func detailJobWhereClause(filter admin.DetailJobFilter, prefix string) (string, 
 func (s *MySQLStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT t.task_code, t.task_name, ch.code, ch.name,
+		`SELECT t.task_code, t.task_name, ch.id, ch.code, ch.name,
        t.schedule_type, t.schedule_value, t.status,
+       COALESCE(ch.effective_interval_minutes, ch.base_interval_minutes, 60),
+       ch.is_active,
        COALESCE(DATE_FORMAT(t.last_run_at, '%Y-%m-%d %H:%i:%s'), ''),
        COALESCE(DATE_FORMAT(t.next_run_at, '%Y-%m-%d %H:%i:%s'), '')
 FROM crawl_task AS t
@@ -1670,11 +1672,14 @@ ORDER BY t.status ASC, t.id ASC`,
 		if err := rows.Scan(
 			&item.TaskCode,
 			&item.TaskName,
+			&item.ChannelID,
 			&item.ChannelCode,
 			&item.ChannelName,
 			&item.ScheduleType,
 			&item.ScheduleValue,
 			&item.Status,
+			&item.EffectiveIntervalMinutes,
+			&item.IsActive,
 			&item.LastRunAt,
 			&item.NextRunAt,
 		); err != nil {
@@ -1686,6 +1691,29 @@ ORDER BY t.status ASC, t.id ASC`,
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *MySQLStore) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload admin.CrawlTaskConfigPayload) error {
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE channel
+SET effective_interval_minutes = ?, is_active = ?, schedule_version = schedule_version + 1
+WHERE code = ?`,
+		payload.EffectiveIntervalMinutes,
+		payload.IsActive,
+		channelCode,
+	)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return admin.ErrNotFound
+	}
+	return nil
 }
 
 func (s *MySQLStore) ListCategories(ctx context.Context) ([]admin.Category, error) {
@@ -1766,7 +1794,8 @@ func (s *MySQLStore) ListChannels(ctx context.Context) ([]admin.Channel, error) 
        ch.min_interval_minutes, ch.max_interval_minutes, ch.manual_interval_enabled,
        ch.effective_interval_minutes, ch.schedule_version, ch.is_active,
        COALESCE(DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s'), ''),
-       COALESCE(DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s'), '')
+       COALESCE(DATE_FORMAT(ch.updated_at, '%Y-%m-%d %H:%i:%s'), ''),
+       COALESCE(ch.cookies, '')
 FROM channel AS ch
 JOIN category AS c ON c.id = ch.category_id
 ORDER BY ch.id ASC`,
@@ -1778,6 +1807,7 @@ ORDER BY ch.id ASC`,
 	result := []admin.Channel{}
 	for rows.Next() {
 		var item admin.Channel
+		var cookiesRaw string
 		if err := rows.Scan(
 			&item.ID,
 			&item.Name,
@@ -1795,10 +1825,13 @@ ORDER BY ch.id ASC`,
 			&item.IsActive,
 			&item.CreatedAt,
 			&item.UpdatedAt,
+			&cookiesRaw,
 		); err != nil {
 			return nil, err
 		}
 		item.CrawlInterval = item.BaseIntervalMinutes
+		item.CookieStatus = channelCookieStatus(item.Code, cookiesRaw)
+		item.RequiresCredential = channelRequiresCredential(item.Code)
 		result = append(result, item)
 	}
 	return result, rows.Err()
@@ -2306,6 +2339,33 @@ type channelCredentialRow struct {
 	ExtraCredentials string
 	UpdatedAt        string
 	UpdatedBy        string
+}
+
+// credentialRequiredChannels lists channels that require cookie credentials.
+var credentialRequiredChannels = map[string]bool{
+	"weibo":       true,
+	"zhihu":       true,
+	"xiaohongshu": true,
+}
+
+func channelRequiresCredential(code string) bool {
+	return credentialRequiredChannels[code]
+}
+
+func channelCookieStatus(code string, cookiesRaw string) string {
+	if !credentialRequiredChannels[code] {
+		return ""
+	}
+	cookiesData := parseStoredCookies(cookiesRaw)
+	cookieValue := stringFromMap(cookiesData, "cookie")
+	cookieStatus := stringFromMap(cookiesData, "status")
+	if cookieStatus == "" {
+		cookieStatus = "not_configured"
+	}
+	if cookieValue == "" || isSampleCredentialStatus(cookieStatus) {
+		return "expired"
+	}
+	return cookieStatus
 }
 
 type llmModelConfigRow struct {

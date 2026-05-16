@@ -24,6 +24,22 @@ const form = reactive({
 })
 const message = ref('')
 
+function credentialWarning(item: AdminChannel): string {
+  if (!item.requires_credential) return ''
+  if (!item.cookie_status || item.cookie_status === 'not_configured') return '凭证未配置，该渠道无法正常采集'
+  if (item.cookie_status === 'sample') return '凭证为样例数据，请替换为真实凭证'
+  if (item.cookie_status === 'expired') return '凭证可能已过期，请检查并更新'
+  if (item.cookie_status === 'invalid') return '凭证无效，请重新配置'
+  return ''
+}
+
+function credentialTone(item: AdminChannel): 'error' | 'warning' | 'success' | 'muted' {
+  if (!item.requires_credential) return 'muted'
+  if (item.cookie_status === 'active') return 'success'
+  if (item.cookie_status === 'expired' || item.cookie_status === 'invalid' || item.cookie_status === 'not_configured') return 'error'
+  return 'warning'
+}
+
 function resetScheduleDefaults() {
   form.crawl_interval = 60
   form.base_interval_minutes = 60
@@ -89,9 +105,20 @@ onMounted(refreshData)
             <small>基础 {{ item.base_interval_minutes || item.crawl_interval }} / 热点 {{ item.hot_interval_minutes || '-' }} / v{{ item.schedule_version || 1 }}</small>
           </span>
           <StatusBadge :label="item.is_active === 1 ? '启用' : '停用'" :tone="item.is_active === 1 ? 'success' : 'muted'" />
+          <StatusBadge v-if="item.requires_credential" :label="item.cookie_status === 'active' ? '凭证有效' : '凭证异常'" :tone="credentialTone(item)" />
+          <span v-if="credentialWarning(item)" class="credential-warning">{{ credentialWarning(item) }}</span>
         </li>
       </ul>
       <EmptyState v-else title="暂无渠道" description="新增渠道后，采集任务可以绑定这些数据源。" />
     </DataPanel>
   </section>
 </template>
+
+<style scoped>
+.credential-warning {
+  display: block;
+  color: var(--danger, #f56c6c);
+  font-size: 12px;
+  margin-top: 2px;
+}
+</style>

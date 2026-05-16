@@ -6,7 +6,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import PageTabs from '@/components/PageTabs.vue'
 import PaginationControl from '@/components/PaginationControl.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { getChannelHealth, getCrawlRuns, getCrawlTasks, rebuildEvents, triggerCrawlTask } from '@/services/adminApi'
+import { getChannelHealth, getCrawlRuns, getCrawlTasks, rebuildEvents, triggerCrawlTask, updateCrawlTaskConfig } from '@/services/adminApi'
 import type { ChannelHealth, CrawlRunSummary, CrawlTask } from '@/types/admin'
 
 const route = useRoute()
@@ -20,6 +20,11 @@ const runsPage = ref(1)
 const tasksPage = ref(1)
 const actionPage = ref(1)
 const pageSize = 8
+
+const editIntervals = ref<Record<string, number>>({})
+const editActive = ref<Record<string, number>>({})
+const savingTask = ref<string | null>(null)
+const taskMessage = ref('')
 
 const section = computed(() => String(route.meta.section || 'health'))
 const tabs = [
@@ -38,6 +43,34 @@ async function loadData() {
   runs.value = runItems
   tasks.value = taskItems
   healthItems.value = channelHealthItems
+  for (const t of taskItems) {
+    if (!(t.channel_code in editIntervals.value)) {
+      editIntervals.value[t.channel_code] = t.effective_interval_minutes
+    }
+    if (!(t.channel_code in editActive.value)) {
+      editActive.value[t.channel_code] = t.is_active
+    }
+  }
+}
+
+async function saveTaskConfig(channelCode: string) {
+  const interval = editIntervals.value[channelCode]
+  const active = editActive.value[channelCode]
+  if (!interval || interval < 1) {
+    taskMessage.value = '间隔分钟数必须大于 0'
+    return
+  }
+  savingTask.value = channelCode
+  taskMessage.value = ''
+  try {
+    await updateCrawlTaskConfig(channelCode, { effective_interval_minutes: interval, is_active: active })
+    taskMessage.value = `${channelCode} 配置已保存，调度器将在下个周期生效`
+    await loadData()
+  } catch (e: any) {
+    taskMessage.value = e?.message || '保存失败'
+  } finally {
+    savingTask.value = null
+  }
 }
 
 function pageSlice<T>(items: T[], page: number) {
@@ -102,20 +135,32 @@ function issueText(item: ChannelHealth) {
     <PageTabs :items="tabs" />
 
     <DataPanel v-if="section === 'actions'" title="采集操作栏" status="人工触发">
-      <div class="action-strip">
-        <button
-          v-for="item in pagedActionTasks"
-          :key="item.task_code"
-          type="button"
-          :disabled="isRunning"
-          @click="runAction(() => triggerCrawlTask(item.channel_code))"
-        >
-          立即采集 {{ item.channel_name }}
-        </button>
-        <button type="button" :disabled="isRunning" @click="runAction(rebuildEvents)">重建事件</button>
+      <div class="action-groups">
+        <div class="action-group">
+          <h4 class="action-group-title">单渠道采集</h4>
+          <p class="action-group-desc">立即触发指定渠道的一次完整采集（列表抓取 + 详情入库），不影响调度周期</p>
+          <div class="action-strip">
+            <button
+              v-for="item in pagedActionTasks"
+              :key="item.task_code"
+              type="button"
+              :disabled="isRunning"
+              @click="runAction(() => triggerCrawlTask(item.channel_code))"
+            >
+              {{ item.channel_name }}
+            </button>
+          </div>
+          <PaginationControl v-model:page="actionPage" :page-size="pageSize" :total="tasks.length" />
+        </div>
+        <div class="action-group">
+          <h4 class="action-group-title">全局操作</h4>
+          <p class="action-group-desc">重新扫描所有原始内容，按时间、实体、关键词重新聚合生成事件</p>
+          <div class="action-strip">
+            <button type="button" :disabled="isRunning" @click="runAction(rebuildEvents)">重建事件</button>
+          </div>
+        </div>
       </div>
-      <PaginationControl v-model:page="actionPage" :page-size="pageSize" :total="tasks.length" />
-      <p class="action-message">{{ actionMessage || '用于手动补采重点渠道，或在数据治理后重新生成事件流。' }}</p>
+      <p class="action-message">{{ actionMessage }}</p>
     </DataPanel>
 
     <DataPanel v-if="section === 'health'" title="渠道健康表" :status="`${healthItems.length} 个渠道`">
@@ -146,12 +191,50 @@ function issueText(item: ChannelHealth) {
 
     <DataPanel v-if="section === 'tasks'" title="采集任务配置" :status="`${tasks.length} 个`">
       <ul v-if="pagedTasks.length" class="data-list">
-        <li v-for="item in pagedTasks" :key="item.task_code">
-          <strong>{{ item.task_name }}</strong>
-          <span>{{ item.channel_name }} · {{ item.schedule_value }}</span>
-          <StatusBadge :label="item.status" :tone="item.status === 'active' ? 'success' : 'muted'" />
+        <li v-for="item in pagedTasks" :key="item.task_code" class="task-row">
+          <div class="task-info">
+            <strong>{{ item.task_name }}</strong>
+            <StatusBadge :label="item.status === 'active' ? '运行中' : '已暂停'" :tone="item.status === 'active' ? 'success' : 'muted'" />
+          </div>
+          <div class="task-detail">
+            <span>{{ item.channel_name }} · 当前 {{ item.schedule_value }}</span>
+            <span class="task-time">上次 {{ item.last_run_at || '无' }} · 下次 {{ item.next_run_at || '待定' }}</span>
+          </div>
+          <div class="task-edit">
+            <div class="task-config-row">
+              <label class="task-config-label">间隔(分钟)</label>
+              <input
+                type="number"
+                class="task-config-input"
+                :value="editIntervals[item.channel_code]"
+                min="1"
+                max="1440"
+                @input="editIntervals[item.channel_code] = Number(($event.target as HTMLInputElement).value)"
+              />
+            </div>
+            <div class="task-config-row">
+              <label class="task-config-label">状态</label>
+              <select
+                class="task-config-select"
+                :value="editActive[item.channel_code]"
+                @change="editActive[item.channel_code] = Number(($event.target as HTMLSelectElement).value)"
+              >
+                <option :value="1">启用</option>
+                <option :value="0">停用</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button"
+              :disabled="savingTask === item.channel_code"
+              @click="saveTaskConfig(item.channel_code)"
+            >
+              {{ savingTask === item.channel_code ? '保存中...' : '保存' }}
+            </button>
+          </div>
         </li>
       </ul>
+      <p v-if="taskMessage" class="action-message">{{ taskMessage }}</p>
       <PaginationControl v-model:page="tasksPage" :page-size="pageSize" :total="tasks.length" />
       <EmptyState v-if="!pagedTasks.length" title="暂无采集任务" description="启动调度器后会同步渠道任务。" />
     </DataPanel>

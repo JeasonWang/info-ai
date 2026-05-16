@@ -318,9 +318,9 @@ class CredentialProvider:
 
                     new_cookie_data = json.loads(cookies) if cookies.startswith("{") else {"cookie": cookies}
                     existing.update(new_cookie_data)
-                    if existing.get("cookie") and _is_sample_credential_status(existing.get("status", "")):
+                    # 用户主动保存新 cookie 时，无论旧状态如何，都标记为 active
+                    if existing.get("cookie"):
                         existing["status"] = "active"
-                    existing.setdefault("status", "active")
                     existing.setdefault("last_verified_at", None)
                     channel.cookies = json.dumps(existing, ensure_ascii=False)
 
@@ -386,7 +386,7 @@ class CredentialProvider:
             return {"success": False, "message": "凭证未配置", "response_code": 0}
 
         test_urls = {
-            "weibo": "https://m.weibo.cn/api/container/getIndex?type=uid&value=1652900001",
+            "weibo": "https://weibo.com/ajax/statuses/hot_band",
             "zhihu": "https://www.zhihu.com/api/v4/members/self?include=url_token",
             "xiaohongshu": "https://edith.xiaohongshu.com/api/sns/web/v2/user/me",
         }
@@ -395,7 +395,17 @@ class CredentialProvider:
         if not test_url:
             return {"success": False, "message": "不支持验证的渠道", "response_code": 0}
 
-        headers = {"Cookie": cookie}
+        headers = {"Cookie": cookie, "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+
+        if channel_code == "weibo":
+            headers["Referer"] = "https://weibo.com/"
+            headers["Accept"] = "application/json"
+
+        # 知乎测试连接不需要 zse 签名头（zse 对 /members/self 反而触发 403），
+        # 仅用 Cookie 即可判断登录态是否有效。
+        if channel_code == "zhihu":
+            headers["Referer"] = "https://www.zhihu.com/"
+            headers["Accept"] = "application/json, text/plain, */*"
 
         try:
             response = httpx.get(test_url, headers=headers, timeout=10, follow_redirects=True)
@@ -403,26 +413,26 @@ class CredentialProvider:
 
             # 根据响应判断凭证有效性
             if channel_code == "weibo":
-                if "用户信息" in response_text or '"ok":1' in response_text or '"id":' in response_text:
+                if response.status_code == 200 and '"ok":1' in response_text:
                     self._update_cookie_status(channel_code, "active")
                     return {"success": True, "message": "凭证有效", "response_code": response.status_code}
-                elif "登录" in response_text or "请登录" in response_text:
+                elif response.status_code in (401, 403) or "登录" in response_text or "请登录" in response_text:
                     self._update_cookie_status(channel_code, "expired")
                     return {"success": False, "message": "凭证已过期", "response_code": response.status_code}
                 else:
                     self._update_cookie_status(channel_code, "invalid")
-                    return {"success": False, "message": f"凭证无效，响应状态: {response.status_code}", "response_code": response.status_code}
+                    return {"success": False, "message": f"凭证无效，响应状态: {response.status_code}，响应: {response_text[:100]}", "response_code": response.status_code}
 
             elif channel_code == "zhihu":
-                if '"id":' in response_text or '"url_token":' in response_text:
+                if response.status_code == 200 and ('"id":' in response_text or '"url_token":' in response_text):
                     self._update_cookie_status(channel_code, "active")
                     return {"success": True, "message": "凭证有效", "response_code": response.status_code}
-                elif "登录" in response_text or "需要登录" in response_text:
+                elif response.status_code == 401 or "登录" in response_text or "需要登录" in response_text:
                     self._update_cookie_status(channel_code, "expired")
                     return {"success": False, "message": "凭证已过期", "response_code": response.status_code}
                 else:
                     self._update_cookie_status(channel_code, "invalid")
-                    return {"success": False, "message": f"凭证无效，响应状态: {response.status_code}", "response_code": response.status_code}
+                    return {"success": False, "message": f"凭证无效，响应状态: {response.status_code}，响应: {response_text[:100]}", "response_code": response.status_code}
 
             elif channel_code == "xiaohongshu":
                 if '"code":0' in response_text or '"userId":' in response_text:
@@ -518,20 +528,28 @@ class CredentialProvider:
                             status="sample",
                         )
                     extra = channel.extra_credentials or {}
-                    zhihu_extra = extra.get("zhihu", {})
-                    if _is_sample_credential_status(zhihu_extra.get("status", "")):
+                    # 支持两种存储格式：
+                    # 扁平格式: {"ZHIHU_ZSE_93": "...", "ZHIHU_ZSE_96": "..."}
+                    # 嵌套格式: {"zhihu": {"zse_93": "...", "zse_96": "..."}}
+                    env_name = f"ZHIHU_{credential_key.upper()}"
+                    flat_value = extra.get(env_name, "")
+                    zhihu_nested = extra.get("zhihu", {})
+                    nested_value = zhihu_nested.get(credential_key, "")
+                    value = flat_value or nested_value
+                    status = zhihu_nested.get("status", "") if isinstance(zhihu_nested, dict) else ""
+                    if _is_sample_credential_status(status):
                         return _DatabaseCredentialRead(
                             found=True,
                             channel_code=channel_code,
                             credential_key=credential_key,
-                            status=zhihu_extra.get("status", ""),
+                            status=status,
                         )
                     return _DatabaseCredentialRead(
-                        found=bool(zhihu_extra),
-                        value=zhihu_extra.get(credential_key, ""),
+                        found=bool(value),
+                        value=value,
                         channel_code=channel_code,
                         credential_key=credential_key,
-                        status=zhihu_extra.get("status", ""),
+                        status=status,
                     )
                 else:
                     return _DatabaseCredentialRead(found=False)

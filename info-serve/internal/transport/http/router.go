@@ -86,6 +86,7 @@ func registerAPIRoutes(
 	mux.HandleFunc("GET "+prefix+"/admin/detail-jobs", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.DetailJobs))
 	mux.HandleFunc("GET "+prefix+"/admin/detail-jobs/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.DetailJob))
 	mux.HandleFunc("GET "+prefix+"/admin/crawl-tasks", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CrawlTasks))
+	mux.HandleFunc("PUT "+prefix+"/admin/crawl-tasks/{channel_code}/config", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateCrawlTaskConfig))
 	mux.HandleFunc("GET "+prefix+"/admin/categories", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.Categories))
 	mux.HandleFunc("POST "+prefix+"/admin/categories", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.CreateCategory))
 	mux.HandleFunc("PUT "+prefix+"/admin/categories/{id}", transportmiddleware.RequireAdminWithAudit(authService, auditService, adminHandler.UpdateCategory))

@@ -83,6 +83,10 @@ func (s *MemoryStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
 	return []CrawlTask{}, nil
 }
 
+func (s *MemoryStore) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error {
+	return nil
+}
+
 func (s *MemoryStore) ListCategories(ctx context.Context) ([]Category, error) {
 	return []Category{}, nil
 }

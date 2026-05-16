@@ -164,6 +164,10 @@ func (s fakeAdminStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error)
 	return s.crawlTasks, nil
 }
 
+func (s fakeAdminStore) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error {
+	return nil
+}
+
 func (s fakeAdminStore) ListCategories(ctx context.Context) ([]Category, error) {
 	return s.categories, nil
 }

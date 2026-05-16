@@ -35,11 +35,16 @@ const llmSuccessRate = computed(() => {
   return Math.round((totalRecentSuccess.value * 1000) / totalRecentCalls.value) / 10
 })
 const circuitOpenCount = computed(() => configs.value.filter((item) => Boolean(item.circuit_open_until)).length)
-const llmHealthRows = computed(() => [
-  { label: '可用模型', count: enabledConfigs.value.length, tone: enabledConfigs.value.length ? 'success' : 'danger' },
-  { label: '近百次成功率', count: `${llmSuccessRate.value}%`, tone: llmSuccessRate.value >= 80 ? 'success' : llmSuccessRate.value >= 50 ? 'warning' : 'danger' },
-  { label: '熔断中', count: circuitOpenCount.value, tone: circuitOpenCount.value ? 'danger' : 'success' },
-])
+const llmHealthRows = computed(() => {
+  const exhaustedConfigs = configs.value.filter((item) => item.is_enabled === 1 && item.daily_call_limit > 0 && item.daily_call_count >= item.daily_call_limit)
+  const allExhausted = enabledConfigs.value.length > 0 && exhaustedConfigs.length >= enabledConfigs.value.length
+  return [
+    { label: '可用模型', count: enabledConfigs.value.length, tone: enabledConfigs.value.length ? 'success' : 'danger' },
+    { label: '近百次成功率', count: `${llmSuccessRate.value}%`, tone: llmSuccessRate.value >= 80 ? 'success' : llmSuccessRate.value >= 50 ? 'warning' : 'danger' },
+    { label: '熔断中', count: circuitOpenCount.value, tone: circuitOpenCount.value ? 'danger' : 'success' },
+    { label: '今日额度耗尽', count: `${exhaustedConfigs.length}/${enabledConfigs.value.length}`, tone: allExhausted ? 'error' : exhaustedConfigs.length > 0 ? 'warning' : 'success' },
+  ]
+})
 const selectedChatConfig = computed(() => {
   if (selectedChatConfigId.value === '') return null
   return configs.value.find((item) => item.id === selectedChatConfigId.value) || null
@@ -240,6 +245,7 @@ onMounted(refreshData)
           <div class="channel-quality-badges">
             <StatusBadge :label="item.is_enabled === 1 ? '启用' : '停用'" :tone="item.is_enabled === 1 ? 'success' : 'muted'" />
             <StatusBadge :label="modelHealthLabel(item)" :tone="modelHealthTone(item)" />
+            <StatusBadge v-if="item.is_enabled === 1 && item.daily_call_limit > 0 && item.daily_call_count >= item.daily_call_limit" label="今日额度已耗尽" tone="error" />
             <button type="button" class="button--ghost" :disabled="item.is_enabled !== 1" @click="useConfigForChat(item)">
               选为聊天模型
             </button>
