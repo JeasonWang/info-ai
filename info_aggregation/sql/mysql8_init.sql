@@ -717,5 +717,3 @@ UNION ALL
 SELECT 'user_account', COUNT(*) FROM `user_account`
 UNION ALL
 SELECT 'llm_model_config', COUNT(*) FROM `llm_model_config`;
-
-SET FOREIGN_KEY_CHECKS = 1;
