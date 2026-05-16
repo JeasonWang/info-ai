@@ -33,16 +33,20 @@ configure_engine(SQLALCHEMY_DATABASE_URL)
 
 
 def get_session():
+    """获取数据库会话上下文管理器。
+    
+    推荐用法：
+        with get_session() as session:
+            session.query(...)
+    
+    也可直接调用（向后兼容）：
+        session = get_session()
+        try:
+            ...
+        finally:
+            session.close()
     """
-    获取数据库会话
-    返回: SQLAlchemy Session实例
-    """
-    session = Session()
-    try:
-        return session
-    except Exception:
-        session.rollback()
-        raise
+    return Session()
 
 
 def init_db():

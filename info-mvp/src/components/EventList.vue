@@ -6,6 +6,7 @@ const props = defineProps<{
   events: EventListItem[]
   loading: boolean
   hasMore: boolean
+  displayMode?: 'card' | 'compact'
 }>()
 
 const emit = defineEmits<{
@@ -109,6 +110,34 @@ function latestSignal(item: EventListItem): string {
   return time ? `最近更新 ${time}` : '等待下一轮更新'
 }
 
+const CATEGORY_COLOR_MAP: Record<string, string> = {
+  tech: 'var(--cat-tech)',
+  finance: 'var(--cat-finance)',
+  sport: 'var(--cat-sport)',
+  society: 'var(--cat-society)',
+  ent: 'var(--cat-ent)',
+  global: 'var(--cat-global)',
+}
+
+function getCatColor(code: string): string {
+  return CATEGORY_COLOR_MAP[code] || getCategoryColor(code)
+}
+
+const STAGE_MAP: Record<string, { label: string; cls: string }> = {
+  emerging: { label: '新兴', cls: 'evo-emerging' },
+  spreading: { label: '扩散中', cls: 'evo-spreading' },
+  confirmed: { label: '已确认', cls: 'evo-confirmed' },
+  multi_confirmed: { label: '多源确认', cls: 'evo-confirmed' },
+  reversal: { label: '可能反转', cls: 'evo-reversal' },
+  potential_reversal: { label: '可能反转', cls: 'evo-reversal' },
+  cooling: { label: '降温中', cls: 'evo-cooling' },
+}
+
+function stageInfo(stage: string | undefined): { label: string; cls: string } | null {
+  if (!stage) return null
+  return STAGE_MAP[stage] || null
+}
+
 // #ifdef H5
 let loadObserver: IntersectionObserver | null = null
 
@@ -146,71 +175,107 @@ onUnmounted(() => {
 
 <template>
   <view class="event-list">
-    <view
-      v-for="item in events"
-      :key="item.id"
-      class="card"
-      @click="goDetail(item)"
-    >
+    <!-- Compact mode -->
+    <template v-if="displayMode === 'compact'">
       <view
-        class="category-strip"
-        :style="{ backgroundColor: getCategoryColor(item.primary_category.code) }"
-      />
-
-      <view class="card-body">
-        <view class="card-header">
-          <view class="title-wrap">
-            <text class="insight-label">{{ insightLabel(item) }}</text>
-            <text class="title">{{ item.title }}</text>
-            <view v-if="item.new_update_count > 0" class="update-dot-wrap">
-              <text class="update-badge">+{{ item.new_update_count }}</text>
-              <view class="pulse-ring" />
-            </view>
+        v-for="(item, idx) in events"
+        :key="item.id"
+        class="compact-item"
+        @click="goDetail(item)"
+      >
+        <text class="compact-rank" :class="{ top: idx < 3 }">{{ idx + 1 }}</text>
+        <view class="compact-body">
+          <text class="compact-title">{{ item.title }}</text>
+          <view class="compact-meta">
+            <text class="compact-tag" :class="qualityClass(item)">{{ insightLabel(item) }}</text>
+            <text v-if="stageInfo(item.evolution_stage)" class="evo-tag" :class="stageInfo(item.evolution_stage)!.cls">{{ stageInfo(item.evolution_stage)!.label }}</text>
+            <text class="compact-info">{{ item.source_count }} 来源</text>
+            <text class="compact-info">{{ item.primary_category.name }}</text>
+            <text class="compact-info">{{ formatEventTime(item.last_updated_at) }}</text>
           </view>
         </view>
-
-        <text class="summary">{{ item.one_line_summary }}</text>
-
-        <view class="intel-row">
-          <text class="intel-chip" :class="qualityClass(item)">{{ confidenceLabel(item) }}</text>
-          <text class="intel-text">{{ latestSignal(item) }}</text>
-          <text class="intel-text">{{ item.source_count }} 个来源</text>
+        <view class="heat-bar-wrap">
+          <view class="heat-bar">
+            <view
+              class="heat-bar-fill"
+              :class="item.heat_score >= 700 ? 'high' : item.heat_score >= 400 ? 'mid' : 'low'"
+              :style="{ width: Math.min(item.heat_score / 10, 100) + '%' }"
+            />
+          </view>
+          <text class="heat-num" :class="{ muted: item.heat_score < 400 }">{{ formatHeat(item.heat_score) }}</text>
         </view>
+      </view>
+    </template>
 
-        <view v-if="reasonText(item)" class="reason-line">
-          <text>{{ item.status === 'monitoring' ? '观察原因' : '判断依据' }}：{{ reasonText(item) }}</text>
-        </view>
+    <!-- Card mode (default) -->
+    <template v-else>
+      <view
+        v-for="item in events"
+        :key="item.id"
+        class="card"
+        @click="goDetail(item)"
+      >
+        <view
+          class="category-strip"
+          :style="{ backgroundColor: getCatColor(item.primary_category.code) }"
+        />
 
-        <view class="footer">
-          <view class="badges">
-            <text
-              v-for="badge in item.source_badges.slice(0, 3)"
-              :key="badge"
-              class="badge"
-            >
-              {{ badge }}
-            </text>
-            <text v-if="item.source_badges.length > 3" class="badge-more">
-              +{{ item.source_badges.length - 3 }}
-            </text>
-            <text v-if="item.last_updated_at" class="event-time">
-              {{ formatEventTime(item.last_updated_at) }}
-            </text>
-            <text v-if="qualityText(item)" class="quality-chip" :class="qualityClass(item)">
-              {{ qualityText(item) }}
-            </text>
+        <view class="card-body">
+          <view class="card-header">
+            <view class="title-wrap">
+              <text class="insight-label">{{ insightLabel(item) }}</text>
+              <text class="title">{{ item.title }}</text>
+              <view v-if="item.new_update_count > 0" class="update-dot-wrap">
+                <text class="update-badge">+{{ item.new_update_count }}</text>
+                <view class="pulse-ring" />
+              </view>
+            </view>
           </view>
 
-          <view class="stats">
-            <view class="heat-badge">
-              <text class="heat-icon">&#xe7ac;</text>
-              <text class="heat-value">{{ formatHeat(item.heat_score) }}</text>
+          <text class="summary">{{ item.one_line_summary }}</text>
+
+          <view class="intel-row">
+            <text class="intel-chip" :class="qualityClass(item)">{{ confidenceLabel(item) }}</text>
+            <text v-if="stageInfo(item.evolution_stage)" class="evo-tag" :class="stageInfo(item.evolution_stage)!.cls">{{ stageInfo(item.evolution_stage)!.label }}</text>
+            <text class="intel-text">{{ latestSignal(item) }}</text>
+            <text class="intel-text">{{ item.source_count }} 个来源</text>
+          </view>
+
+          <view v-if="reasonText(item)" class="reason-line">
+            <text>{{ item.status === 'monitoring' ? '观察原因' : '判断依据' }}：{{ reasonText(item) }}</text>
+          </view>
+
+          <view class="footer">
+            <view class="badges">
+              <text
+                v-for="badge in item.source_badges.slice(0, 3)"
+                :key="badge"
+                class="badge"
+              >
+                {{ badge }}
+              </text>
+              <text v-if="item.source_badges.length > 3" class="badge-more">
+                +{{ item.source_badges.length - 3 }}
+              </text>
+              <text v-if="item.last_updated_at" class="event-time">
+                {{ formatEventTime(item.last_updated_at) }}
+              </text>
+              <text v-if="qualityText(item)" class="quality-chip" :class="qualityClass(item)">
+                {{ qualityText(item) }}
+              </text>
             </view>
-            <text class="source-count">{{ item.source_count }} 来源</text>
+
+            <view class="stats">
+              <view class="heat-badge">
+                <text class="heat-icon">&#xe7ac;</text>
+                <text class="heat-value">{{ formatHeat(item.heat_score) }}</text>
+              </view>
+              <text class="source-count">{{ item.source_count }} 来源</text>
+            </view>
           </view>
         </view>
       </view>
-    </view>
+    </template>
 
     <view v-if="loading && events.length > 0" class="load-more">
       <view class="spinner" />
@@ -594,6 +659,169 @@ onUnmounted(() => {
   .card {
     width: 100%;
   }
+}
+
+/* Compact mode */
+.compact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(234, 223, 213, 0.6);
+}
+
+.compact-item:active {
+  background: var(--brand-accent-light);
+}
+
+.compact-rank {
+  min-width: 40rpx;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-align: center;
+  padding-top: 2rpx;
+}
+
+.compact-rank.top {
+  color: var(--brand-primary);
+}
+
+.compact-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.compact-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.compact-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.compact-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.compact-tag.quality-chip--good {
+  background: rgba(52, 199, 89, 0.12);
+  color: #1a9a42;
+}
+
+.compact-tag.quality-chip--watch {
+  background: rgba(245, 166, 35, 0.12);
+  color: #c47d10;
+}
+
+.compact-tag.quality-chip--muted {
+  background: var(--divider);
+  color: var(--text-muted);
+}
+
+.compact-info {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+/* Evolution stage tags */
+.evo-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.evo-emerging {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--stage-emerging);
+}
+
+.evo-spreading {
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--stage-spreading);
+}
+
+.evo-confirmed {
+  background: rgba(74, 144, 217, 0.12);
+  color: var(--stage-confirmed);
+}
+
+.evo-reversal {
+  background: rgba(208, 2, 27, 0.12);
+  color: var(--stage-reversal);
+}
+
+.evo-cooling {
+  background: rgba(139, 117, 104, 0.12);
+  color: var(--stage-cooling);
+}
+
+/* Heat bar (compact mode) */
+.heat-bar-wrap {
+  min-width: 100rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding-top: 4rpx;
+}
+
+.heat-bar {
+  flex: 1;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.heat-bar-fill {
+  height: 100%;
+  border-radius: 4rpx;
+  transition: width 0.5s ease;
+}
+
+.heat-bar-fill.high {
+  background: linear-gradient(90deg, #f6a23a, #f04f3a);
+}
+
+.heat-bar-fill.mid {
+  background: linear-gradient(90deg, #f6a23a, #f5c542);
+}
+
+.heat-bar-fill.low {
+  background: #c5b9ad;
+}
+
+.heat-num {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: var(--brand-primary);
+  min-width: 48rpx;
+  text-align: right;
+}
+
+.heat-num.muted {
+  color: var(--text-muted);
 }
 
 /* #ifdef H5 */

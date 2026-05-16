@@ -100,8 +100,7 @@ def _run_manual_crawl(channel_code: str):
         error_message = str(exc)
         logger.error(f"渠道 {channel_code} 手动采集失败: {exc}", exc_info=True)
     finally:
-        session = get_session()
-        try:
+        with get_session() as session:
             _sync_crawl_tasks(session)
             _record_crawl_run(
                 session,
@@ -119,10 +118,6 @@ def _run_manual_crawl(channel_code: str):
             )
             rebuild_events(session)
             save_data_quality_snapshot(session)
-        finally:
-            session.close()
-
-
 def _split_csv(raw_value: str) -> list[str]:
     if not raw_value:
         return []
@@ -371,8 +366,7 @@ def health():
 
 @app.get("/ready")
 def ready():
-    session = get_session()
-    try:
+    with get_session() as session:
         session.execute(text("SELECT 1"))
         return {
             "code": 0,
@@ -383,10 +377,6 @@ def ready():
                 "public_api_enabled": ENABLE_PUBLIC_API,
             },
         }
-    finally:
-        session.close()
-
-
 def public_api_route(method: str, path: str):
     """仅在测试/过渡期开启旧业务 HTTP 接口。"""
     def decorator(func):
@@ -403,18 +393,13 @@ def list_categories():
     获取所有信息分类
     返回: 分类列表
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         categories = session.query(Category).all()
         return {
             "code": 0,
             "message": "success",
             "data": [c.to_dict() for c in categories],
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/event-categories")
 def list_event_categories():
     return {
@@ -441,8 +426,7 @@ def list_channels(
         category_id: 可选，按分类ID筛选
     返回: 渠道列表
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         query = session.query(Channel)
         if category_id:
             query = query.filter(Channel.category_id == category_id)
@@ -454,28 +438,18 @@ def list_channels(
             "message": "success",
             "data": [ch.to_dict() for ch in channels],
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/categories")
 def admin_list_categories():
-    session = get_session()
-    try:
+    with get_session() as session:
         categories = session.query(Category).order_by(Category.id.asc()).all()
         return {
             "code": 0,
             "message": "success",
             "data": [item.to_dict() for item in categories],
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/categories")
 def admin_create_category(payload: CategoryPayload):
-    session = get_session()
-    try:
+    with get_session() as session:
         if session.query(Category).filter(Category.name == payload.name).first():
             raise HTTPException(status_code=400, detail="分类名称已存在")
         if session.query(Category).filter(Category.code == payload.code).first():
@@ -494,14 +468,9 @@ def admin_create_category(payload: CategoryPayload):
             "message": "success",
             "data": category.to_dict(),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("put", "/api/admin/categories/{category_id}")
 def admin_update_category(category_id: int, payload: CategoryPayload):
-    session = get_session()
-    try:
+    with get_session() as session:
         category = session.query(Category).filter(Category.id == category_id).first()
         if not category:
             raise HTTPException(status_code=404, detail="分类不存在")
@@ -521,28 +490,18 @@ def admin_update_category(category_id: int, payload: CategoryPayload):
             "message": "success",
             "data": category.to_dict(),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/channels")
 def admin_list_channels():
-    session = get_session()
-    try:
+    with get_session() as session:
         channels = session.query(Channel).order_by(Channel.id.asc()).all()
         return {
             "code": 0,
             "message": "success",
             "data": [item.to_dict() for item in channels],
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/channels")
 def admin_create_channel(payload: ChannelPayload):
-    session = get_session()
-    try:
+    with get_session() as session:
         if not session.query(Category).filter(Category.id == payload.category_id).first():
             raise HTTPException(status_code=400, detail="分类不存在")
         if session.query(Channel).filter(Channel.name == payload.name).first():
@@ -566,14 +525,9 @@ def admin_create_channel(payload: ChannelPayload):
             "message": "success",
             "data": channel.to_dict(),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("put", "/api/admin/channels/{channel_id}")
 def admin_update_channel(channel_id: int, payload: ChannelPayload):
-    session = get_session()
-    try:
+    with get_session() as session:
         channel = session.query(Channel).filter(Channel.id == channel_id).first()
         if not channel:
             raise HTTPException(status_code=404, detail="渠道不存在")
@@ -597,44 +551,29 @@ def admin_update_channel(channel_id: int, payload: ChannelPayload):
             "message": "success",
             "data": channel.to_dict(),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/llm-model-configs")
 def admin_list_llm_model_configs():
     """返回大模型配置列表，API Key 脱敏展示。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         return {
             "code": 0,
             "message": "success",
             "data": list_llm_model_configs(session),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/llm-model-configs")
 def admin_create_llm_model_config(payload: LLMModelConfigPayload):
     """新增大模型配置。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         config = create_llm_model_config(session, payload.model_dump())
         return {
             "code": 0,
             "message": "success",
             "data": next(item for item in list_llm_model_configs(session) if item["id"] == config.id),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("put", "/api/admin/llm-model-configs/{config_id}")
 def admin_update_llm_model_config(config_id: int, payload: LLMModelConfigPayload):
     """更新大模型配置；api_key 为空时保留原密钥。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         config = update_llm_model_config(session, config_id, payload.model_dump())
         if not config:
             raise HTTPException(status_code=404, detail="大模型配置不存在")
@@ -643,10 +582,6 @@ def admin_update_llm_model_config(config_id: int, payload: LLMModelConfigPayload
             "message": "success",
             "data": next(item for item in list_llm_model_configs(session) if item["id"] == config.id),
         }
-    finally:
-        session.close()
-
-
 @app.post("/api/internal/llm/chat-test")
 def internal_llm_chat_test(payload: LLMChatTestPayload):
     """供 info-serve 管理后台代理调用的大模型连通性测试接口。"""
@@ -707,8 +642,7 @@ def list_infos(
         page_size: 每页数量，默认20
     返回: 分页信息列表
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         query = session.query(Info).filter(Info.is_deleted == 0)
 
         if category_id:
@@ -733,10 +667,6 @@ def list_infos(
                 "items": [_info_with_quality(item) for item in items],
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/events")
 def list_events(
     category_code: str = Query("all", description="按分类编码筛选"),
@@ -745,8 +675,7 @@ def list_events(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=50, description="每页数量"),
 ):
-    session = get_session()
-    try:
+    with get_session() as session:
         query = session.query(Event)
         if category_code != "all":
             query = query.join(Category, Category.id == Event.primary_category_id).filter(Category.code == category_code)
@@ -823,10 +752,6 @@ def list_events(
                 ],
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/infos/{info_id}")
 def get_info(info_id: int):
     """
@@ -835,8 +760,7 @@ def get_info(info_id: int):
         info_id: 信息ID
     返回: 信息详情
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         info = session.query(Info).filter(Info.id == info_id, Info.is_deleted == 0).first()
         if not info:
             raise HTTPException(status_code=404, detail="信息不存在")
@@ -845,14 +769,9 @@ def get_info(info_id: int):
             "message": "success",
             "data": _info_with_quality(info),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/events/{event_id}")
 def get_event_detail(event_id: int):
-    session = get_session()
-    try:
+    with get_session() as session:
         event = session.query(Event).filter(Event.id == event_id).first()
         if not event:
             raise HTTPException(status_code=404, detail="事件不存在")
@@ -932,18 +851,13 @@ def get_event_detail(event_id: int):
                 "evidence_chain": evidence_chain,
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/events/{event_id}/analysis-runs")
 def get_event_analysis_runs(event_id: int):
     """
     获取事件的历次分析运行记录。
     用于追溯事件分析的完整历史。
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         event = session.query(Event).filter(Event.id == event_id).first()
         if not event:
             raise HTTPException(status_code=404, detail="事件不存在")
@@ -982,10 +896,6 @@ def get_event_analysis_runs(event_id: int):
                 ],
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/events/{event_id}/analysis-sources")
 def get_event_analysis_sources(event_id: int, run_id: int = None):
     """
@@ -994,8 +904,7 @@ def get_event_analysis_sources(event_id: int, run_id: int = None):
     - 不传 run_id：返回最新一次分析运行的来源
     - 传 run_id：返回指定分析运行的来源
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         event = session.query(Event).filter(Event.id == event_id).first()
         if not event:
             raise HTTPException(status_code=404, detail="事件不存在")
@@ -1055,18 +964,13 @@ def get_event_analysis_sources(event_id: int, run_id: int = None):
                 ],
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/stats")
 def get_stats():
     """
     获取系统统计信息
     返回: 各分类信息数量统计
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         from sqlalchemy import func
         stats = (
             session.query(
@@ -1090,14 +994,9 @@ def get_stats():
                 ],
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/rebuild-events")
 def admin_rebuild_events():
-    session = get_session()
-    try:
+    with get_session() as session:
         rebuild_events(session)
         event_count = session.query(Event).count()
         return {
@@ -1105,14 +1004,9 @@ def admin_rebuild_events():
             "message": "success",
             "data": {"event_count": event_count},
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/refresh-quality")
 def admin_refresh_quality():
-    session = get_session()
-    try:
+    with get_session() as session:
         semantic_result = refresh_info_semantics(session)
         rebuild_events(session)
         event_count = session.query(Event).count()
@@ -1124,17 +1018,12 @@ def admin_refresh_quality():
                 "event_count": event_count,
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/retry-low-quality-details")
 def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, description="本次最多重抓的低完整内容数量")):
     """按渠道重抓低完整详情，解决详情页正文缺失或质量分偏低的问题。"""
     from scheduler import _fetch_details_for_items
 
-    session = get_session()
-    try:
+    with get_session() as session:
         candidates = (
             session.query(Info)
             .join(Channel, Channel.id == Info.channel_id)
@@ -1172,9 +1061,6 @@ def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, descript
             if not channel_code:
                 continue
             grouped_ids.setdefault(channel_code, []).append(info.id)
-    finally:
-        session.close()
-
     total_success = 0
     total_failed = 0
     channel_results = {}
@@ -1190,8 +1076,7 @@ def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, descript
             "detail_failed_count": failed_count,
         }
 
-    session = get_session()
-    try:
+    with get_session() as session:
         semantic_result = refresh_info_semantics(session)
         rebuild_events(session)
         snapshot = save_data_quality_snapshot(session)
@@ -1210,139 +1095,95 @@ def admin_retry_low_quality_details(limit: int = Query(20, ge=1, le=50, descript
                 "event_count": event_count,
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/data-quality-report")
 def admin_data_quality_report():
     """返回数据库质量体检结果，供 Plus 版本收尾和后续采集治理使用。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         return {
             "code": 0,
             "message": "success",
             "data": build_data_quality_report(session),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/channel-quality-report")
 def admin_channel_quality_report(
     sample_limit: int = Query(5, ge=1, le=20, description="每个渠道返回的低质量样本数量"),
 ):
     """按渠道返回真实详情完整度、可用率、失败原因和凭证健康状态。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         return {
             "code": 0,
             "message": "success",
             "data": build_channel_quality_report(session, sample_limit=sample_limit),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/event-analysis-quality-report")
 def admin_event_analysis_quality_report(
     limit: int = Query(20, ge=1, le=100, description="返回的风险事件数量"),
 ):
     """返回事件分析质量报告，帮助运营发现低置信度、回退和弱来源事件。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         return {
             "code": 0,
             "message": "success",
             "data": build_event_analysis_quality_report(session, limit=limit),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/event-analysis-detail-jobs")
 def admin_enqueue_event_analysis_detail_jobs(
     limit: int = Query(20, ge=1, le=100, description="本次最多入队的弱来源数量"),
 ):
     """将事件分析质量风险中的弱来源加入详情补偿队列。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         result = enqueue_event_analysis_detail_jobs(session, limit=limit)
         return {
             "code": 0,
             "message": "事件分析弱来源已加入详情补偿队列",
             "data": result,
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/prioritize-source-quality-governance")
 def admin_prioritize_source_quality_governance(
     limit: int = Query(20, ge=1, le=100, description="本次最多治理的风险来源数量"),
 ):
     """一键治理来源质量风险：定向补偿弱来源、补事实源、重分析并刷新展示质量。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         result = prioritize_source_quality_governance(session, limit=limit)
         return {
             "code": 0,
             "message": "来源质量风险已完成优先治理",
             "data": result,
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/rebuild-stale-event-analysis")
 def admin_rebuild_stale_event_analysis(
     limit: int = Query(200, ge=1, le=1000, description="事件重建最多读取的信息数量"),
 ):
     """手动处理过期事件分析，供运营在详情补偿后立即刷新事件摘要。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         result = rebuild_stale_event_analysis(session, limit=limit)
         return {
             "code": 0,
             "message": "过期事件分析已处理",
             "data": result,
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/mark-low-confidence-event-analysis-stale")
 def admin_mark_low_confidence_event_analysis_stale(
     limit: int = Query(100, ge=1, le=1000, description="本次最多标记的低置信完整来源事件数量"),
 ):
     """将低置信但来源已完整可用的事件标记为过期，供后续重分析。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         result = mark_low_confidence_complete_events_stale(session, limit=limit)
         return {
             "code": 0,
             "message": "低置信完整来源事件已标记为待重分析",
             "data": result,
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/crawl-credential-report")
 def admin_crawl_credential_report():
     """返回采集凭证脱敏健康状态，帮助判断弱渠道是否因为 Cookie 缺失或过期。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         channel_codes = [channel.code for channel in session.query(Channel).order_by(Channel.id.asc()).all()]
         return {
             "code": 0,
             "message": "success",
             "data": build_credential_report(channel_codes),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("get", "/api/admin/channels/{channel_code}/credentials")
 def admin_get_channel_credentials(channel_code: str):
     """获取渠道凭证信息（脱敏）。"""
@@ -1456,8 +1297,7 @@ def admin_detail_jobs(
     failure_reason: str = Query("", max_length=200, description="按失败原因过滤"),
 ):
     """返回详情补偿队列概览，辅助定位积压渠道和失败原因。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         return {
             "code": 0,
             "message": "success",
@@ -1468,15 +1308,10 @@ def admin_detail_jobs(
                 failure_reason=failure_reason.strip(),
             ),
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/archive-low-quality")
 def admin_archive_low_quality():
     """软删除明显低质量内容，并重建事件流。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         archive_result = archive_low_quality_infos(session)
         rebuild_events(session)
         return {
@@ -1488,15 +1323,10 @@ def admin_archive_low_quality():
                 "quality_report": build_data_quality_report(session),
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/admin/archive-duplicate-titles")
 def admin_archive_duplicate_titles():
     """软删除重复标题内容，每组保留质量最高的一条，并重建事件流。"""
-    session = get_session()
-    try:
+    with get_session() as session:
         archive_result = archive_duplicate_title_infos(session)
         rebuild_events(session)
         return {
@@ -1508,10 +1338,6 @@ def admin_archive_duplicate_titles():
                 "quality_report": build_data_quality_report(session),
             },
         }
-    finally:
-        session.close()
-
-
 @public_api_route("post", "/api/crawl/trigger")
 def trigger_crawl(
     background_tasks: BackgroundTasks,

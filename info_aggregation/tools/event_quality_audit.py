@@ -128,11 +128,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Audit info-ai event data quality.")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     args = parser.parse_args()
-    session = get_session()
-    try:
+    with get_session() as session:
         report = build_event_quality_audit(session)
-    finally:
-        session.close()
     print(json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None))
 
 

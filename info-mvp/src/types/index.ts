@@ -103,6 +103,7 @@ export interface EventListItem {
   source_count: number
   source_badges: string[]
   new_update_count: number
+  evolution_stage?: string
 }
 
 export interface EventPage {

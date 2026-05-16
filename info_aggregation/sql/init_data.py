@@ -283,23 +283,21 @@ def init_all_data():
     """
     init_db()
 
-    session = get_session()
-    try:
-        category_map = init_categories(session)
-        channel_map = init_channels(session, category_map)
-        init_channel_credentials(session)
-        if os.getenv("ENABLE_SEED_DATA", "").strip().lower() in {"1", "true", "yes", "on"}:
-            init_mock_data(session, category_map, channel_map)
-        else:
-            logger.info("未启用 ENABLE_SEED_DATA，跳过模拟数据插入")
-        if os.getenv("REBUILD_EVENTS_ON_STARTUP", "").strip().lower() in {"1", "true", "yes", "on"}:
-            rebuild_events(session)
-        else:
-            logger.info("未启用 REBUILD_EVENTS_ON_STARTUP，跳过启动时事件重建")
-        logger.info("数据初始化完成")
-    except Exception as e:
-        session.rollback()
-        logger.error(f"数据初始化失败: {e}", exc_info=True)
-        raise
-    finally:
-        session.close()
+    with get_session() as session:
+        try:
+            category_map = init_categories(session)
+            channel_map = init_channels(session, category_map)
+            init_channel_credentials(session)
+            if os.getenv("ENABLE_SEED_DATA", "").strip().lower() in {"1", "true", "yes", "on"}:
+                init_mock_data(session, category_map, channel_map)
+            else:
+                logger.info("未启用 ENABLE_SEED_DATA，跳过模拟数据插入")
+            if os.getenv("REBUILD_EVENTS_ON_STARTUP", "").strip().lower() in {"1", "true", "yes", "on"}:
+                rebuild_events(session)
+            else:
+                logger.info("未启用 REBUILD_EVENTS_ON_STARTUP，跳过启动时事件重建")
+            logger.info("数据初始化完成")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"数据初始化失败: {e}", exc_info=True)
+            raise

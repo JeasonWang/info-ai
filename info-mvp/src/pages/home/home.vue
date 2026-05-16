@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onLoad, onPullDownRefresh, onReachBottom, onPageScroll } from '@dcloudio/uni-app'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import EventList from '@/components/EventList.vue'
-import FilterPanel from '@/components/FilterPanel.vue'
-import FilterBar from '@/components/FilterBar.vue'
+import SpotlightCard from '@/components/SpotlightCard.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import {
   getChannels,
   getEventCategories,
+  getEventById,
   getEvents,
   getHomeFilterPreference,
   saveHomeFilterPreference,
@@ -15,7 +15,7 @@ import {
 import { useListLoad } from '@/composables/useListLoad'
 import { useFilterMemory } from '@/composables/useFilterMemory'
 import { useUserStore } from '@/stores/user'
-import type { EventCategory, EventListItem } from '@/types'
+import type { EventCategory, EventListItem, EventIntelligenceBrief, EventControversyBrief } from '@/types'
 
 const pageSize = 10
 const { memory, save } = useFilterMemory()
@@ -23,36 +23,36 @@ const userStore = useUserStore()
 const categories = ref<EventCategory[]>([])
 const channels = ref<{ code: string; name: string }[]>([])
 const activeCategoryCode = ref(memory.value.categoryCode)
-const activeChannelCode = ref(memory.value.channelCode)
+const activeChannelCode = ref(memory.value.channelCode || 'all')
 const keyword = ref(memory.value.keyword)
 const appliedKeyword = ref(memory.value.keyword)
 const sortMode = ref<'composite' | 'latest'>(memory.value.sortMode)
 const feedStatus = ref<'active' | 'monitoring'>('active')
 const showBackToTop = ref(false)
+const dockVisible = ref(true)
+const displayMode = ref<'card' | 'compact'>('compact')
+const showSearch = ref(false)
+const showFilterPanel = ref(false)
 const nearBottomDistance = 180
+
 const feedOptions = [
-  { value: 'active' as const, label: '可信事件', meta: '有来源支撑' },
-  { value: 'monitoring' as const, label: '观察中', meta: '待核实线索' },
+  { value: 'active' as const, label: '可信事件', meta: '多源确认' },
+  { value: 'monitoring' as const, label: '观察中', meta: '待核实' },
 ]
-const activeCategoryName = computed(() => {
-  if (activeCategoryCode.value === 'all') return '全网热点'
-  return categories.value.find((item) => item.code === activeCategoryCode.value)?.name || '全网热点'
-})
-const activeChannelName = computed(() => {
-  if (activeChannelCode.value === 'all') return '全部渠道'
-  return channels.value.find((item) => item.code === activeChannelCode.value)?.name || '全部渠道'
-})
-const leadingEvents = computed(() => events.value.slice(0, 3))
-const activeFeedName = computed(() => (feedStatus.value === 'monitoring' ? '观察中热点' : '可信事件'))
-const briefingTitle = computed(() => (feedStatus.value === 'monitoring' ? '重点观察' : '今日重点'))
-const briefingHint = computed(() =>
-  feedStatus.value === 'monitoring'
-    ? '已有热度但证据还不够，适合持续跟踪。'
-    : '优先展示来源更完整、判断更清晰的事件。',
-)
+
 const userInitial = computed(() => {
   const email = userStore.user?.email || ''
   return (email.trim()[0] || '我').toUpperCase()
+})
+
+const activeCategoryName = computed(() => {
+  if (activeCategoryCode.value === 'all') return '全部'
+  return categories.value.find(c => c.code === activeCategoryCode.value)?.name || '全部'
+})
+
+const activeChannelName = computed(() => {
+  if (activeChannelCode.value === 'all') return '全部渠道'
+  return channels.value.find(c => c.code === activeChannelCode.value)?.name || '全部渠道'
 })
 
 const {
@@ -76,13 +76,38 @@ const {
   return { items: result.items, total: result.total }
 })
 
+const spotlightEvent = computed(() => events.value[0] || null)
+const spotlightBrief = ref<EventIntelligenceBrief | null>(null)
+const spotlightControversy = ref<EventControversyBrief | null>(null)
+
+const situationStats = computed(() => {
+  const total = events.value.length
+  const highAttention = events.value.filter(e => (e.composite_score || 0) > 80).length
+  return { total, eventTotal: eventTotal.value, highAttention }
+})
+
+async function loadSpotlightDetail() {
+  const top = events.value[0]
+  if (!top) {
+    spotlightBrief.value = null
+    spotlightControversy.value = null
+    return
+  }
+  try {
+    const detail = await getEventById(top.id)
+    spotlightBrief.value = detail.intelligence_brief || null
+    spotlightControversy.value = detail.controversy_brief || null
+  } catch {
+    spotlightBrief.value = null
+    spotlightControversy.value = null
+  }
+}
+
 async function loadCategories() {
   try {
     categories.value = await getEventCategories()
     ensureActiveCategoryExists()
-  } catch {
-    // 分类加载失败不影响主列表
-  }
+  } catch { /* noop */ }
 }
 
 async function loadChannels() {
@@ -90,23 +115,17 @@ async function loadChannels() {
     const list = await getChannels()
     channels.value = [{ name: '全部渠道', code: 'all' }, ...list]
     ensureActiveChannelExists()
-  } catch {
-    // 渠道加载失败不影响主列表
-  }
+  } catch { /* noop */ }
 }
 
 function ensureActiveCategoryExists() {
-  const exists = categories.value.some((item) => item.code === activeCategoryCode.value)
-  if (!exists) {
-    activeCategoryCode.value = 'all'
-  }
+  const exists = categories.value.some(item => item.code === activeCategoryCode.value)
+  if (!exists) activeCategoryCode.value = 'all'
 }
 
 function ensureActiveChannelExists() {
-  const exists = channels.value.some((item) => item.code === activeChannelCode.value)
-  if (!exists) {
-    activeChannelCode.value = 'all'
-  }
+  const exists = channels.value.some(item => item.code === activeChannelCode.value)
+  if (!exists) activeChannelCode.value = 'all'
 }
 
 async function rememberCurrentFilter() {
@@ -117,13 +136,8 @@ async function rememberCurrentFilter() {
     keyword: appliedKeyword.value,
   }
   save(preference)
-
   if (!userStore.isLoggedIn) return
-  try {
-    await saveHomeFilterPreference(preference)
-  } catch {
-    // 服务端偏好同步失败不阻塞
-  }
+  try { await saveHomeFilterPreference(preference) } catch { /* noop */ }
 }
 
 async function restoreServerFilterPreference() {
@@ -136,15 +150,14 @@ async function restoreServerFilterPreference() {
     keyword.value = preference.keyword || ''
     appliedKeyword.value = preference.keyword || ''
     ensureActiveCategoryExists()
+    ensureActiveChannelExists()
     save({
       categoryCode: activeCategoryCode.value,
       channelCode: activeChannelCode.value,
       sortMode: sortMode.value,
       keyword: appliedKeyword.value,
     })
-  } catch {
-    // 服务端不可用则继续本地缓存
-  }
+  } catch { /* noop */ }
 }
 
 function onCategoryChange(code: string) {
@@ -186,86 +199,12 @@ function onSearch(value: string) {
   scrollToTop()
 }
 
+function toggleDisplayMode() {
+  displayMode.value = displayMode.value === 'compact' ? 'card' : 'compact'
+}
+
 function scrollToTop() {
   uni.pageScrollTo({ scrollTop: 0, duration: 300 })
-  // #ifdef H5
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-  getH5ScrollElements().forEach((el) => {
-    el.scrollTo({ top: 0, behavior: 'smooth' })
-  })
-  // #endif
-}
-
-function updateBackToTop(scrollTop: number) {
-  showBackToTop.value = scrollTop > 180
-}
-
-function maybeLoadMoreByScroll(scrollTop: number, viewportHeight: number, scrollHeight: number) {
-  if (scrollHeight - scrollTop - viewportHeight <= nearBottomDistance) {
-    void loadMore()
-  }
-}
-
-// #ifdef H5
-function getH5ScrollElements() {
-  const selectors = [
-    'html',
-    'body',
-    '#app',
-    'uni-page',
-    'uni-page-wrapper',
-    'uni-page-body',
-    '.uni-page-wrapper',
-    '.uni-page-body',
-    '.home-page',
-  ]
-  const elements = selectors
-    .map((selector) => document.querySelector(selector))
-    .filter((el): el is HTMLElement => el instanceof HTMLElement)
-  const scrollingElement = document.scrollingElement
-  if (scrollingElement instanceof HTMLElement) {
-    elements.unshift(scrollingElement)
-  }
-  return [...new Set(elements)]
-}
-
-function getH5ScrollMetrics() {
-  const scrollingElement = document.scrollingElement || document.documentElement
-  const body = document.body
-  const elementMetrics = getH5ScrollElements().map((el) => ({
-    scrollTop: el.scrollTop || 0,
-    viewportHeight: el.clientHeight || window.innerHeight || 0,
-    scrollHeight: el.scrollHeight || 0,
-  }))
-  const scrollTop = Math.max(
-    window.scrollY || 0,
-    scrollingElement.scrollTop || 0,
-    document.documentElement.scrollTop || 0,
-    body?.scrollTop || 0,
-    ...elementMetrics.map((item) => item.scrollTop),
-  )
-  const viewportHeight = Math.max(
-    window.innerHeight || 0,
-    scrollingElement.clientHeight || 0,
-    document.documentElement.clientHeight || 0,
-    ...elementMetrics.map((item) => item.viewportHeight),
-  )
-  const scrollHeight = Math.max(
-    scrollingElement.scrollHeight || 0,
-    document.documentElement.scrollHeight || 0,
-    body?.scrollHeight || 0,
-    ...elementMetrics.map((item) => item.scrollHeight),
-  )
-  return { scrollTop, viewportHeight, scrollHeight }
-}
-// #endif
-
-async function handleRetry() {
-  await refresh()
-}
-
-async function handleLoadMoreRetry() {
-  await loadMore()
 }
 
 function goLogin() {
@@ -280,12 +219,25 @@ function goHistory() {
   uni.navigateTo({ url: '/pages/history/history' })
 }
 
-function confidenceText(item: EventListItem) {
-  const score = item.display_quality_score || item.composite_score || 0
-  if (item.status === 'monitoring' || item.display_quality_level === 'weak') return '待核实'
-  if (score >= 80) return '高可信'
-  if (score >= 60) return '可信'
-  return '需观察'
+function goSpotlightDetail() {
+  if (spotlightEvent.value) {
+    uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${spotlightEvent.value.id}` })
+  }
+}
+
+async function handleRetry() { await refresh() }
+async function handleLoadMoreRetry() { await loadMore() }
+
+function updateBackToTop(scrollTop: number) {
+  showBackToTop.value = scrollTop > 300
+}
+
+let lastScrollTop = 0
+
+function handleScroll(scrollTop: number) {
+  showBackToTop.value = scrollTop > 300
+  dockVisible.value = !(scrollTop > 300 && scrollTop > lastScrollTop)
+  lastScrollTop = scrollTop
 }
 
 onLoad(() => {
@@ -299,242 +251,219 @@ onPullDownRefresh(async () => {
   uni.stopPullDownRefresh()
 })
 
-onReachBottom(() => {
-  loadMore()
-})
+onReachBottom(() => { loadMore() })
 
 onPageScroll((e) => {
-  updateBackToTop(e.scrollTop)
+  handleScroll(e.scrollTop)
 })
-
-// #ifdef H5
-let nativeScrollFrame = 0
-let scrollCheckTimer = 0
-let scrollTargets: EventTarget[] = []
-
-function bindH5ScrollTargets() {
-  const nextTargets: EventTarget[] = [window, document, ...getH5ScrollElements()]
-  nextTargets.forEach((target) => {
-    if (!scrollTargets.includes(target)) {
-      target.addEventListener('scroll', handleNativeScroll, { passive: true, capture: true })
-    }
-  })
-  scrollTargets
-    .filter((target) => !nextTargets.includes(target))
-    .forEach((target) => {
-      target.removeEventListener('scroll', handleNativeScroll, { capture: true })
-    })
-  scrollTargets = nextTargets
-}
-
-function syncH5ScrollState() {
-  bindH5ScrollTargets()
-  const { scrollTop, viewportHeight, scrollHeight } = getH5ScrollMetrics()
-  updateBackToTop(scrollTop)
-  maybeLoadMoreByScroll(scrollTop, viewportHeight, scrollHeight)
-}
-
-function handleNativeScroll() {
-  if (nativeScrollFrame) return
-  nativeScrollFrame = window.requestAnimationFrame(() => {
-    nativeScrollFrame = 0
-    syncH5ScrollState()
-  })
-}
 
 onMounted(async () => {
-  await nextTick()
-  bindH5ScrollTargets()
-  scrollCheckTimer = window.setInterval(syncH5ScrollState, 300)
-  syncH5ScrollState()
+  // #ifdef H5
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY || document.documentElement.scrollTop || 0
+    handleScroll(y)
+  }, { passive: true })
+  // #endif
 })
 
-onUnmounted(() => {
-  scrollTargets.forEach((target) => {
-    target.removeEventListener('scroll', handleNativeScroll, { capture: true })
-  })
-  scrollTargets = []
-  if (scrollCheckTimer) {
-    window.clearInterval(scrollCheckTimer)
-  }
-  if (nativeScrollFrame) {
-    window.cancelAnimationFrame(nativeScrollFrame)
-  }
-})
-// #endif
-
-// #ifdef MP-WEIXIN
-function onShareAppMessage() {
-  return {
-    title: '信息达人 AI 情报台',
-    path: '/pages/home/home',
-  }
-}
-
-function onShareTimeline() {
-  return {
-    title: '信息达人 AI 情报台',
-    query: '',
-  }
-}
-// #endif
+watch(events, () => { loadSpotlightDetail() })
 </script>
 
 <template>
-  <view class="home-page">
-    <!-- 顶部导航栏 -->
-    <view class="nav-bar">
-      <view class="brand">
-        <text class="brand-name">信息达人</text>
-        <text class="brand-count">{{ eventTotal }}</text>
-        <text class="brand-tag">AI 情报台 · {{ activeCategoryName }}</text>
-      </view>
-      <view class="user-actions">
-        <template v-if="userStore.isLoggedIn">
-          <view class="quick-action" @click="goFavorites">
-            <text>收藏</text>
+  <view class="page-root">
+    <view class="home-page">
+      <!-- Nav Bar -->
+      <view class="nav-bar">
+        <view class="nav-brand">
+          <view class="nav-logo"><text class="nav-logo-text">AI</text></view>
+          <text class="nav-title">AI 情报台</text>
+        </view>
+        <view class="nav-actions">
+          <view class="nav-icon-btn" @click="showSearch = !showSearch">
+            <text class="nav-icon-text">&#x1F50D;</text>
           </view>
-          <view class="quick-action" @click="goHistory">
-            <text>足迹</text>
-          </view>
-          <view class="avatar-btn" @click="goLogin">
+          <view v-if="userStore.isLoggedIn" class="avatar-btn" @click="goLogin">
             <text>{{ userInitial }}</text>
           </view>
-        </template>
-        <view v-else class="login-btn" @click="goLogin">
-          <text>登录</text>
-        </view>
-      </view>
-    </view>
-
-    <view class="home-shell">
-      <!-- 搜索框 -->
-      <FilterBar
-        :keyword="keyword"
-        @search="onSearch"
-      />
-
-      <view class="feed-switch" aria-label="事件视图">
-        <view
-          v-for="option in feedOptions"
-          :key="option.value"
-          class="feed-switch-item"
-          :class="{ active: feedStatus === option.value }"
-          @click="onFeedStatusChange(option.value)"
-        >
-          <text class="feed-switch-label">{{ option.label }}</text>
-          <text class="feed-switch-meta">{{ option.meta }}</text>
+          <view v-else class="login-btn" @click="goLogin"><text>登录</text></view>
         </view>
       </view>
 
-      <view class="briefing-panel">
-        <view class="briefing-head">
-          <view>
-            <text class="briefing-title">{{ briefingTitle }}</text>
-            <text class="briefing-hint">{{ briefingHint }}</text>
-          </view>
-          <text class="briefing-count">{{ eventTotal }} 条</text>
-        </view>
-        <view v-if="leadingEvents.length" class="briefing-list">
-          <view
-            v-for="(item, index) in leadingEvents"
-            :key="item.id"
-            class="briefing-item"
-            @click="uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${item.id}` })"
-          >
-            <text class="briefing-rank">{{ index + 1 }}</text>
-            <view class="briefing-copy">
-              <text class="briefing-event-title">{{ item.title }}</text>
-              <text class="briefing-event-summary">{{ item.one_line_summary }}</text>
-              <text class="briefing-event-meta">{{ confidenceText(item) }} · {{ item.source_count }} 来源</text>
-            </view>
-            <text class="briefing-score">{{ item.display_quality_score || item.composite_score }}</text>
-          </view>
-        </view>
-        <text v-else-if="!loading" class="briefing-empty">当前筛选下暂无可展示事件。</text>
-      </view>
-
-      <!-- 筛选面板（分类+渠道+排序） -->
-      <view class="filter-wrap">
-        <FilterPanel
-          :categories="categories"
-          :channels="channels"
-          :active-code="activeCategoryCode"
-          :active-channel-code="activeChannelCode"
-          :sort-mode="sortMode"
-          @category-change="onCategoryChange"
-          @channel-change="onChannelChange"
-          @sort-change="onSortChange"
+      <!-- Search (expandable) -->
+      <view v-if="showSearch" class="search-bar">
+        <input
+          class="search-input"
+          :value="keyword"
+          placeholder="搜索事件关键词..."
+          confirm-type="search"
+          @confirm="onSearch(($event as any).detail?.value || '')"
         />
+        <view class="search-cancel" @click="showSearch = false; keyword = ''; onSearch('')">
+          <text>取消</text>
+        </view>
       </view>
 
-      <view class="desktop-grid">
+      <view class="home-shell">
+        <!-- View Switch -->
+        <view class="view-switch">
+          <view
+            v-for="option in feedOptions"
+            :key="option.value"
+            class="view-switch-item"
+            :class="{ active: feedStatus === option.value }"
+            @click="onFeedStatusChange(option.value)"
+          >
+            <text class="switch-label">{{ option.label }}</text>
+            <text class="switch-meta">{{ option.meta }}</text>
+          </view>
+        </view>
+
+        <!-- Situation Strip -->
+        <view class="situation-strip">
+          <view class="stat-card">
+            <text class="stat-num">{{ situationStats.eventTotal }}</text>
+            <text class="stat-label">活跃情报</text>
+          </view>
+          <view class="stat-card">
+            <text class="stat-num accent">+{{ situationStats.total }}</text>
+            <text class="stat-label">已加载</text>
+          </view>
+          <view class="stat-card">
+            <text class="stat-num">{{ situationStats.highAttention }}</text>
+            <text class="stat-label">高关注度</text>
+          </view>
+        </view>
+
+        <!-- Spotlight Card -->
+        <SpotlightCard
+          v-if="spotlightEvent"
+          :event="spotlightEvent"
+          :brief="spotlightBrief"
+          :controversy="spotlightControversy"
+          @click="goSpotlightDetail"
+        />
+
+        <!-- Filter Bar: category tabs + filter toggle + mode toggle -->
+        <view class="filter-bar">
+          <scroll-view scroll-x class="filter-tabs-scroll">
+            <view class="filter-tabs">
+              <view class="filter-tab" :class="{ active: activeCategoryCode === 'all' }" @click="onCategoryChange('all')">
+                <text>全部</text>
+              </view>
+              <view
+                v-for="cat in categories"
+                :key="cat.code"
+                class="filter-tab"
+                :class="{ active: activeCategoryCode === cat.code }"
+                @click="onCategoryChange(cat.code)"
+              >
+                <text>{{ cat.name }}</text>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="filter-actions">
+            <view class="filter-btn" :class="{ active: showFilterPanel }" @click="showFilterPanel = !showFilterPanel">
+              <text class="filter-btn-icon">&#x2699;</text>
+              <view v-if="activeChannelCode !== 'all' || sortMode === 'latest'" class="filter-indicator" />
+            </view>
+            <view class="filter-btn" @click="toggleDisplayMode">
+              <text class="filter-btn-icon">{{ displayMode === 'compact' ? '&#x2630;' : '&#x2261;' }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- Expandable Filter Panel (channel + sort) -->
+        <view v-if="showFilterPanel" class="filter-panel">
+          <view class="filter-section">
+            <text class="filter-section-title">渠道</text>
+            <view class="filter-pills">
+              <view
+                v-for="ch in channels"
+                :key="ch.code"
+                class="pill"
+                :class="{ active: activeChannelCode === ch.code }"
+                @click="onChannelChange(ch.code)"
+              >
+                <text>{{ ch.name }}</text>
+              </view>
+            </view>
+          </view>
+          <view class="filter-section">
+            <text class="filter-section-title">排序</text>
+            <view class="filter-pills">
+              <view class="pill" :class="{ active: sortMode === 'composite' }" @click="onSortChange('composite')">
+                <text>综合优先</text>
+              </view>
+              <view class="pill" :class="{ active: sortMode === 'latest' }" @click="onSortChange('latest')">
+                <text>最新优先</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- Active filter hint (when filters are active and panel is closed) -->
+        <view v-if="!showFilterPanel && (activeChannelCode !== 'all' || sortMode === 'latest')" class="active-filters">
+          <text class="active-filter-tag" v-if="activeChannelCode !== 'all'" @click="onChannelChange('all')">{{ activeChannelName }} ✕</text>
+          <text class="active-filter-tag" v-if="sortMode === 'latest'" @click="onSortChange('composite')">最新优先 ✕</text>
+        </view>
+
+        <!-- Main Content -->
         <view class="feed-column">
           <SkeletonBlock v-if="loading && events.length === 0" />
-
           <view v-else-if="error && events.length === 0" class="error-state">
-            <text class="error-icon">&#xe60c;</text>
             <text class="error-text">{{ error }}</text>
-            <text class="retry-btn" @click="handleRetry">点击重试</text>
+            <text class="retry-btn" @click="handleRetry">重试</text>
           </view>
-
           <EventList
             :events="events"
             :loading="loading"
             :has-more="hasMore"
+            :display-mode="displayMode"
             @load-more="loadMore"
             @retry="handleLoadMoreRetry"
           />
         </view>
-
-        <view class="insight-rail">
-          <view class="rail-card">
-            <text class="rail-title">当前视图</text>
-            <text class="rail-line">{{ activeFeedName }}</text>
-            <text class="rail-line">{{ activeCategoryName }}</text>
-            <text class="rail-line">{{ activeChannelName }}</text>
-            <text class="rail-line">{{ sortMode === 'latest' ? '最新发布优先' : '综合热度优先' }}</text>
-          </view>
-          <view class="rail-card">
-            <text class="rail-title">值得先看</text>
-            <view v-if="leadingEvents.length" class="lead-list">
-              <view
-                v-for="item in leadingEvents"
-                :key="item.id"
-                class="lead-item"
-                @click="uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${item.id}` })"
-              >
-                <text class="lead-title">{{ item.title }}</text>
-                <text class="lead-meta">{{ item.source_count }} 来源 · 热度 {{ Math.round(item.heat_score || 0) }}</text>
-              </view>
-            </view>
-            <text v-else class="rail-empty">加载后展示最值得优先阅读的事件。</text>
-          </view>
-        </view>
       </view>
     </view>
 
-    <view
-      v-if="showBackToTop"
-      class="back-to-top"
-      @click="scrollToTop"
-    >
+    <!-- Back to Top -->
+    <view v-if="showBackToTop" class="back-to-top" @click="scrollToTop">
       <text class="back-to-top-icon">↑</text>
+    </view>
+
+    <!-- Floating Dock -->
+    <view class="dock-wrap" :style="{ opacity: dockVisible ? 1 : 0, transform: dockVisible ? 'translateY(0)' : 'translateY(100%)' }">
+      <view class="dock">
+        <view class="dock-item active" @click="() => {}">
+          <text class="dock-icon">&#x25C9;</text>
+          <text class="dock-label">情报</text>
+        </view>
+        <view class="dock-ai">
+          <view class="dock-ai-orb"><text class="ai-icon">&#x2726;</text></view>
+          <text class="dock-label ai-label">智询</text>
+        </view>
+        <view class="dock-item" @click="userStore.isLoggedIn ? goFavorites() : goLogin()">
+          <text class="dock-icon">&#x25CE;</text>
+          <text class="dock-label">我的</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <style scoped>
-.home-page {
-  width: 100vw;
-  max-width: 100vw;
-  box-sizing: border-box;
-  padding-bottom: 40rpx;
-  background:
-    linear-gradient(180deg, rgba(255, 239, 219, 0.72) 0, rgba(243, 236, 225, 0) 280rpx),
-    var(--bg-color);
+.page-root {
+  width: 100%;
   min-height: 100vh;
-  overflow-x: hidden;
+  position: relative;
+}
+
+.home-page {
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 180rpx;
+  background: var(--bg-color);
+  min-height: 100vh;
 }
 
 .home-shell {
@@ -542,721 +471,290 @@ function onShareTimeline() {
   max-width: 1240px;
   margin: 0 auto;
   box-sizing: border-box;
-  overflow: hidden;
 }
 
-/* 顶部导航栏 */
+/* Nav Bar */
 .nav-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16rpx;
-  padding: 24rpx;
+  padding: 20rpx 24rpx;
   background: rgba(255, 250, 245, 0.92);
-  border-bottom: 1rpx solid var(--divider);
+  border-bottom: 1rpx solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 20;
   backdrop-filter: blur(18px);
-  max-width: 100vw;
   box-sizing: border-box;
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  min-width: 0;
-}
+.nav-brand { display: flex; align-items: center; gap: 12rpx; }
 
-.brand-name {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 2rpx;
-}
-
-.brand-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36rpx;
-  height: 32rpx;
-  padding: 0 10rpx;
-  color: #fff;
+.nav-logo {
+  width: 56rpx; height: 56rpx; border-radius: 14rpx;
   background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
-  border-radius: var(--radius-pill);
-  font-size: 22rpx;
-  font-weight: 800;
-  line-height: 32rpx;
+  display: flex; align-items: center; justify-content: center;
 }
 
-.brand-tag {
-  font-size: 20rpx;
-  color: var(--brand-accent);
-  background: var(--brand-accent-light);
-  padding: 4rpx 12rpx;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-  max-width: 240rpx;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
+.nav-logo-text { color: #fff; font-size: 28rpx; font-weight: 800; }
 
-.user-actions {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  flex-shrink: 0;
-}
+.nav-title { font-size: 34rpx; font-weight: 700; color: var(--text-primary); }
 
-.quick-action {
-  height: 64rpx;
-  padding: 0 20rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-pill);
-  background: var(--brand-soft);
-  color: var(--brand-accent);
-  font-size: 24rpx;
-  font-weight: 700;
-  transition: background var(--transition-fast);
-}
+.nav-actions { display: flex; align-items: center; gap: 12rpx; }
 
-.quick-action:active,
-.avatar-btn:active {
-  background: var(--divider);
+.nav-icon-btn {
+  width: 64rpx; height: 64rpx; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
 }
+.nav-icon-btn:active { background: var(--brand-accent-light); }
+.nav-icon-text { font-size: 32rpx; }
 
 .avatar-btn {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
-  color: #fff;
-  font-size: 26rpx;
-  font-weight: 800;
-  box-shadow: var(--shadow-sm);
+  width: 60rpx; height: 60rpx; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
+  color: #fff; font-size: 26rpx; font-weight: 800;
 }
 
 .login-btn {
-  padding: 14rpx 32rpx;
+  padding: 12rpx 28rpx; border-radius: var(--radius-pill);
   background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
-  color: #fff;
-  border-radius: var(--radius-pill);
-  font-size: 28rpx;
-  font-weight: 500;
-  transition: transform var(--transition-fast), background var(--transition-fast);
+  color: #fff; font-size: 26rpx; font-weight: 500;
+}
+.login-btn:active { opacity: 0.9; }
+
+/* Search */
+.search-bar {
+  display: flex; align-items: center; gap: 16rpx; padding: 12rpx 24rpx;
+  background: var(--card-bg); border-bottom: 1rpx solid var(--border-color);
 }
 
-.login-btn:active {
-  transform: scale(0.95);
-  background: #dd482f;
+.search-input {
+  flex: 1; height: 64rpx; padding: 0 20rpx;
+  background: var(--surface-elevated); border-radius: var(--radius-pill);
+  font-size: 26rpx; color: var(--text-primary);
 }
 
-.rail-title,
-.rail-line,
-.rail-empty,
-.lead-title,
-.lead-meta {
-  display: block;
+.search-cancel { padding: 12rpx; color: var(--brand-primary); font-size: 26rpx; }
+
+/* View Switch */
+.view-switch {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8rpx; margin: 20rpx 24rpx 0; padding: 6rpx;
+  background: rgba(255, 255, 255, 0.6); border-radius: var(--radius-pill);
 }
 
-.filter-wrap {
-  margin-top: 16rpx;
-  margin-bottom: 16rpx;
+.view-switch-item {
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2rpx;
+  padding: 14rpx 0; border-radius: var(--radius-pill);
+  color: var(--text-muted); transition: all 0.25s;
 }
 
-.feed-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10rpx;
-  margin: 16rpx 24rpx 0;
-  padding: 8rpx;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1rpx solid var(--divider);
-  border-radius: var(--radius-lg);
-  box-sizing: border-box;
+.view-switch-item.active {
+  color: #fff; background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
+  box-shadow: 0 4rpx 16rpx rgba(240, 90, 61, 0.3);
 }
 
-.feed-switch-item {
-  min-width: 0;
-  min-height: 76rpx;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4rpx;
-  padding: 10rpx 16rpx;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+.switch-label { font-size: 26rpx; font-weight: 600; }
+.switch-meta { font-size: 20rpx; opacity: 0.7; }
+
+/* Situation Strip */
+.situation-strip {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx; margin: 20rpx 24rpx 0;
 }
 
-.feed-switch-item.active {
-  background: #1f2937;
-  color: #fff;
+.stat-card {
+  background: var(--card-bg); border-radius: var(--radius-sm);
+  padding: 20rpx; box-shadow: var(--shadow-sm); text-align: center;
+}
+
+.stat-num { font-size: 48rpx; font-weight: 800; color: var(--text-primary); line-height: 1.1; }
+.stat-num.accent { color: var(--brand-primary); }
+.stat-label { font-size: 22rpx; color: var(--text-muted); margin-top: 4rpx; }
+
+/* Filter Bar */
+.filter-bar {
+  display: flex; align-items: center; gap: 8rpx;
+  padding: 20rpx 24rpx 0; position: relative;
+}
+
+.filter-tabs-scroll { flex: 1; white-space: nowrap; }
+.filter-tabs { display: flex; gap: 0; }
+
+.filter-tab {
+  flex-shrink: 0; padding: 12rpx 28rpx; font-size: 26rpx; font-weight: 500;
+  color: var(--text-muted); border-bottom: 4rpx solid transparent; transition: all 0.2s;
+}
+
+.filter-tab.active {
+  color: var(--brand-primary); font-weight: 700; border-bottom-color: var(--brand-primary);
+}
+
+.filter-actions { display: flex; align-items: center; gap: 8rpx; flex-shrink: 0; }
+
+.filter-btn {
+  width: 60rpx; height: 60rpx; border-radius: 14rpx;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card-bg); border: 1rpx solid var(--border-color);
+  position: relative;
+}
+.filter-btn:active { background: var(--brand-accent-light); }
+.filter-btn.active { background: var(--brand-accent-light); border-color: var(--brand-primary); }
+.filter-btn-icon { font-size: 28rpx; }
+
+.filter-indicator {
+  position: absolute; top: -4rpx; right: -4rpx;
+  width: 14rpx; height: 14rpx; border-radius: 50%;
+  background: var(--brand-primary); border: 2rpx solid var(--bg-color);
+}
+
+/* Filter Panel */
+.filter-panel {
+  margin: 12rpx 24rpx 0; padding: 24rpx;
+  background: var(--card-bg); border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
 }
 
-.feed-switch-label,
-.feed-switch-meta {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.filter-section { margin-bottom: 20rpx; }
+.filter-section:last-child { margin-bottom: 0; }
+
+.filter-section-title {
+  font-size: 22rpx; font-weight: 700; color: var(--text-muted);
+  margin-bottom: 12rpx;
 }
 
-.feed-switch-label {
-  font-size: 26rpx;
-  font-weight: 800;
+.filter-pills { display: flex; flex-wrap: wrap; gap: 12rpx; }
+
+.pill {
+  padding: 10rpx 24rpx; border-radius: var(--radius-pill);
+  font-size: 24rpx; color: var(--text-secondary);
+  background: var(--surface-elevated); border: 1rpx solid var(--border-color);
+}
+.pill.active {
+  color: #fff; background: var(--brand-primary); border-color: var(--brand-primary);
+}
+.pill:active { opacity: 0.8; }
+
+/* Active filter tags */
+.active-filters {
+  display: flex; gap: 12rpx; padding: 8rpx 24rpx 0; flex-wrap: wrap;
 }
 
-.feed-switch-meta {
-  font-size: 20rpx;
-  opacity: 0.76;
+.active-filter-tag {
+  font-size: 22rpx; color: var(--brand-primary); background: var(--brand-accent-light);
+  padding: 6rpx 16rpx; border-radius: var(--radius-pill);
 }
 
-.briefing-panel {
-  margin: 16rpx 24rpx 0;
-  padding: 24rpx;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1rpx solid var(--divider);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  box-sizing: border-box;
-}
+/* Feed column */
+.feed-column { min-width: 0; }
 
-.briefing-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 18rpx;
-}
-
-.briefing-title,
-.briefing-hint,
-.briefing-event-title,
-.briefing-event-summary,
-.briefing-event-meta,
-.briefing-empty {
-  display: block;
-}
-
-.briefing-title {
-  color: var(--text-primary);
-  font-size: 32rpx;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.briefing-hint {
-  margin-top: 6rpx;
-  color: var(--text-muted);
-  font-size: 22rpx;
-  line-height: 1.5;
-}
-
-.briefing-count {
-  flex-shrink: 0;
-  height: 36rpx;
-  padding: 0 14rpx;
-  color: var(--brand-accent);
-  background: var(--brand-accent-light);
-  border-radius: var(--radius-pill);
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 36rpx;
-}
-
-.briefing-list {
-  display: grid;
-  gap: 12rpx;
-}
-
-.briefing-item {
-  display: grid;
-  grid-template-columns: 40rpx minmax(0, 1fr) 52rpx;
-  align-items: center;
-  gap: 14rpx;
-  padding: 16rpx;
-  background: var(--surface-elevated);
-  border-radius: var(--radius-md);
-}
-
-.briefing-rank {
-  width: 40rpx;
-  height: 40rpx;
-  color: #fff;
-  background: #1f2937;
-  border-radius: 50%;
-  font-size: 22rpx;
-  font-weight: 800;
-  line-height: 40rpx;
-  text-align: center;
-}
-
-.briefing-copy {
-  min-width: 0;
-}
-
-.briefing-event-title {
-  color: var(--text-primary);
-  font-size: 26rpx;
-  font-weight: 800;
-  line-height: 1.4;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.briefing-event-summary {
-  margin-top: 4rpx;
-  color: var(--text-secondary);
-  font-size: 22rpx;
-  line-height: 1.45;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.briefing-event-meta {
-  margin-top: 6rpx;
-  color: var(--text-muted);
-  font-size: 20rpx;
-  line-height: 1.35;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.briefing-score {
-  color: #117a4f;
-  font-size: 28rpx;
-  font-weight: 800;
-  text-align: right;
-}
-
-.briefing-empty {
-  color: var(--text-muted);
-  font-size: 24rpx;
-}
-
-.desktop-grid {
-  display: block;
-}
-
-.feed-column {
-  min-width: 0;
-}
-
-.insight-rail {
-  display: none;
-}
-
-.rail-card {
-  background: rgba(255, 255, 255, 0.94);
-  border: 1rpx solid var(--divider);
-  border-radius: var(--radius-lg);
-  padding: 26rpx;
-  box-shadow: var(--shadow-sm);
-}
-
-.rail-title {
-  color: var(--text-primary);
-  font-size: 30rpx;
-  font-weight: 800;
-  margin-bottom: 18rpx;
-}
-
-.rail-line {
-  color: var(--text-secondary);
-  font-size: 26rpx;
-  padding: 12rpx 0;
-  border-bottom: 1rpx solid var(--divider);
-}
-
-.rail-line:last-child {
-  border-bottom: 0;
-}
-
-.lead-list {
-  display: grid;
-  gap: 14rpx;
-}
-
-.lead-item {
-  padding: 18rpx;
-  background: var(--surface-elevated);
-  border-radius: var(--radius-md);
-}
-
-.lead-title {
-  color: var(--text-primary);
-  font-size: 26rpx;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.lead-meta,
-.rail-empty {
-  color: var(--text-muted);
-  font-size: 22rpx;
-  line-height: 1.5;
-  margin-top: 8rpx;
-}
-
-/* 错误状态 */
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 120rpx 40rpx;
-}
-
-.error-icon {
-  font-family: 'uniicons';
-  font-size: 80rpx;
-  color: var(--border-color);
-  margin-bottom: 24rpx;
-}
-
-.error-text {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-bottom: 24rpx;
-}
-
+/* Error */
+.error-state { display: flex; flex-direction: column; align-items: center; padding: 160rpx 40rpx; }
+.error-text { font-size: var(--text-base); color: var(--text-muted); margin-bottom: 24rpx; }
 .retry-btn {
-  display: inline-block;
-  font-size: var(--text-base);
-  color: var(--brand-accent);
-  padding: 16rpx 40rpx;
-  border: 1rpx solid var(--brand-accent);
-  border-radius: var(--radius-pill);
+  font-size: var(--text-base); color: var(--brand-primary);
+  padding: 16rpx 40rpx; border: 1rpx solid var(--brand-primary);
+  border-radius: var(--radius-pill); background: var(--brand-accent-light);
+}
+
+/* Back to Top */
+.back-to-top {
+  position: fixed; right: 28rpx; bottom: 200rpx;
+  width: 72rpx; height: 72rpx; border-radius: 50%;
+  background: var(--card-bg); box-shadow: var(--shadow-md);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 300;
+}
+.back-to-top:active { transform: scale(0.9); }
+.back-to-top-icon { font-size: 32rpx; color: var(--text-secondary); }
+
+/* Dock */
+.dock-wrap {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 300;
+  display: flex; justify-content: center;
+  padding: 0 0 calc(16rpx + env(safe-area-inset-bottom));
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s;
+}
+
+.dock {
+  display: flex; align-items: flex-end; width: 72%;
+  background: rgba(255, 250, 245, 0.9);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border-radius: 40rpx; padding: 10rpx 0;
+  box-shadow: 0 4rpx 32rpx rgba(106, 70, 43, 0.12), 0 0 0 1rpx rgba(234, 223, 213, 0.5);
+}
+
+.dock-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4rpx; padding: 14rpx 0; border-radius: 28rpx;
+  position: relative;
+}
+
+.dock-icon { font-size: 40rpx; color: var(--text-muted); }
+.dock-label { font-size: 18rpx; color: var(--text-muted); }
+
+.dock-item.active .dock-icon { color: var(--brand-primary); }
+.dock-item.active .dock-label { color: var(--brand-primary); font-weight: 600; }
+.dock-item.active::before {
+  content: ''; position: absolute; inset: 2rpx; border-radius: 26rpx;
   background: var(--brand-accent-light);
 }
 
-/* 返回顶部 */
-.back-to-top {
-  position: fixed;
-  right: 32rpx;
-  bottom: 120rpx;
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 50%;
+.dock-ai {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; margin-top: -24rpx; position: relative; z-index: 1;
+}
+
+.dock-ai-orb {
+  width: 80rpx; height: 80rpx; border-radius: 50%;
   background: linear-gradient(135deg, #f05a3d 0%, #ff7a45 100%);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  transition: transform var(--transition-fast);
-  animation: float-in 0.3s ease;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4rpx 20rpx rgba(240, 90, 61, 0.35);
 }
+.dock-ai-orb:active { transform: scale(0.93); }
+.ai-icon { font-size: 40rpx; color: #fff; }
+.ai-label { color: var(--brand-primary) !important; margin-top: 4rpx; }
 
-.back-to-top:active {
-  transform: scale(0.92);
+@keyframes orb-glow {
+  0%, 100% { box-shadow: 0 4rpx 20rpx rgba(240, 90, 61, 0.35); }
+  50% { box-shadow: 0 4rpx 28rpx rgba(240, 90, 61, 0.45), 0 0 0 6rpx rgba(240, 90, 61, 0.06); }
 }
+.dock-ai-orb { animation: orb-glow 3s ease-in-out infinite; }
 
-.back-to-top-icon {
-  font-family: 'uniicons';
-  font-size: 36rpx;
-  color: #fff;
-}
-
+/* Responsive */
 @media (max-width: 700px) {
-  .home-shell {
-    max-width: 390px;
-    margin: 0;
-  }
+  .home-shell { max-width: 100%; margin: 0; }
+  .nav-bar { padding: 16rpx 24rpx; }
 
-  .nav-bar {
-    padding: 12px 16px;
-  }
+  .view-switch { width: calc(100% - 32px); margin: 16px 16px 0; padding: 3px; gap: 3px; }
+  .view-switch-item { padding: 10px 0; }
+  .switch-label { font-size: 13px; }
+  .switch-meta { font-size: 10px; }
 
-  .brand-tag {
-    display: none;
-  }
+  .situation-strip { margin: 12px 16px 0; gap: 6px; }
+  .stat-card { padding: 10px; }
+  .stat-num { font-size: 24px; }
+  .stat-label { font-size: 11px; }
 
-  .brand-count {
-    min-width: 24px;
-    height: 20px;
-    padding: 0 7px;
-    font-size: 12px;
-    line-height: 20px;
-  }
+  .filter-bar { padding: 12px 16px 0; }
+  .filter-tab { padding: 6px 14px; font-size: 13px; }
+  .filter-panel { margin: 10px 16px 0; padding: 14px; }
+  .pill { padding: 6px 12px; font-size: 12px; }
 
-  .user-actions {
-    gap: 8px;
-  }
-
-  .quick-action {
-    height: 34px;
-    padding: 0 10px;
-    font-size: 12px;
-  }
-
-  .avatar-btn {
-    width: 34px;
-    height: 34px;
-    font-size: 14px;
-  }
-
-  .filter-wrap {
-    width: 358px;
-    max-width: calc(100% - 32px);
-    box-sizing: border-box;
-    margin-top: 14px;
-    margin-bottom: 14px;
-    margin-left: 16px;
-    margin-right: 16px;
-  }
-
-  .feed-switch {
-    width: 358px;
-    max-width: calc(100% - 32px);
-    margin: 14px 16px 0;
-    padding: 4px;
-    gap: 4px;
-    border-radius: 12px;
-  }
-
-  .feed-switch-item {
-    min-height: 54px;
-    padding: 8px 10px;
-    border-radius: 9px;
-  }
-
-  .feed-switch-label {
-    font-size: 14px;
-  }
-
-  .feed-switch-meta {
-    font-size: 11px;
-  }
-
-  .briefing-panel {
-    width: 358px;
-    max-width: calc(100% - 32px);
-    margin: 14px 16px 0;
-    padding: 14px;
-    border-radius: 12px;
-  }
-
-  .briefing-title {
-    font-size: 17px;
-  }
-
-  .briefing-hint {
-    font-size: 12px;
-  }
-
-  .briefing-count {
-    height: 22px;
-    padding: 0 8px;
-    font-size: 12px;
-    line-height: 22px;
-  }
-
-  .briefing-item {
-    grid-template-columns: 24px minmax(0, 1fr) 36px;
-    gap: 9px;
-    padding: 10px;
-    border-radius: 9px;
-  }
-
-  .briefing-rank {
-    width: 24px;
-    height: 24px;
-    font-size: 12px;
-    line-height: 24px;
-  }
-
-  .briefing-event-title {
-    font-size: 14px;
-  }
-
-  .briefing-event-summary {
-    font-size: 12px;
-  }
-
-  .briefing-score {
-    font-size: 16px;
-  }
-
-  .back-to-top {
-    right: 20px;
-    bottom: 32px;
-    width: 44px;
-    height: 44px;
-  }
-
-  .back-to-top-icon {
-    font-size: 22px;
-  }
-}
-
-@keyframes float-in {
-  from {
-    opacity: 0;
-    transform: translateY(20rpx) scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  .back-to-top { right: 16px; bottom: 120rpx; width: 36px; height: 36px; }
+  .back-to-top-icon { font-size: 16px; }
 }
 
 /* #ifdef H5 */
 @media (min-width: 960px) {
-  .home-page {
-    padding-bottom: 72px;
-  }
-
-  .nav-bar {
-    padding: 18px 32px;
-  }
-
-  .brand-name {
-    font-size: 24px;
-    letter-spacing: 0;
-  }
-
-  .brand-tag {
-    font-size: 13px;
-    padding: 4px 10px;
-  }
-
-  .brand-count {
-    min-width: 26px;
-    height: 22px;
-    padding: 0 8px;
-    font-size: 13px;
-    line-height: 22px;
-  }
-
-  .user-actions {
-    gap: 10px;
-  }
-
-  .icon-btn {
-    width: 36px;
-    height: 36px;
-  }
-
-  .login-btn {
-    padding: 9px 18px;
-    font-size: 14px;
-  }
-
-  .desktop-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 20px;
-    padding: 0 24px;
-    align-items: start;
-  }
-
-  .feed-switch {
-    max-width: 760px;
-    margin: 18px 24px 0;
-    padding: 5px;
-    gap: 6px;
-    border-radius: 14px;
-  }
-
-  .feed-switch-item {
-    min-height: 58px;
-    padding: 9px 14px;
-    border-radius: 10px;
-  }
-
-  .feed-switch-label {
-    font-size: 15px;
-  }
-
-  .feed-switch-meta {
-    font-size: 12px;
-  }
-
-  .briefing-panel {
-    max-width: 760px;
-    margin: 18px 24px 0;
-    padding: 18px;
-    border-radius: 14px;
-  }
-
-  .briefing-title {
-    font-size: 20px;
-  }
-
-  .briefing-hint {
-    font-size: 13px;
-  }
-
-  .briefing-count {
-    height: 24px;
-    padding: 0 10px;
-    font-size: 12px;
-    line-height: 24px;
-  }
-
-  .briefing-item {
-    grid-template-columns: 28px minmax(0, 1fr) 44px;
-    padding: 12px;
-    border-radius: 10px;
-  }
-
-  .briefing-rank {
-    width: 28px;
-    height: 28px;
-    font-size: 13px;
-    line-height: 28px;
-  }
-
-  .briefing-event-title {
-    font-size: 14px;
-  }
-
-  .briefing-event-summary {
-    font-size: 12px;
-  }
-
-  .briefing-score {
-    font-size: 18px;
-  }
-
-  .insight-rail {
-    position: sticky;
-    top: 86px;
-    display: grid;
-    gap: 16px;
-  }
-
-  .rail-card {
-    padding: 18px;
-    border-radius: 14px;
-  }
-
-  .rail-title {
-    font-size: 18px;
-    margin-bottom: 12px;
-  }
-
-  .rail-line,
-  .lead-title {
-    font-size: 14px;
-  }
-
-  .lead-meta,
-  .rail-empty {
-    font-size: 12px;
-  }
+  .home-page { padding-bottom: 72px; }
+  .nav-bar { padding: 14px 32px; }
+  .nav-title { font-size: 18px; }
+  .view-switch { max-width: 760px; margin: 18px 24px 0; }
+  .situation-strip { max-width: 760px; margin: 18px 24px 0; }
+  .filter-bar { max-width: 760px; margin: 0 auto; }
+  .filter-panel { max-width: 760px; margin: 10px auto 0; }
 }
 /* #endif */
 </style>

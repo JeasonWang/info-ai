@@ -64,8 +64,7 @@ class AggregationCommandHandler:
         return _run_manual_crawl(channel_code)
 
     def rebuild_events(self, payload: dict[str, Any]) -> dict[str, Any]:
-        session = get_session()
-        try:
+        with get_session() as session:
             limit = _optional_positive_int(payload.get("limit"))
             if limit:
                 rebuild_events(session, limit=limit)
@@ -73,12 +72,8 @@ class AggregationCommandHandler:
                 rebuild_events(session)
             event_count = session.query(Event).count()
             return {"event_count": event_count}
-        finally:
-            session.close()
-
     def refresh_quality(self, payload: dict[str, Any]) -> dict[str, Any]:
-        session = get_session()
-        try:
+        with get_session() as session:
             semantic_result = refresh_info_semantics(session)
             rebuild_events(session)
             snapshot = save_data_quality_snapshot(session)
@@ -88,13 +83,9 @@ class AggregationCommandHandler:
                 "quality_snapshot_id": snapshot.id,
                 "event_count": event_count,
             }
-        finally:
-            session.close()
-
     def retry_low_quality_details(self, payload: dict[str, Any]) -> dict[str, Any]:
         limit = _bounded_int(payload.get("limit"), default=20, minimum=1, maximum=50)
-        session = get_session()
-        try:
+        with get_session() as session:
             candidates = (
                 session.query(Info)
                 .join(Channel, Channel.id == Info.channel_id)
@@ -129,9 +120,6 @@ class AggregationCommandHandler:
                 channel_code = info.channel.code if info.channel else ""
                 if channel_code:
                     grouped_ids.setdefault(channel_code, []).append(info.id)
-        finally:
-            session.close()
-
         total_success = 0
         total_failed = 0
         channel_results = {}
@@ -147,8 +135,7 @@ class AggregationCommandHandler:
                 "detail_failed_count": failed_count,
             }
 
-        session = get_session()
-        try:
+        with get_session() as session:
             semantic_result = refresh_info_semantics(session)
             rebuild_events(session)
             snapshot = save_data_quality_snapshot(session)
@@ -163,65 +150,38 @@ class AggregationCommandHandler:
                 "quality_snapshot_id": snapshot.id,
                 "event_count": event_count,
             }
-        finally:
-            session.close()
-
     def enqueue_event_analysis_detail_jobs(self, payload: dict[str, Any]) -> dict[str, Any]:
         limit = _bounded_int(payload.get("limit"), default=20, minimum=1, maximum=100)
-        session = get_session()
-        try:
+        with get_session() as session:
             return enqueue_event_analysis_detail_jobs(session, limit=limit)
-        finally:
-            session.close()
-
     def prioritize_source_quality_governance(self, payload: dict[str, Any]) -> dict[str, Any]:
         limit = _bounded_int(payload.get("limit"), default=20, minimum=1, maximum=100)
-        session = get_session()
-        try:
+        with get_session() as session:
             return prioritize_source_quality_governance(session, limit=limit)
-        finally:
-            session.close()
-
     def rebuild_stale_event_analysis(self, payload: dict[str, Any]) -> dict[str, Any]:
         limit = _bounded_int(payload.get("limit"), default=200, minimum=1, maximum=1000)
-        session = get_session()
-        try:
+        with get_session() as session:
             return rebuild_stale_event_analysis(session, limit=limit)
-        finally:
-            session.close()
-
     def mark_low_confidence_event_analysis_stale(self, payload: dict[str, Any]) -> dict[str, Any]:
         limit = _bounded_int(payload.get("limit"), default=100, minimum=1, maximum=1000)
-        session = get_session()
-        try:
+        with get_session() as session:
             return mark_low_confidence_complete_events_stale(session, limit=limit)
-        finally:
-            session.close()
-
     def archive_low_quality(self, payload: dict[str, Any]) -> dict[str, Any]:
-        session = get_session()
-        try:
+        with get_session() as session:
             archive_result = archive_low_quality_infos(session)
             rebuild_events(session)
             return {
                 **archive_result,
                 "event_count": session.query(Event).count(),
             }
-        finally:
-            session.close()
-
     def archive_duplicate_titles(self, payload: dict[str, Any]) -> dict[str, Any]:
-        session = get_session()
-        try:
+        with get_session() as session:
             archive_result = archive_duplicate_title_infos(session)
             rebuild_events(session)
             return {
                 **archive_result,
                 "event_count": session.query(Event).count(),
             }
-        finally:
-            session.close()
-
     def test_channel_credentials(self, payload: dict[str, Any]) -> dict[str, Any]:
         channel_code = str(payload.get("channel_code") or "").strip()
         if not channel_code:
@@ -277,8 +237,7 @@ def _run_manual_crawl(channel_code: str) -> dict[str, Any]:
         logger.error("手动采集命令失败 channel=%s error=%s", channel_code, exc, exc_info=True)
         raise
     finally:
-        session = get_session()
-        try:
+        with get_session() as session:
             _sync_crawl_tasks(session)
             _record_crawl_run(
                 session,
@@ -297,9 +256,6 @@ def _run_manual_crawl(channel_code: str) -> dict[str, Any]:
             if status != "failed":
                 rebuild_events(session)
                 save_data_quality_snapshot(session)
-        finally:
-            session.close()
-
     return {
         "channel_code": channel_code,
         "status": status,

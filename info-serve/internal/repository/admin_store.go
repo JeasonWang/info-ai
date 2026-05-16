@@ -2098,10 +2098,7 @@ func (s *MySQLStore) UpdateChannelCredentials(ctx context.Context, channelCode s
 		for key, value := range newCookieData {
 			existing[key] = value
 		}
-		if stringFromMap(existing, "cookie") != "" && isSampleCredentialStatus(stringFromMap(existing, "status")) {
-			existing["status"] = "active"
-		}
-		if stringFromMap(existing, "status") == "" {
+		if stringFromMap(existing, "cookie") != "" {
 			existing["status"] = "active"
 		}
 		if _, ok := existing["last_verified_at"]; !ok {

@@ -110,12 +110,8 @@ def main() -> None:
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     args = parser.parse_args()
 
-    session = get_session()
-    try:
+    with get_session() as session:
         result = preview_event_rebuild(session, limit=args.limit)
-    finally:
-        session.close()
-
     print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
 
 

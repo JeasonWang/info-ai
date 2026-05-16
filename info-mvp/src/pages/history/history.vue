@@ -219,7 +219,7 @@ function retry() {
   left: 0;
   right: 0;
   height: 2rpx;
-  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.06), transparent);
+  background: linear-gradient(90deg, transparent, rgba(240, 90, 61, 0.06), transparent);
   pointer-events: none;
 }
 
