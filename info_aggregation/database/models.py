@@ -241,6 +241,7 @@ class DetailJob(Base):
         Index("idx_detail_job_info_status", "info_id", "status"),
         Index("idx_detail_job_status_priority", "status", "priority", "next_run_at"),
         Index("idx_detail_job_channel_status", "channel_code", "status"),
+        Index("idx_detail_job_status_updated", "status", "updated_at"),
     )
 
 

@@ -228,22 +228,19 @@ function goSpotlightDetail() {
 async function handleRetry() { await refresh() }
 async function handleLoadMoreRetry() { await loadMore() }
 
-function updateBackToTop(scrollTop: number) {
-  showBackToTop.value = scrollTop > 300
-}
-
 let lastScrollTop = 0
 
 function handleScroll(scrollTop: number) {
-  showBackToTop.value = scrollTop > 300
-  dockVisible.value = !(scrollTop > 300 && scrollTop > lastScrollTop)
+  showBackToTop.value = scrollTop > 200
+  dockVisible.value = !(scrollTop > 200 && scrollTop > lastScrollTop)
   lastScrollTop = scrollTop
 }
 
-onLoad(() => {
+onLoad(async () => {
   loadCategories()
   loadChannels()
-  restoreServerFilterPreference().then(() => refresh())
+  try { await restoreServerFilterPreference() } catch { /* noop */ }
+  refresh()
 })
 
 onPullDownRefresh(async () => {
@@ -257,7 +254,7 @@ onPageScroll((e) => {
   handleScroll(e.scrollTop)
 })
 
-onMounted(async () => {
+onMounted(() => {
   // #ifdef H5
   window.addEventListener('scroll', () => {
     const y = window.scrollY || document.documentElement.scrollTop || 0
@@ -427,8 +424,8 @@ watch(events, () => { loadSpotlightDetail() })
     </view>
 
     <!-- Back to Top -->
-    <view v-if="showBackToTop" class="back-to-top" @click="scrollToTop">
-      <text class="back-to-top-icon">↑</text>
+    <view v-show="showBackToTop" class="back-to-top" @click="scrollToTop">
+      <view class="back-to-top-arrow" />
     </view>
 
     <!-- Floating Dock -->
@@ -660,14 +657,21 @@ watch(events, () => { loadSpotlightDetail() })
 
 /* Back to Top */
 .back-to-top {
-  position: fixed; right: 28rpx; bottom: 200rpx;
-  width: 72rpx; height: 72rpx; border-radius: 50%;
-  background: var(--card-bg); box-shadow: var(--shadow-md);
+  position: fixed; right: 24rpx; bottom: 200rpx;
+  width: 80rpx; height: 80rpx; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.12);
   display: flex; align-items: center; justify-content: center;
-  z-index: 300;
+  z-index: 999;
+  transition: opacity 0.3s, transform 0.3s;
 }
 .back-to-top:active { transform: scale(0.9); }
-.back-to-top-icon { font-size: 32rpx; color: var(--text-secondary); }
+.back-to-top-arrow {
+  width: 20rpx; height: 20rpx;
+  border-left: 4rpx solid var(--text-primary);
+  border-top: 4rpx solid var(--text-primary);
+  transform: rotate(45deg) translateY(4rpx);
+}
 
 /* Dock */
 .dock-wrap {
@@ -742,8 +746,8 @@ watch(events, () => { loadSpotlightDetail() })
   .filter-panel { margin: 10px 16px 0; padding: 14px; }
   .pill { padding: 6px 12px; font-size: 12px; }
 
-  .back-to-top { right: 16px; bottom: 120rpx; width: 36px; height: 36px; }
-  .back-to-top-icon { font-size: 16px; }
+  .back-to-top { right: 16px; bottom: 100px; width: 40px; height: 40px; }
+  .back-to-top-arrow { width: 10px; height: 10px; border-width: 2px; }
 }
 
 /* #ifdef H5 */

@@ -6,7 +6,7 @@ import logging
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-from config import SQLALCHEMY_DATABASE_URL
+from config import AUTO_INIT_DB_SCHEMA, SQLALCHEMY_DATABASE_URL
 from .models import Base
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,9 @@ def init_db():
     """
     初始化数据库：创建所有表结构
     """
+    if not AUTO_INIT_DB_SCHEMA:
+        logger.info("AUTO_INIT_DB_SCHEMA=0，跳过 ORM 自动建表和兼容 ALTER；请确认已执行 mysql8_init.sql")
+        return
     logger.info("正在初始化数据库，创建表结构...")
     Base.metadata.create_all(bind=engine)
     _ensure_event_key_column()

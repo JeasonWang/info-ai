@@ -16,7 +16,9 @@ import redis
 from config import (
     AGGREGATION_COMMAND_CONSUMER_GROUP,
     AGGREGATION_COMMAND_CONSUMER_NAME,
+    AGGREGATION_COMMAND_PENDING_IDLE_MS,
     AGGREGATION_COMMAND_STREAM,
+    AGGREGATION_RESULT_PREFIX,
     AGGREGATION_RESULT_TTL_SECONDS,
     ENABLE_REDIS_COMMAND_CONSUMER,
     REDIS_DB,
@@ -44,6 +46,8 @@ class AggregationRedisConsumer:
         self.stream = AGGREGATION_COMMAND_STREAM
         self.group = AGGREGATION_COMMAND_CONSUMER_GROUP
         self.consumer_name = AGGREGATION_COMMAND_CONSUMER_NAME or f"aggregation-{uuid4().hex[:8]}"
+        self.pending_idle_ms = AGGREGATION_COMMAND_PENDING_IDLE_MS
+        self.result_prefix = AGGREGATION_RESULT_PREFIX
         self.result_ttl_seconds = AGGREGATION_RESULT_TTL_SECONDS
         self._stop_event = threading.Event()
 
@@ -73,18 +77,44 @@ class AggregationRedisConsumer:
                 raise
 
     def consume_once(self, block_ms: int = 1000, count: int = 1) -> int:
+        processed = self._consume_stale_pending(count=count)
+        if processed >= count:
+            return processed
+
         messages = self.redis.xreadgroup(
             self.group,
             self.consumer_name,
             {self.stream: ">"},
-            count=count,
+            count=count - processed,
             block=block_ms,
         )
-        processed = 0
         for _, entries in messages:
             for message_id, fields in entries:
                 self._handle_message(message_id, fields)
                 processed += 1
+        return processed
+
+    def _consume_stale_pending(self, count: int) -> int:
+        if count <= 0:
+            return 0
+        try:
+            claimed = self.redis.xautoclaim(
+                self.stream,
+                self.group,
+                self.consumer_name,
+                self.pending_idle_ms,
+                "0-0",
+                count=count,
+            )
+        except redis.ResponseError as exc:
+            logger.warning("claim aggregation pending messages failed: %s", exc)
+            return 0
+
+        entries = _extract_claimed_entries(claimed)
+        processed = 0
+        for message_id, fields in entries[:count]:
+            self._handle_message(message_id, fields)
+            processed += 1
         return processed
 
     def _handle_message(self, message_id: str, fields: dict[str, str]) -> None:
@@ -123,12 +153,24 @@ class AggregationRedisConsumer:
             logger.error("聚合命令执行失败 request_id=%s action=%s error=%s", request_id, action, exc, exc_info=True)
 
     def _store_result(self, request_id: str, result: dict[str, Any]) -> None:
-        key = result_key(request_id)
+        key = result_key(request_id, self.result_prefix)
         self.redis.setex(key, self.result_ttl_seconds, json.dumps(result, ensure_ascii=False, default=str))
 
 
-def result_key(request_id: str) -> str:
-    return f"info_ai:aggregation:results:{request_id}"
+def result_key(request_id: str, prefix: str = AGGREGATION_RESULT_PREFIX) -> str:
+    return f"{prefix}{request_id}"
+
+
+def _extract_claimed_entries(claimed: Any) -> list[tuple[str, dict[str, str]]]:
+    if not claimed:
+        return []
+    if isinstance(claimed, tuple) and len(claimed) >= 2:
+        entries = claimed[1]
+    elif isinstance(claimed, list) and len(claimed) >= 2 and isinstance(claimed[0], str):
+        entries = claimed[1]
+    else:
+        entries = claimed
+    return list(entries or [])
 
 
 def _decode_payload(raw: str | None) -> dict[str, Any]:

@@ -1,7 +1,13 @@
+from datetime import datetime, timedelta
+
 from database import Category, Channel, DetailJob, Info
 from crawlers.registry import crawler_registry
 from services.collection import detail_job_worker
-from services.collection.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
+from services.collection.detail_job_worker import (
+    _claim_pending_detail_jobs,
+    crawler_detail_runner,
+    process_pending_detail_jobs,
+)
 from services.collection.detail_pipeline import DetailPipelineResult
 
 
@@ -79,6 +85,38 @@ def test_process_pending_detail_jobs_retries_failed_job(session):
     assert job.attempt_count == 1
     assert job.last_failure_reason == "empty_content"
     assert job.next_run_at is not None
+
+
+def test_claim_pending_detail_jobs_marks_jobs_running_before_processing(session):
+    _, job_id = _seed_detail_job(session)
+
+    claimed_ids = _claim_pending_detail_jobs(session, limit=5, now=datetime.now())
+
+    assert claimed_ids == [job_id]
+    job = session.get(DetailJob, job_id)
+    assert job.status == "running"
+    assert job.attempt_count == 1
+
+
+def test_claim_pending_detail_jobs_recovers_stale_running_jobs(session, monkeypatch):
+    _, job_id = _seed_detail_job(session)
+    job = session.get(DetailJob, job_id)
+    job.status = "running"
+    session.commit()
+    session.query(DetailJob).filter(DetailJob.id == job_id).update(
+        {DetailJob.updated_at: datetime.now() - timedelta(minutes=90)},
+        synchronize_session=False,
+    )
+    session.commit()
+    monkeypatch.setattr(detail_job_worker, "DETAIL_JOB_RUNNING_TIMEOUT_MINUTES", 30)
+
+    claimed_ids = _claim_pending_detail_jobs(session, limit=5, now=datetime.now())
+
+    assert claimed_ids == [job_id]
+    job = session.get(DetailJob, job_id)
+    assert job.status == "running"
+    assert job.attempt_count == 1
+    assert job.last_failure_reason == "running_timeout_recovered"
 
 
 def test_process_pending_detail_jobs_merges_when_failed_job_already_exists(session):

@@ -3,6 +3,9 @@ import random
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
+from sqlalchemy import func
+
+from config import DETAIL_JOB_RUNNING_TIMEOUT_MINUTES
 from database import DetailJob, Info, InfoAcquisitionLog
 from crawlers.registry import crawler_registry
 from services.collection.credential_provider import build_credential_report
@@ -217,29 +220,75 @@ def _run_detail_runner(runner: DetailRunner, info: Info, job: DetailJob) -> Deta
     return runner(info)
 
 
-def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) -> dict:
-    """执行待补偿详情任务，并更新任务状态、Info 详情字段和采集日志。"""
-
-    now = datetime.now()
-    jobs = (
+def _recover_stale_running_jobs(session, now: datetime) -> int:
+    timeout_before = now - timedelta(minutes=DETAIL_JOB_RUNNING_TIMEOUT_MINUTES)
+    stale_jobs = (
         session.query(DetailJob)
+        .filter(
+            DetailJob.status == "running",
+            (DetailJob.updated_at.is_(None)) | (DetailJob.updated_at <= timeout_before),
+        )
+        .all()
+    )
+    for job in stale_jobs:
+        job.status = "pending"
+        job.next_run_at = now
+        job.last_failure_reason = "running_timeout_recovered"
+        job.updated_at = now
+    return len(stale_jobs)
+
+
+def _claim_pending_detail_jobs(session, limit: int, now: datetime) -> list[int]:
+    _recover_stale_running_jobs(session, now)
+    session.flush()
+    jobs = (
+        session.query(DetailJob.id)
         .filter(DetailJob.status == "pending", DetailJob.next_run_at <= now)
         .order_by(DetailJob.priority.desc(), DetailJob.next_run_at.asc(), DetailJob.id.asc())
         .limit(limit)
         .all()
     )
+    claimed_ids = []
+    for row in jobs:
+        job_id = row[0]
+        updated_count = (
+            session.query(DetailJob)
+            .filter(DetailJob.id == job_id, DetailJob.status == "pending")
+            .update(
+                {
+                    DetailJob.status: "running",
+                    DetailJob.attempt_count: func.coalesce(DetailJob.attempt_count, 0) + 1,
+                    DetailJob.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        if updated_count:
+            claimed_ids.append(job_id)
+    session.commit()
+    return claimed_ids
+
+
+def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) -> dict:
+    """执行待补偿详情任务，并更新任务状态、Info 详情字段和采集日志。"""
+
+    job_ids = _claim_pending_detail_jobs(session, limit, datetime.now())
     succeeded_count = 0
     failed_count = 0
     xhs_consecutive_count = 0
 
-    for job in jobs:
+    for job_id in job_ids:
+        job = session.get(DetailJob, job_id)
+        if not job or job.status != "running":
+            continue
         info = session.get(Info, job.info_id)
         if not info:
             job.status = "cancelled"
+            job.last_failure_reason = "info_not_found"
+            job.updated_at = datetime.now()
+            session.commit()
             continue
 
-        job.status = "running"
-        job.attempt_count += 1
         result = _run_detail_runner(runner, info, job)
 
         if _is_usable_detail_result(result, job.strategy_hint or ""):
@@ -249,15 +298,6 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
         else:
             _apply_failure(session, job, result)
             failed_count += 1
-
-        # Rate-limit: add longer delay for xiaohongshu to avoid rendering failures
-        if job.channel_code == "xiaohongshu":
-            xhs_consecutive_count += 1
-            delay = random.uniform(3.0, 6.0) if xhs_consecutive_count % 3 == 0 else random.uniform(1.5, 3.0)
-            time.sleep(delay)
-        else:
-            xhs_consecutive_count = 0
-            time.sleep(random.uniform(0.3, 1.0))
 
         session.add(
             InfoAcquisitionLog(
@@ -272,6 +312,14 @@ def process_pending_detail_jobs(session, runner: DetailRunner, limit: int = 20) 
                 raw_excerpt=(result.content or info.content or "")[:200],
             )
         )
+        session.commit()
 
-    session.commit()
+        # Rate-limit: add longer delay for xiaohongshu to avoid rendering failures
+        if job.channel_code == "xiaohongshu":
+            xhs_consecutive_count += 1
+            delay = random.uniform(3.0, 6.0) if xhs_consecutive_count % 3 == 0 else random.uniform(1.5, 3.0)
+            time.sleep(delay)
+        else:
+            xhs_consecutive_count = 0
+            time.sleep(random.uniform(0.3, 1.0))
     return {"succeeded_count": succeeded_count, "failed_count": failed_count}

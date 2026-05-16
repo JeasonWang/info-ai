@@ -12,6 +12,7 @@ APP_TIMEZONE = os.getenv("APP_TIMEZONE", os.getenv("TZ", "Asia/Shanghai"))
 # ==================== 数据库配置 ====================
 DEFAULT_DB_TYPE = "sqlite" if APP_ENV == "test" else "mysql"
 DB_TYPE = os.getenv("DB_TYPE", DEFAULT_DB_TYPE)
+AUTO_INIT_DB_SCHEMA = os.getenv("AUTO_INIT_DB_SCHEMA", "1" if APP_ENV in {"local", "test"} else "0") == "1"
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
@@ -39,6 +40,7 @@ CRAWLER_REQUEST_TIMEOUT = 15
 CRAWLER_RETRY_TIMES = 3
 CRAWLER_RETRY_INTERVAL = 300
 CRAWLER_MAX_CONTENT_LENGTH = int(os.getenv("CRAWLER_MAX_CONTENT_LENGTH", "12000"))
+DETAIL_JOB_RUNNING_TIMEOUT_MINUTES = int(os.getenv("DETAIL_JOB_RUNNING_TIMEOUT_MINUTES", "30"))
 
 # ==================== 事件分析配置 ====================
 EVENT_ANALYSIS_MODE = os.getenv("EVENT_ANALYSIS_MODE", "hybrid")
@@ -95,6 +97,8 @@ ENABLE_REDIS_COMMAND_CONSUMER = os.getenv("ENABLE_REDIS_COMMAND_CONSUMER", "1") 
 AGGREGATION_COMMAND_STREAM = os.getenv("AGGREGATION_COMMAND_STREAM", "info_ai:aggregation:commands")
 AGGREGATION_COMMAND_CONSUMER_GROUP = os.getenv("AGGREGATION_COMMAND_CONSUMER_GROUP", "info_aggregation")
 AGGREGATION_COMMAND_CONSUMER_NAME = os.getenv("AGGREGATION_COMMAND_CONSUMER_NAME", "")
+AGGREGATION_COMMAND_PENDING_IDLE_MS = int(os.getenv("AGGREGATION_COMMAND_PENDING_IDLE_MS", "60000"))
+AGGREGATION_RESULT_PREFIX = os.getenv("AGGREGATION_RESULT_PREFIX", "info_ai:aggregation:results:")
 AGGREGATION_RESULT_TTL_SECONDS = int(os.getenv("AGGREGATION_RESULT_TTL_SECONDS", "86400"))
 
 # ==================== 信息分类枚举 ====================

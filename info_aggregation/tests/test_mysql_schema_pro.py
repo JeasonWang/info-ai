@@ -67,6 +67,8 @@ def test_max_mysql_migration_contains_initial_data_and_tasks():
     assert "INSERT INTO `category`" in migration
     assert "INSERT INTO `channel`" in migration
     assert "INSERT INTO `crawl_task`" in migration
+    assert "CONCAT('crawl_', ch.`code`)" in migration
+    assert "CONCAT(ch.`code`, '_interval_crawl')" not in migration
     assert "admin@info-daren.local" in migration
     assert "Admin123456" in migration
     assert "llm_model_config" in migration
@@ -92,3 +94,10 @@ def test_max_mysql_migration_contains_initial_data_and_tasks():
         "sina_sports",
     ]:
         assert f"'{channel_code}'" in migration
+
+
+def test_mysql_schema_matches_orm_unique_constraints():
+    migration = MYSQL8_INIT_PATH.read_text(encoding="utf-8")
+
+    assert "UNIQUE KEY `uk_event_key` (`event_key`)" in migration
+    assert "UNIQUE KEY `uq_event_analysis_source_run_info` (`run_id`,`info_id`)" in migration

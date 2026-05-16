@@ -139,7 +139,8 @@ CREATE TABLE IF NOT EXISTS `detail_job` (
   PRIMARY KEY (`id`),
   KEY `idx_detail_job_status_priority` (`status`,`priority`,`next_run_at`),
   KEY `idx_detail_job_channel_status` (`channel_code`,`status`),
-  KEY `idx_detail_job_info_status` (`info_id`,`status`)
+  KEY `idx_detail_job_info_status` (`info_id`,`status`),
+  KEY `idx_detail_job_status_updated` (`status`,`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='详情补偿任务表：保存低分、失败或列表态内容的二次抓取任务';
 
 CREATE TABLE IF NOT EXISTS `event` (
@@ -164,6 +165,7 @@ CREATE TABLE IF NOT EXISTS `event` (
   `event_generation` int unsigned DEFAULT '1' COMMENT '事件代数',
   `evolution_stage` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT 'emerging' COMMENT '演变阶段: emerging/peak/declining/resolved/recurring',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_event_key` (`event_key`),
   KEY `idx_event_category_score` (`primary_category_id`,`composite_score`,`last_updated_at`),
   KEY `idx_event_status_updated` (`status`,`last_updated_at`),
   KEY `idx_event_core_entity` (`event_key`,`event_generation`)
@@ -218,8 +220,9 @@ CREATE TABLE IF NOT EXISTS `event_analysis_source` (
   `quality_score` int DEFAULT '0' COMMENT '质量分',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_run_id` (`run_id`),
-  KEY `idx_info_id` (`info_id`)
+  UNIQUE KEY `uq_event_analysis_source_run_info` (`run_id`,`info_id`),
+  KEY `idx_event_analysis_source_run_id` (`run_id`),
+  KEY `idx_event_analysis_source_info_id` (`info_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='事件分析来源记录表';
 
 CREATE TABLE IF NOT EXISTS `event_evolution` (
@@ -609,8 +612,8 @@ INSERT INTO `crawl_task` (
 )
 SELECT
   ch.`id`,
-  CONCAT(ch.`code`, '_interval_crawl'),
-  CONCAT(ch.`name`, '定时采集'),
+  CONCAT('crawl_', ch.`code`),
+  CONCAT(ch.`name`, '采集'),
   'interval',
   CAST(ch.`effective_interval_minutes` AS CHAR),
   ch.`schedule_version`,

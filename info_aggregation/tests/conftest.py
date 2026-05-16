@@ -1,7 +1,12 @@
+import os
 import sys
 from pathlib import Path
 
 import pytest
+
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("DB_TYPE", "sqlite")
+os.environ.setdefault("ENABLE_PUBLIC_API", "1")
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
