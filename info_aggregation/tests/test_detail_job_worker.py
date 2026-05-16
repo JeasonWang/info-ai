@@ -1,7 +1,14 @@
+from datetime import datetime, timedelta
+
 from database import Category, Channel, DetailJob, Info
 from crawlers.registry import crawler_registry
-from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
-from services.detail_pipeline import DetailPipelineResult
+from services.collection import detail_job_worker
+from services.collection.detail_job_worker import (
+    _claim_pending_detail_jobs,
+    crawler_detail_runner,
+    process_pending_detail_jobs,
+)
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def _seed_detail_job(session):
@@ -80,6 +87,38 @@ def test_process_pending_detail_jobs_retries_failed_job(session):
     assert job.next_run_at is not None
 
 
+def test_claim_pending_detail_jobs_marks_jobs_running_before_processing(session):
+    _, job_id = _seed_detail_job(session)
+
+    claimed_ids = _claim_pending_detail_jobs(session, limit=5, now=datetime.now())
+
+    assert claimed_ids == [job_id]
+    job = session.get(DetailJob, job_id)
+    assert job.status == "running"
+    assert job.attempt_count == 1
+
+
+def test_claim_pending_detail_jobs_recovers_stale_running_jobs(session, monkeypatch):
+    _, job_id = _seed_detail_job(session)
+    job = session.get(DetailJob, job_id)
+    job.status = "running"
+    session.commit()
+    session.query(DetailJob).filter(DetailJob.id == job_id).update(
+        {DetailJob.updated_at: datetime.now() - timedelta(minutes=90)},
+        synchronize_session=False,
+    )
+    session.commit()
+    monkeypatch.setattr(detail_job_worker, "DETAIL_JOB_RUNNING_TIMEOUT_MINUTES", 30)
+
+    claimed_ids = _claim_pending_detail_jobs(session, limit=5, now=datetime.now())
+
+    assert claimed_ids == [job_id]
+    job = session.get(DetailJob, job_id)
+    assert job.status == "running"
+    assert job.attempt_count == 1
+    assert job.last_failure_reason == "running_timeout_recovered"
+
+
 def test_process_pending_detail_jobs_merges_when_failed_job_already_exists(session):
     info_id, pending_job_id = _seed_detail_job(session)
     existing_failed = DetailJob(
@@ -144,6 +183,35 @@ def test_crawler_detail_runner_uses_registered_crawler(session):
     assert result.score == 91
 
 
+def test_crawler_detail_runner_bootstraps_registry_when_empty(session, monkeypatch):
+    info_id, _ = _seed_detail_job(session)
+    original_crawlers = crawler_registry._crawlers.copy()
+    original_locks = crawler_registry._locks.copy()
+    crawler_registry._crawlers.clear()
+    crawler_registry._locks.clear()
+    detail_job_worker._CRAWLER_REGISTRY_BOOTSTRAPPED = False
+
+    def fake_register_all_crawlers():
+        crawler_registry.register("36kr", FakeCrawler())
+
+    monkeypatch.setattr(
+        "application.crawler_bootstrap.register_all_crawlers",
+        fake_register_all_crawlers,
+    )
+
+    try:
+        result = crawler_detail_runner(session.get(Info, info_id))
+    finally:
+        crawler_registry._crawlers.clear()
+        crawler_registry._crawlers.update(original_crawlers)
+        crawler_registry._locks.clear()
+        crawler_registry._locks.update(original_locks)
+        detail_job_worker._CRAWLER_REGISTRY_BOOTSTRAPPED = False
+
+    assert result.status == "complete"
+    assert result.strategy == "fake_crawler"
+
+
 class FailingCrawler:
     def safe_fetch_detail(self, source_url, item):
         pipeline = DetailPipelineResult(
@@ -156,6 +224,20 @@ class FailingCrawler:
             matched_rules=["empty_content"],
         )
         return "", pipeline.status, pipeline.failure_reason, pipeline
+
+
+class PartialCrawler:
+    def safe_fetch_detail(self, source_url, item):
+        pipeline = DetailPipelineResult(
+            content="OpenAI 发布新模型，开发者关注推理能力、API 接入节奏和企业落地成本。",
+            status="partial",
+            strategy="partial_crawler",
+            score=72,
+            content_length=36,
+            failure_reason="content_below_channel_complete_threshold",
+            matched_rules=["below_channel_complete_threshold"],
+        )
+        return pipeline.content, pipeline.status, pipeline.failure_reason, pipeline
 
 
 def test_crawler_detail_runner_uses_http_html_fallback_when_crawler_fails(session):
@@ -183,3 +265,126 @@ def test_crawler_detail_runner_uses_http_html_fallback_when_crawler_fails(sessio
 
     assert result.status == "complete"
     assert result.strategy == "http_html_article"
+
+
+def test_crawler_detail_runner_continues_for_full_article_strategy(session):
+    info_id, _ = _seed_detail_job(session)
+    crawler_registry.register("36kr", PartialCrawler())
+
+    result = crawler_detail_runner(
+        session.get(Info, info_id),
+        html_fetcher=lambda url: """
+        <article>
+          <p>OpenAI 发布新模型，开发者关注推理能力、API 接入节奏、企业部署成本和落地周期。</p>
+          <p>公司表示，新模型将面向企业客户开放试用，重点覆盖知识管理、自动化办公、客服和研发辅助。</p>
+          <p>行业人士认为，企业会继续关注调用价格、服务稳定性、权限隔离、数据安全和区域合规要求。</p>
+          <p>云服务厂商也会围绕算力、存储、网络、安全审计和监控能力提供配套服务，帮助客户降低上线风险。</p>
+          <p>投资者则会观察客户增长、续费率、毛利率和生态合作进展，判断产品能否形成长期商业壁垒。</p>
+          <p>从市场角度看，AI 产品竞争正在从单点模型能力转向完整解决方案，企业更关注稳定交付和真实收益。</p>
+          <p>这也会推动更多公司重新评估预算、组织流程和数据资产治理，把 AI 能力嵌入核心业务流程。</p>
+          <p>多位产业人士表示，企业采购新模型时不会只比较单次调用能力，还会综合评估工程接入、私有数据治理、审计追踪、成本预测和长期服务支持。</p>
+          <p>对于软件公司来说，谁能把模型能力稳定嵌入销售、财务、人力、研发和客户服务等高频场景，谁就更容易形成可持续的产品价值。</p>
+          <p>因此，这次发布不仅是一次技术更新，也会影响企业软件、云基础设施、咨询服务和行业应用公司的竞争节奏。</p>
+          <p>后续市场还会关注生态伙伴数量、标杆客户案例、真实业务降本效果以及模型在复杂任务中的稳定表现。</p>
+        </article>
+        """,
+        strategy_hint="retry_full_article_detail",
+    )
+
+    assert result.status == "complete"
+    assert result.strategy == "http_html_article"
+    assert "strategy_hint:retry_full_article_detail" in result.matched_rules
+
+
+def test_process_pending_detail_jobs_keeps_strict_partial_in_queue(session):
+    _, job_id = _seed_detail_job(session)
+    job = session.get(DetailJob, job_id)
+    job.strategy_hint = "retry_full_article_detail"
+    session.commit()
+
+    def runner(info):
+        return DetailPipelineResult(
+            content="OpenAI 发布新模型，开发者关注推理能力、API 接入节奏和企业落地成本。",
+            status="partial",
+            strategy="partial_crawler",
+            score=72,
+            content_length=36,
+            failure_reason="content_below_channel_complete_threshold",
+            matched_rules=["below_channel_complete_threshold"],
+        )
+
+    result = process_pending_detail_jobs(session, runner=runner, limit=5)
+
+    assert result == {"succeeded_count": 0, "failed_count": 1}
+    job = session.get(DetailJob, job_id)
+    assert job.status == "pending"
+    assert job.last_failure_reason == "content_below_channel_complete_threshold"
+
+
+def test_crawler_detail_runner_uses_secondary_search_for_title_only_strategy(session):
+    info_id, _ = _seed_detail_job(session)
+    crawler_registry.register("36kr", FailingCrawler())
+
+    result = crawler_detail_runner(
+        session.get(Info, info_id),
+        html_fetcher=lambda url: """
+        <article>
+          <p>OpenAI 发布新模型，开发者关注推理能力、API 接入节奏、企业部署成本和落地周期。</p>
+          <p>公司表示，新模型将面向企业客户开放试用，重点覆盖知识管理、自动化办公、客服和研发辅助。</p>
+          <p>行业人士认为，企业会继续关注调用价格、服务稳定性、权限隔离、数据安全和区域合规要求。</p>
+          <p>云服务厂商也会围绕算力、存储、网络、安全审计和监控能力提供配套服务，帮助客户降低上线风险。</p>
+          <p>投资者则会观察客户增长、续费率、毛利率和生态合作进展，判断产品能否形成长期商业壁垒。</p>
+          <p>从市场角度看，AI 产品竞争正在从单点模型能力转向完整解决方案，企业更关注稳定交付和真实收益。</p>
+          <p>这也会推动更多公司重新评估预算、组织流程和数据资产治理，把 AI 能力嵌入核心业务流程。</p>
+          <p>多位产业人士表示，企业采购新模型时不会只比较单次调用能力，还会综合评估工程接入、私有数据治理、审计追踪、成本预测和长期服务支持。</p>
+          <p>对于软件公司来说，谁能把模型能力稳定嵌入销售、财务、人力、研发和客户服务等高频场景，谁就更容易形成可持续的产品价值。</p>
+          <p>因此，这次发布不仅是一次技术更新，也会影响企业软件、云基础设施、咨询服务和行业应用公司的竞争节奏。</p>
+          <p>后续市场还会关注生态伙伴数量、标杆客户案例、真实业务降本效果以及模型在复杂任务中的稳定表现。</p>
+        </article>
+        """,
+        search_fetcher=lambda url: '<a href="https://www.36kr.com/p/real-article">真实文章</a>',
+        strategy_hint="search_secondary_detail_source",
+    )
+
+    assert result.status == "complete"
+    assert result.strategy == "secondary_search"
+    assert "strategy_hint:search_secondary_detail_source" in result.matched_rules
+
+
+def test_crawler_detail_runner_reports_missing_cookie_for_cookie_strategy(session, monkeypatch):
+    monkeypatch.setattr(
+        "services.collection.detail_job_worker.build_credential_report",
+        lambda channel_codes: {
+            "weibo": {
+                "channel_code": "weibo",
+                "health": "missing_required",
+                "missing_required": ["WEIBO_COOKIE"],
+                "credentials": [],
+            }
+        },
+    )
+    category = Category(name="综合", code="all", description="综合事件")
+    session.add(category)
+    session.flush()
+    channel = Channel(name="微博", code="weibo", base_url="https://weibo.com", category_id=category.id)
+    session.add(channel)
+    session.flush()
+    info = Info(
+        title="微博热搜样本",
+        content="请先登录",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="worker-weibo-cookie",
+        source_url="https://s.weibo.com/weibo?q=test",
+        detail_fetch_status="failed",
+        detail_score=0,
+    )
+    session.add(info)
+    session.commit()
+
+    result = crawler_detail_runner(info, strategy_hint="check_cookie_or_rendering_strategy")
+
+    assert result.status == "failed"
+    assert result.strategy == "credential_diagnostic"
+    assert result.failure_reason == "missing_required_credentials"
+    assert "missing_credential:WEIBO_COOKIE" in result.matched_rules

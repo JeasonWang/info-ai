@@ -81,6 +81,7 @@ export function getEvents(params: ListEventParams) {
   q.set('category_code', params.category_code ?? 'all')
   if (params.channel_code && params.channel_code !== 'all') q.set('channel_code', params.channel_code)
   if (params.keyword) q.set('keyword', params.keyword)
+  if (params.status) q.set('status', params.status)
   if (params.sort) q.set('sort', params.sort)
   if (params.page) q.set('page', String(params.page))
   if (params.page_size) q.set('page_size', String(params.page_size))
@@ -103,7 +104,7 @@ export function getStats() {
 }
 
 export function registerUser(email: string, password: string) {
-  return post<PublicUser>('/auth/register', { email, password }, true)
+  return post<LoginResult>('/auth/register', { email, password }, true)
 }
 
 export function loginUser(email: string, password: string) {

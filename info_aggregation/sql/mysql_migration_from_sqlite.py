@@ -31,13 +31,11 @@ PRO_TABLE_ORDER = [
     "user_account",
     "user_session",
     "user_favorite_event",
-    "user_follow_keyword",
     "user_preference",
     "user_read_history",
     "admin_audit_log",
     "crawl_task",
     "crawl_run_log",
-    "crawl_health_snapshot",
     "data_quality_snapshot",
 ]
 
@@ -157,14 +155,45 @@ def table_exists(sqlite_conn: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
+def iter_sql_statements(schema: str) -> Iterable[str]:
+    """按 SQL 字符串边界切分语句，避免 Cookie 等文本里的分号打断执行。"""
+    buffer: list[str] = []
+    quote: str | None = None
+    escaped = False
+
+    for char in schema:
+        buffer.append(char)
+
+        if quote is not None:
+            if quote in {"'", '"'} and char == "\\" and not escaped:
+                escaped = True
+                continue
+            if char == quote and not escaped:
+                quote = None
+            escaped = False
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote = char
+            continue
+
+        if char == ";":
+            statement = "".join(buffer[:-1]).strip()
+            if statement:
+                yield statement
+            buffer = []
+
+    statement = "".join(buffer).strip()
+    if statement:
+        yield statement
+
+
 def execute_schema(mysql_conn, schema_path: Path) -> None:
     """执行 MySQL 建表脚本。"""
     schema = schema_path.read_text(encoding="utf-8")
     with mysql_conn.cursor() as cursor:
-        for statement in schema.split(";"):
-            sql = statement.strip()
-            if sql:
-                cursor.execute(sql)
+        for sql in iter_sql_statements(schema):
+            cursor.execute(sql)
     mysql_conn.commit()
 
 
@@ -253,8 +282,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mysql-db", default="info-max", help="MySQL 数据库名")
     parser.add_argument(
         "--schema-path",
-        default=str(Path(__file__).with_name("mysql_schema_pro.sql")),
-        help="MySQL 建表脚本路径",
+        default=str(Path(__file__).with_name("mysql8_init.sql")),
+        help="MySQL 8 初始化脚本路径",
     )
     parser.add_argument("--batch-size", type=int, default=500, help="每批迁移数量")
     parser.add_argument("--reset-target", action="store_true", help="迁移前清空目标库数据，适合本地完整重跑")

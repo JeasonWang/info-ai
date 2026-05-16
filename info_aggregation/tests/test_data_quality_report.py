@@ -4,8 +4,8 @@ from fastapi.testclient import TestClient
 
 from api import app
 from database import Category, Channel, Event, Info
-from services.data_maintenance import archive_duplicate_title_infos, archive_low_quality_infos
-from services.data_quality_report import build_data_quality_report
+from services.quality.data_maintenance import archive_duplicate_title_infos, archive_low_quality_infos
+from services.quality.data_quality_report import build_data_quality_report
 
 
 def _seed_category_and_channel(session):
@@ -293,6 +293,9 @@ def test_admin_retry_low_quality_details_api_groups_records_by_channel(session, 
     assert response.status_code == 200
     payload = response.json()["data"]
     assert payload["selected_count"] == 1
+    assert payload["selected_samples"][0]["info_id"] == weak_info.id
+    assert payload["selected_samples"][0]["attention_priority"] == 84
+    assert payload["selected_samples"][0]["recommended_action"]
     assert payload["detail_success_count"] == 1
     assert payload["detail_failed_count"] == 0
     assert calls == [("weibo", [weak_info.id])]

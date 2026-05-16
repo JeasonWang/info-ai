@@ -14,6 +14,13 @@ import type {
   CrawlTask,
   DetailJobDetail,
   DetailJobReport,
+  EventAnalysisQualityReport,
+  LLMModelConfig,
+  LLMChatPayload,
+  LLMChatResult,
+  LLMChatTestPayload,
+  LLMChatTestResult,
+  LLMModelConfigPayload,
   LowQualityInfo,
   QualitySnapshot,
 } from '@/types/admin'
@@ -32,6 +39,10 @@ export function getChannelHealth() {
 
 export function getChannelQualityReport(sampleLimit = 5) {
   return apiRequest<ChannelQualityReport>(apiV1(`/admin/channel-quality-report?sample_limit=${sampleLimit}`))
+}
+
+export function getEventAnalysisQualityReport(limit = 20) {
+  return apiRequest<EventAnalysisQualityReport>(apiV1(`/admin/event-analysis-quality-report?limit=${limit}`))
 }
 
 export function getQualitySnapshots(limit = 20) {
@@ -67,6 +78,18 @@ export function getDetailJob(id: number) {
 
 export function getCrawlTasks() {
   return apiRequest<CrawlTask[]>(apiV1('/admin/crawl-tasks'))
+}
+
+export interface CrawlTaskConfigPayload {
+  effective_interval_minutes: number
+  is_active: number
+}
+
+export function updateCrawlTaskConfig(channelCode: string, payload: CrawlTaskConfigPayload) {
+  return apiRequest<{ message: string }>(apiV1(`/admin/crawl-tasks/${encodeURIComponent(channelCode)}/config`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function getAuditLogs(limit = 30) {
@@ -109,6 +132,38 @@ export function updateChannel(id: number, payload: ChannelPayload) {
   })
 }
 
+export function getLLMModelConfigs() {
+  return apiRequest<LLMModelConfig[]>(apiV1('/admin/llm-model-configs'))
+}
+
+export function createLLMModelConfig(payload: LLMModelConfigPayload) {
+  return apiRequest<LLMModelConfig>(apiV1('/admin/llm-model-configs'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateLLMModelConfig(id: number, payload: LLMModelConfigPayload) {
+  return apiRequest<LLMModelConfig>(apiV1(`/admin/llm-model-configs/${id}`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function testLLMChat(payload: LLMChatTestPayload) {
+  return apiRequest<LLMChatTestResult>(apiV1('/admin/llm-model-configs/test-chat'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function chatLLM(payload: LLMChatPayload) {
+  return apiRequest<LLMChatResult>(apiV1('/admin/llm-model-configs/chat'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function triggerCrawlTask(channelCode: string) {
   return apiRequest<AdminActionResult>(apiV1(`/admin/crawl-tasks/${encodeURIComponent(channelCode)}/trigger`), {
     method: 'POST',
@@ -129,6 +184,24 @@ export function refreshQuality() {
 
 export function retryLowQualityDetails(limit = 20) {
   return apiRequest<AdminActionResult>(apiV1(`/admin/retry-low-quality-details?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
+export function enqueueEventAnalysisDetailJobs(limit = 20) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/event-analysis-detail-jobs?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
+export function rebuildStaleEventAnalysis(limit = 200) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/rebuild-stale-event-analysis?limit=${limit}`), {
+    method: 'POST',
+  })
+}
+
+export function prioritizeWeakSourceGovernance(limit = 20) {
+  return apiRequest<AdminActionResult>(apiV1(`/admin/prioritize-weak-source-governance?limit=${limit}`), {
     method: 'POST',
   })
 }
@@ -167,4 +240,99 @@ export function archiveDuplicateTitles() {
   return apiRequest<AdminActionResult>(apiV1('/admin/archive-duplicate-titles'), {
     method: 'POST',
   })
+}
+
+export interface ChannelCredentialInfo {
+  channel_code: string
+  cookie_configured: boolean
+  cookie_preview: string
+  cookie_status: string
+  extra_credentials: Record<string, any>
+  updated_at: string | null
+  updated_by: string
+}
+
+export interface CredentialTestResult {
+  channel_code: string
+  success: boolean
+  response_code: number
+}
+
+export interface ChannelCredentialPayload {
+  cookies: string
+  extra_credentials?: Record<string, any>
+  updated_by?: string
+}
+
+export function getChannelCredentials(channelCode: string) {
+  return apiRequest<ChannelCredentialInfo>(apiV1(`/admin/channels/${encodeURIComponent(channelCode)}/credentials`))
+}
+
+export function updateChannelCredentials(channelCode: string, payload: ChannelCredentialPayload) {
+  return apiRequest<{ channel_code: string }>(apiV1(`/admin/channels/${encodeURIComponent(channelCode)}/credentials`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function testChannelCredentials(channelCode: string) {
+  return apiRequest<CredentialTestResult>(apiV1(`/admin/channels/${encodeURIComponent(channelCode)}/credentials/test`), {
+    method: 'POST',
+  })
+}
+
+export function deleteChannelCredentials(channelCode: string) {
+  return apiRequest<{ channel_code: string }>(apiV1(`/admin/channels/${encodeURIComponent(channelCode)}/credentials`), {
+    method: 'DELETE',
+  })
+}
+
+export interface EventAnalysisRun {
+  run_id: number
+  analysis_version: string
+  mode: string
+  provider: string
+  model_name: string
+  status: string
+  input_item_count: number
+  quality_score: number
+  confidence: number
+  fallback_used: boolean
+  failure_reason: string
+  started_at: string
+  finished_at: string
+  created_at: string
+}
+
+export interface EventAnalysisSource {
+  source_id: number
+  info_id: number
+  title: string
+  role: string
+  weight: number
+  quality_score: number
+  channel_name: string
+  source_url: string
+  event_time: string
+}
+
+export interface EventAnalysisRunsResult {
+  event_id: number
+  event_title: string
+  runs: EventAnalysisRun[]
+}
+
+export interface EventAnalysisSourcesResult {
+  event_id: number
+  event_title: string
+  run: EventAnalysisRun
+  sources: EventAnalysisSource[]
+}
+
+export function getEventAnalysisRuns(eventId: number) {
+  return apiRequest<EventAnalysisRunsResult>(apiV1(`/admin/events/${eventId}/analysis-runs`))
+}
+
+export function getEventAnalysisSources(eventId: number, runId: number) {
+  return apiRequest<EventAnalysisSourcesResult>(apiV1(`/admin/events/${eventId}/analysis-sources?run_id=${runId}`))
 }

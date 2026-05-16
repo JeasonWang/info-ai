@@ -9,7 +9,7 @@ from typing import Callable
 from urllib.parse import quote
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 RenderedFetcher = Callable[[str], str]
@@ -109,7 +109,7 @@ class ToutiaoCrawler(BaseCrawler):
                 content = "。".join(content_parts)
                 results.append({
                     "source_id": source_id,
-                    "title": title[:40],
+                    "title": title[:200],
                     "content": content[:500],
                     "source_url": hot_board_url,
                     "event_time": datetime.now(),

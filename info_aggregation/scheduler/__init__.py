@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import or_
+from sqlalchemy.orm.attributes import flag_modified
 
 from config import (
     SCHEDULER_HOT_INTERVAL,
@@ -29,12 +30,13 @@ from config import (
 from crawlers.registry import crawler_registry
 from cleaners import clean_info_list
 from database import get_session, Channel, CrawlRunLog, CrawlTask, Info, InfoAcquisitionLog
-from services.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
+from services.quality.data_quality import is_low_quality_list_item, is_near_duplicate_item, is_title_content_duplicate
 from services import parse_tech_content, rebuild_events
-from services.data_quality_report import save_data_quality_snapshot
-from services.detail_jobs import enqueue_low_quality_detail_jobs
-from services.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.quality.data_quality_report import save_data_quality_snapshot
+from services.collection.detail_jobs import enqueue_low_quality_detail_jobs
+from services.collection.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
+from services.collection.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.analysis.event_analysis_reanalysis import rebuild_stale_event_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -88,18 +90,8 @@ def _record_info_acquisition_log(
 
 
 def _effective_channel_interval(channel: Channel) -> int:
-    """返回调度器实际使用的分钟间隔，兼容尚未配置 Max 字段的历史渠道。"""
-    effective_interval = channel.effective_interval_minutes
-    legacy_interval = channel.crawl_interval or 60
-    # 新字段上线前的老渠道只有 crawl_interval；如果 Max 字段仍是默认值，
-    # 继续使用老间隔，避免调度同步后被默认 60 分钟覆盖。
-    if (
-        effective_interval == 60
-        and legacy_interval != 60
-        and (channel.base_interval_minutes in (None, 60))
-    ):
-        return legacy_interval
-    return effective_interval or legacy_interval
+    """返回调度器实际使用的分钟间隔。"""
+    return channel.effective_interval_minutes or channel.base_interval_minutes or 60
 
 
 def _sync_crawl_tasks(session) -> dict:
@@ -208,28 +200,18 @@ def _get_channel_category_map() -> dict:
     从数据库获取渠道编码到分类ID的映射
     返回: {channel_code: category_id} 字典
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         channels = session.query(Channel).all()
         return {ch.code: ch.id for ch in channels}
-    finally:
-        session.close()
-
-
 def _get_category_id_map() -> dict:
     """
     从数据库获取分类名称到分类ID的映射
     返回: {category_name: category_id} 字典
     """
-    session = get_session()
-    try:
+    with get_session() as session:
         from database import Category
         categories = session.query(Category).all()
         return {cat.name: cat.id for cat in categories}
-    finally:
-        session.close()
-
-
 def _save_crawled_data(channel_code: str, items: list) -> list:
     """
     将爬取并清洗后的数据保存到数据库
@@ -242,121 +224,117 @@ def _save_crawled_data(channel_code: str, items: list) -> list:
     if not items:
         return []
 
-    session = get_session()
-    try:
-        channel = session.query(Channel).filter(Channel.code == channel_code).first()
-        if not channel:
-            logger.warning(f"渠道 {channel_code} 不存在于数据库")
-            return []
+    with get_session() as session:
+        try:
+            channel = session.query(Channel).filter(Channel.code == channel_code).first()
+            if not channel:
+                logger.warning(f"渠道 {channel_code} 不存在于数据库")
+                return []
 
-        saved_ids = []
-        saved_count = 0
-        recent_existing = (
-            session.query(Info)
-            .filter(Info.channel_id == channel.id)
-            .order_by(Info.created_at.desc())
-            .limit(200)
-            .all()
-        )
-        for item in items:
-            existing = session.query(Info).filter(
-                Info.source_id == item["source_id"],
-                Info.channel_id == channel.id,
-            ).first()
-
-            if existing:
-                continue
-            if any(
-                is_near_duplicate_item(
-                    item["title"],
-                    item["content"],
-                    existing_item.title,
-                    existing_item.content,
-                )
-                for existing_item in recent_existing
-            ):
-                logger.info(f"渠道 {channel_code}: 跳过近似重复内容 {item['title'][:30]}")
-                continue
-
-            detail_status = "pending"
-            detail_error = ""
-            detail_strategy = ""
-            detail_score = 0
-            detail_content_length = 0
-            detail_fetched_at = None
-            content = item["content"]
-            embedded_pipeline = None
-            embedded_content = item.get("_search_content")
-            if embedded_content:
-                embedded_pipeline = run_detail_pipeline(
-                    title=item["title"],
-                    list_content=item["content"],
-                    strategy_results=[
-                        DetailStrategyResult(strategy="search_embedded", content=embedded_content)
-                    ],
-                    channel_code=channel_code,
-                )
-                if embedded_pipeline.status == "complete":
-                    content = embedded_pipeline.content
-                    detail_status = embedded_pipeline.status
-                    detail_error = embedded_pipeline.failure_reason
-                    detail_strategy = embedded_pipeline.strategy
-                    detail_score = embedded_pipeline.score
-                    detail_content_length = embedded_pipeline.content_length
-                    detail_fetched_at = datetime.now()
-                else:
-                    embedded_pipeline = None
-
-            info = Info(
-                title=item["title"],
-                content=content,
-                category_id=channel.category_id,
-                channel_id=channel.id,
-                source_id=item["source_id"],
-                source_url=item["source_url"],
-                event_time=item["event_time"],
-                core_entity=item.get("core_entity", ""),
-                location=item.get("location", ""),
-                indicator_name=item.get("indicator_name", ""),
-                indicator_value=item.get("indicator_value", ""),
-                detail_fetch_status=detail_status,
-                detail_fetch_error=detail_error,
-                detail_strategy=detail_strategy,
-                detail_score=detail_score,
-                detail_content_length=detail_content_length,
-                detail_fetched_at=detail_fetched_at,
+            saved_ids = []
+            saved_count = 0
+            recent_existing = (
+                session.query(Info)
+                .filter(Info.channel_id == channel.id)
+                .order_by(Info.created_at.desc())
+                .limit(200)
+                .all()
             )
-            session.add(info)
-            session.flush()
-            if embedded_pipeline:
-                _apply_info_semantics(info, content)
-                _record_info_acquisition_log(
-                    session,
-                    info=info,
-                    channel_code=channel_code,
-                    strategy=embedded_pipeline.strategy,
-                    status=embedded_pipeline.status,
-                    score=embedded_pipeline.score,
-                    content_length=embedded_pipeline.content_length,
-                    failure_reason=embedded_pipeline.failure_reason,
-                    matched_rules=embedded_pipeline.matched_rules,
+            for item in items:
+                existing = session.query(Info).filter(
+                    Info.source_id == item["source_id"],
+                    Info.channel_id == channel.id,
+                ).first()
+
+                if existing:
+                    continue
+                if any(
+                    is_near_duplicate_item(
+                        item["title"],
+                        item["content"],
+                        existing_item.title,
+                        existing_item.content,
+                    )
+                    for existing_item in recent_existing
+                ):
+                    logger.info(f"渠道 {channel_code}: 跳过近似重复内容 {item['title'][:30]}")
+                    continue
+
+                detail_status = "pending"
+                detail_error = ""
+                detail_strategy = ""
+                detail_score = 0
+                detail_content_length = 0
+                detail_fetched_at = None
+                content = item["content"]
+                embedded_pipeline = None
+                embedded_content = item.get("_search_content")
+                if embedded_content:
+                    embedded_pipeline = run_detail_pipeline(
+                        title=item["title"],
+                        list_content=item["content"],
+                        strategy_results=[
+                            DetailStrategyResult(strategy="search_embedded", content=embedded_content)
+                        ],
+                        channel_code=channel_code,
+                    )
+                    if embedded_pipeline.status == "complete":
+                        content = embedded_pipeline.content
+                        detail_status = embedded_pipeline.status
+                        detail_error = embedded_pipeline.failure_reason
+                        detail_strategy = embedded_pipeline.strategy
+                        detail_score = embedded_pipeline.score
+                        detail_content_length = embedded_pipeline.content_length
+                        detail_fetched_at = datetime.now()
+                    else:
+                        embedded_pipeline = None
+
+                info = Info(
+                    title=item["title"],
                     content=content,
+                    category_id=channel.category_id,
+                    channel_id=channel.id,
+                    source_id=item["source_id"],
+                    source_url=item["source_url"],
+                    event_time=item["event_time"],
+                    core_entity=item.get("core_entity", ""),
+                    location=item.get("location", ""),
+                    indicator_name=item.get("indicator_name", ""),
+                    indicator_value=item.get("indicator_value", ""),
+                    detail_fetch_status=detail_status,
+                    detail_fetch_error=detail_error,
+                    detail_strategy=detail_strategy,
+                    detail_score=detail_score,
+                    detail_content_length=detail_content_length,
+                    detail_fetched_at=detail_fetched_at,
                 )
-            saved_ids.append(info.id)
-            recent_existing.insert(0, info)
-            saved_count += 1
+                session.add(info)
+                session.flush()
+                if embedded_pipeline:
+                    _apply_info_semantics(info, content)
+                    _record_info_acquisition_log(
+                        session,
+                        info=info,
+                        channel_code=channel_code,
+                        strategy=embedded_pipeline.strategy,
+                        status=embedded_pipeline.status,
+                        score=embedded_pipeline.score,
+                        content_length=embedded_pipeline.content_length,
+                        failure_reason=embedded_pipeline.failure_reason,
+                        matched_rules=embedded_pipeline.matched_rules,
+                        content=content,
+                    )
+                saved_ids.append(info.id)
+                recent_existing.insert(0, info)
+                saved_count += 1
 
-        session.commit()
-        logger.info(f"渠道 {channel_code}: 保存{saved_count}条新信息")
-        return saved_ids
-    except Exception as e:
-        session.rollback()
-        logger.error(f"保存数据失败: {e}", exc_info=True)
-        return []
-    finally:
-        session.close()
-
-
+            session.commit()
+            logger.info(f"渠道 {channel_code}: 保存{saved_count}条新信息")
+            return saved_ids
+        except Exception as e:
+            session.rollback()
+            logger.error(f"保存数据失败: {e}", exc_info=True)
+            return []
 def _fetch_details_for_items(channel_code: str, saved_ids: list):
     """
     对新保存的信息执行详情页爬取，更新content和详情爬取状态
@@ -373,121 +351,138 @@ def _fetch_details_for_items(channel_code: str, saved_ids: list):
         logger.warning(f"渠道 {channel_code} 爬虫未注册，跳过详情爬取")
         return {"detail_success_count": 0, "detail_failed_count": len(saved_ids)}
 
-    session = get_session()
-    detail_success_count = 0
-    detail_failed_count = 0
-    try:
-        for info_id in saved_ids:
-            info = session.query(Info).filter(Info.id == info_id).first()
-            if not info:
-                continue
+    with get_session() as session:
+        detail_success_count = 0
+        detail_failed_count = 0
+        try:
+            for info_id in saved_ids:
+                info = session.query(Info).filter(Info.id == info_id).first()
+                if not info:
+                    continue
 
-            original_content = info.content or ""
-            if (
-                info.detail_fetch_status == "complete"
-                and (info.detail_score or 0) >= 80
-                and (info.detail_content_length or len(original_content)) >= 40
-            ):
-                detail_success_count += 1
-                logger.info(
-                    f"详情已完整，跳过重复爬取 [ID={info_id}] "
-                    f"策略={info.detail_strategy}: 内容{info.detail_content_length or len(original_content)}字"
-                )
-                if not (info.tech_topic_type or info.tech_entities or info.tech_keywords):
-                    _apply_info_semantics(info, original_content)
+                original_content = info.content or ""
                 if (
-                    session.query(InfoAcquisitionLog)
-                    .filter(InfoAcquisitionLog.info_id == info.id)
-                    .count()
-                    == 0
+                    info.detail_fetch_status == "complete"
+                    and (info.detail_score or 0) >= 80
+                    and (info.detail_content_length or len(original_content)) >= 40
                 ):
-                    _record_info_acquisition_log(
-                        session,
-                        info=info,
-                        channel_code=channel_code,
-                        strategy=info.detail_strategy or "complete_skip",
-                        status=info.detail_fetch_status,
-                        score=info.detail_score or 0,
-                        content_length=info.detail_content_length or len(original_content),
-                        failure_reason=info.detail_fetch_error or "",
-                        matched_rules=["already_complete"],
-                        content=original_content,
+                    detail_success_count += 1
+                    logger.info(
+                        f"详情已完整，跳过重复爬取 [ID={info_id}] "
+                        f"策略={info.detail_strategy}: 内容{info.detail_content_length or len(original_content)}字"
                     )
-                continue
+                    if not (info.tech_topic_type or info.tech_entities or info.tech_keywords):
+                        _apply_info_semantics(info, original_content)
+                    if (
+                        session.query(InfoAcquisitionLog)
+                        .filter(InfoAcquisitionLog.info_id == info.id)
+                        .count()
+                        == 0
+                    ):
+                        _record_info_acquisition_log(
+                            session,
+                            info=info,
+                            channel_code=channel_code,
+                            strategy=info.detail_strategy or "complete_skip",
+                            status=info.detail_fetch_status,
+                            score=info.detail_score or 0,
+                            content_length=info.detail_content_length or len(original_content),
+                            failure_reason=info.detail_fetch_error or "",
+                            matched_rules=["already_complete"],
+                            content=original_content,
+                        )
+                    continue
 
-            with crawler_registry.get_lock(channel_code):
-                detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
-                    info.source_url, info.to_dict()
+                with crawler_registry.get_lock(channel_code):
+                    detail_content, status, error_msg, pipeline = crawler.safe_fetch_detail(
+                        info.source_url, info.to_dict()
+                    )
+                if detail_content and is_title_content_duplicate(info.title, detail_content):
+                    detail_content = ""
+                    status = "list_only"
+                    error_msg = "title_content_duplicate"
+                    pipeline.content = original_content
+                    pipeline.status = status
+                    pipeline.failure_reason = error_msg
+                    pipeline.score = min(pipeline.score, 10)
+                    pipeline.content_length = len(original_content)
+                    pipeline.matched_rules = [*pipeline.matched_rules, "title_content_duplicate"]
+                elif detail_content and is_low_quality_list_item(info.title, detail_content):
+                    detail_content = ""
+                    status = "list_only"
+                    error_msg = "low_quality_detail"
+                    pipeline.content = original_content
+                    pipeline.status = status
+                    pipeline.failure_reason = error_msg
+                    pipeline.score = min(pipeline.score, 10)
+                    pipeline.content_length = len(original_content)
+                    pipeline.matched_rules = [*pipeline.matched_rules, "low_quality_detail"]
+
+                if detail_content:
+                    info.content = detail_content
+                info.detail_fetch_status = status
+                info.detail_fetch_error = error_msg
+                info.detail_strategy = pipeline.strategy
+                info.detail_score = pipeline.score
+                info.detail_content_length = pipeline.content_length
+                info.detail_fetched_at = datetime.now()
+                for attr in (
+                    "content",
+                    "detail_fetch_status",
+                    "detail_fetch_error",
+                    "detail_strategy",
+                    "detail_score",
+                    "detail_content_length",
+                    "detail_fetched_at",
+                ):
+                    flag_modified(info, attr)
+                _apply_info_semantics(info, detail_content or original_content)
+                session.add(info)
+                # 先显式刷入 Info 详情字段，再写采集日志，避免主表与日志状态脱节。
+                session.flush()
+                _record_info_acquisition_log(
+                    session,
+                    info=info,
+                    channel_code=channel_code,
+                    strategy=pipeline.strategy,
+                    status=status,
+                    score=pipeline.score,
+                    content_length=pipeline.content_length,
+                    failure_reason=error_msg,
+                    matched_rules=pipeline.matched_rules,
+                    content=detail_content or original_content,
                 )
-            if detail_content and is_title_content_duplicate(info.title, detail_content):
-                detail_content = ""
-                status = "list_only"
-                error_msg = "title_content_duplicate"
-                pipeline.content = original_content
-                pipeline.status = status
-                pipeline.failure_reason = error_msg
-                pipeline.score = min(pipeline.score, 10)
-                pipeline.content_length = len(original_content)
-                pipeline.matched_rules = [*pipeline.matched_rules, "title_content_duplicate"]
-            elif detail_content and is_low_quality_list_item(info.title, detail_content):
-                detail_content = ""
-                status = "list_only"
-                error_msg = "low_quality_detail"
-                pipeline.content = original_content
-                pipeline.status = status
-                pipeline.failure_reason = error_msg
-                pipeline.score = min(pipeline.score, 10)
-                pipeline.content_length = len(original_content)
-                pipeline.matched_rules = [*pipeline.matched_rules, "low_quality_detail"]
 
-            if detail_content:
-                info.content = detail_content
-            info.detail_fetch_status = status
-            info.detail_fetch_error = error_msg
-            info.detail_strategy = pipeline.strategy
-            info.detail_score = pipeline.score
-            info.detail_content_length = pipeline.content_length
-            info.detail_fetched_at = datetime.now()
-            _apply_info_semantics(info, detail_content or original_content)
-            _record_info_acquisition_log(
-                session,
-                info=info,
-                channel_code=channel_code,
-                strategy=pipeline.strategy,
-                status=status,
-                score=pipeline.score,
-                content_length=pipeline.content_length,
-                failure_reason=error_msg,
-                matched_rules=pipeline.matched_rules,
-                content=detail_content or original_content,
-            )
+                if status in {"partial", "complete"} and detail_content:
+                    detail_success_count += 1
+                    logger.info(f"详情爬取成功 [ID={info_id}] 策略={pipeline.strategy}: 内容{len(detail_content)}字")
+                    logger.debug(
+                        "详情字段已回写 [ID=%s] status=%s strategy=%s score=%s length=%s",
+                        info_id,
+                        info.detail_fetch_status,
+                        info.detail_strategy,
+                        info.detail_score,
+                        info.detail_content_length,
+                    )
+                else:
+                    detail_failed_count += 1
+                    logger.warning(f"详情爬取未完成 [ID={info_id}] 状态={status}: {error_msg}，保留内容({len((detail_content or original_content))}字)")
 
-            if status in {"partial", "complete"} and detail_content:
-                detail_success_count += 1
-                logger.info(f"详情爬取成功 [ID={info_id}] 策略={pipeline.strategy}: 内容{len(detail_content)}字")
-            else:
-                detail_failed_count += 1
-                logger.warning(f"详情爬取未完成 [ID={info_id}] 状态={status}: {error_msg}，保留内容({len((detail_content or original_content))}字)")
+                time.sleep(random.uniform(1.0, 3.0))
 
-            time.sleep(random.uniform(1.0, 3.0))
-
-        session.commit()
-        logger.info(f"渠道 {channel_code}: 详情爬取完成，共处理{len(saved_ids)}条")
-        return {
-            "detail_success_count": detail_success_count,
-            "detail_failed_count": detail_failed_count,
-        }
-    except Exception as e:
-        session.rollback()
-        logger.error(f"详情爬取过程异常: {e}", exc_info=True)
-        return {
-            "detail_success_count": detail_success_count,
-            "detail_failed_count": len(saved_ids) - detail_success_count,
-        }
-    finally:
-        session.close()
-
-
+            session.commit()
+            logger.info(f"渠道 {channel_code}: 详情爬取完成，共处理{len(saved_ids)}条")
+            return {
+                "detail_success_count": detail_success_count,
+                "detail_failed_count": detail_failed_count,
+            }
+        except Exception as e:
+            session.rollback()
+            logger.error(f"详情爬取过程异常: {e}", exc_info=True)
+            return {
+                "detail_success_count": detail_success_count,
+                "detail_failed_count": len(saved_ids) - detail_success_count,
+            }
 def crawl_by_category(category_name: str):
     """
     按分类执行爬取任务
@@ -503,8 +498,7 @@ def crawl_by_category(category_name: str):
         logger.warning(f"分类 {category_name} 不存在")
         return
 
-    session = get_session()
-    try:
+    with get_session() as session:
         _sync_crawl_tasks(session)
         channels = session.query(Channel).filter(
             Channel.category_id == target_category_id,
@@ -512,9 +506,6 @@ def crawl_by_category(category_name: str):
         ).all()
         active_codes = {ch.code for ch in channels}
         due_codes = set(_get_due_channel_codes(session, target_category_id))
-    finally:
-        session.close()
-
     for code, crawler in all_crawlers.items():
         if code not in active_codes or code not in due_codes:
             continue
@@ -541,8 +532,7 @@ def crawl_by_category(category_name: str):
             error_message = str(exc)
             logger.error(f"渠道 {code} 采集失败: {exc}", exc_info=True)
         finally:
-            monitor_session = get_session()
-            try:
+            with get_session() as monitor_session:
                 _sync_crawl_tasks(monitor_session)
                 _record_crawl_run(
                     monitor_session,
@@ -558,16 +548,9 @@ def crawl_by_category(category_name: str):
                     started_at=started_at,
                     finished_at=datetime.now(),
                 )
-            finally:
-                monitor_session.close()
-
-    session = get_session()
-    try:
+    with get_session() as session:
         rebuild_events(session)
         save_data_quality_snapshot(session)
-    finally:
-        session.close()
-
     logger.info(f"分类 [{category_name}] 爬取任务完成")
 
 
@@ -606,22 +589,18 @@ def cleanup_expired_infos():
     清理两周前创建的信息数据
     """
     cutoff = datetime.now() - timedelta(days=14)
-    session = get_session()
-    try:
-        deleted_count = (
-            session.query(Info)
-            .filter(Info.created_at < cutoff)
-            .delete(synchronize_session=False)
-        )
-        session.commit()
-        logger.info(f"历史数据清理完成，删除{deleted_count}条，截止时间: {cutoff.strftime('%Y-%m-%d %H:%M:%S')}")
-    except Exception as e:
-        session.rollback()
-        logger.error(f"历史数据清理失败: {e}", exc_info=True)
-    finally:
-        session.close()
-
-
+    with get_session() as session:
+        try:
+            deleted_count = (
+                session.query(Info)
+                .filter(Info.created_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+            session.commit()
+            logger.info(f"历史数据清理完成，删除{deleted_count}条，截止时间: {cutoff.strftime('%Y-%m-%d %H:%M:%S')}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"历史数据清理失败: {e}", exc_info=True)
 def process_detail_jobs(session=None, runner=None, enqueue_limit: int = 100, process_limit: int = 20) -> dict:
     """入队并处理详情补偿任务，供 scheduler 和测试共用。"""
 
@@ -634,7 +613,12 @@ def process_detail_jobs(session=None, runner=None, enqueue_limit: int = 100, pro
             runner=runner or crawler_detail_runner,
             limit=process_limit,
         )
-        return {"enqueue": enqueue_result, "process": process_result}
+        reanalyze_result = (
+            rebuild_stale_event_analysis(session)
+            if process_result.get("succeeded_count", 0) > 0
+            else {"stale_count": 0, "rebuilt": False, "event_count": 0}
+        )
+        return {"enqueue": enqueue_result, "process": process_result, "reanalyze": reanalyze_result}
     finally:
         if owns_session:
             session.close()
@@ -646,12 +630,8 @@ def setup_scheduler() -> BackgroundScheduler:
     返回: 配置好的BackgroundScheduler实例
     """
     scheduler = BackgroundScheduler(timezone=_scheduler_timezone())
-    session = get_session()
-    try:
+    with get_session() as session:
         _sync_crawl_tasks(session)
-    finally:
-        session.close()
-
     scheduler.add_job(
         crawl_hot,
         trigger=_interval_trigger(minutes=SCHEDULER_HOT_INTERVAL),

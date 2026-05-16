@@ -59,6 +59,10 @@ export interface InfoItem {
   detail_score: number
   detail_content_length: number
   detail_fetched_at: string | null
+  quality_level?: string
+  quality_summary?: string
+  needs_attention?: boolean
+  attention_priority?: number
   tech_topic_type?: string | null
   tech_entities?: string[] | null
   tech_keywords?: string[] | null
@@ -82,6 +86,7 @@ export interface EventCategory {
 export interface EventListItem {
   id: number
   representative_info_id: number | null
+  status?: 'active' | 'monitoring' | string
   title: string
   one_line_summary: string
   primary_category: {
@@ -91,10 +96,14 @@ export interface EventListItem {
   heat_score: number
   freshness_score: number
   composite_score: number
+  display_quality_score?: number
+  display_quality_level?: string
+  display_quality_reason?: string
   last_updated_at: string | null
   source_count: number
   source_badges: string[]
   new_update_count: number
+  evolution_stage?: string
 }
 
 export interface EventPage {
@@ -114,6 +123,35 @@ export interface EventTimelineItem {
 export interface EventSourceView {
   channel_name: string
   summary: string
+  focus?: string
+  stance?: string
+  difference_hint?: string
+}
+
+export interface EventEvidenceSource {
+  info_id: number
+  title: string
+  channel_name: string
+  source_url: string
+  weight: number
+  detail_score: number
+  detail_fetch_status: string
+  quality_level: string
+  quality_summary: string
+  risk_reasons: string[]
+}
+
+export interface EventPlatformView {
+  channel_name: string
+  source_count: number
+}
+
+export interface EventEvidenceChain {
+  evidence_sources: EventEvidenceSource[]
+  weak_sources: EventEvidenceSource[]
+  platform_views: EventPlatformView[]
+  usable_source_count: number
+  weak_source_count: number
 }
 
 export interface EventRepresentativeSource {
@@ -122,6 +160,12 @@ export interface EventRepresentativeSource {
   channel_name: string
   source_url: string
   event_time: string | null
+  content: string
+  detail_fetch_status: string
+  detail_score: number
+  detail_content_length: number
+  quality_level?: string
+  quality_summary?: string
 }
 
 export interface EventTechTopic {
@@ -135,9 +179,38 @@ export interface EventTechContext {
   keywords: string[]
 }
 
+export interface EventIntelligenceBrief {
+  stage: string
+  confidence_reason: string
+  decision_hint: string
+  follow_up_questions: string[]
+}
+
+export interface EventControversyBrief {
+  level: 'none' | 'low' | 'medium' | 'high' | string
+  title: string
+  summary: string
+  signals: string[]
+  action_hint: string
+  has_rumor_signal: boolean
+}
+
+export interface EventRelatedEvent {
+  id: number
+  title: string
+  one_line_summary: string
+  last_updated_at: string | null
+  relation_type: 'previous' | 'next' | string
+  relation_label: string
+  relation_reason: string
+  evolution_type: string
+  evolution_summary: string
+}
+
 export interface EventDetail {
   event: {
     id: number
+    status?: 'active' | 'monitoring' | string
     title: string
     one_line_summary: string
     primary_category: {
@@ -147,6 +220,9 @@ export interface EventDetail {
     heat_score: number
     freshness_score?: number
     composite_score?: number
+    display_quality_score?: number
+    display_quality_level?: string
+    display_quality_reason?: string
     source_count?: number
     last_updated_at: string | null
   }
@@ -155,6 +231,10 @@ export interface EventDetail {
   source_views: EventSourceView[]
   representative_sources: EventRepresentativeSource[]
   tech_context: EventTechContext
+  evidence_chain?: EventEvidenceChain
+  intelligence_brief?: EventIntelligenceBrief
+  controversy_brief?: EventControversyBrief
+  related_events?: EventRelatedEvent[]
 }
 
 export interface StatsData {
@@ -199,6 +279,7 @@ export interface ListEventParams {
   category_code?: string
   channel_code?: string
   keyword?: string
+  status?: 'active' | 'monitoring'
   sort?: 'composite' | 'latest'
   page?: number
   page_size?: number

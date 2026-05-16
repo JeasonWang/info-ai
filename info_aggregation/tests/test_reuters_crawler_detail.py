@@ -1,5 +1,7 @@
 import json
 
+import requests
+
 from crawlers.reuters import ReutersCrawler
 
 
@@ -36,6 +38,49 @@ def test_reuters_resolve_detail_prefers_article_api_paragraphs():
     assert result.status == "complete"
     assert result.strategy == "reuters_article_api"
     assert "enterprise deployment plans" in result.content
+
+
+def test_reuters_article_api_extracts_nested_story_body_paragraphs():
+    crawler = ReutersCrawler()
+
+    class NestedApiResponse:
+        def json(self):
+            return {
+                "result": {
+                    "article": {
+                        "content_items": [
+                            {"type": "headline", "content": "Markets story"},
+                            {
+                                "type": "body",
+                                "items": [
+                                    {"type": "paragraph", "content": "Global markets rose after officials signaled further talks on trade and energy policy."},
+                                    {"type": "paragraph", "content": "Investors said the comments could affect bond yields, currency moves and corporate financing plans."},
+                                    {"type": "paragraph", "content": "Analysts said companies will watch implementation details before changing supply-chain or investment decisions."},
+                                    {"type": "paragraph", "content": "Reuters reported that policy uncertainty remains a risk for exporters, banks and commodity traders."},
+                                    {"type": "paragraph", "content": "Executives said they need clearer guidance on tariffs, permits and regional compliance rules."},
+                                    {"type": "paragraph", "content": "Economists added that the next data releases could influence central bank expectations, hiring plans and demand forecasts across major regions."},
+                                    {"type": "paragraph", "content": "Several companies said they would keep contingency plans in place until governments publish more detailed implementation schedules."},
+                                ],
+                            },
+                        ]
+                    }
+                }
+            }
+
+    crawler.session.post = lambda *args, **kwargs: NestedApiResponse()
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("should not use web fallback"))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "Global markets rise as officials meet",
+            "content": "Short summary",
+            "source_url": "https://www.reuters.com/world/example-2026-05-14/",
+        }
+    )
+
+    assert result.status == "complete"
+    assert result.strategy == "reuters_article_api"
+    assert "corporate financing plans" in result.content
 
 
 def test_reuters_resolve_detail_uses_json_ld_when_api_is_empty():
@@ -164,14 +209,20 @@ def test_reuters_news_sitemap_restores_official_urls():
     class DummyResponse:
         text = """
         <?xml version="1.0" encoding="UTF-8"?>
-        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
           <url>
             <loc>https://www.reuters.com/sports/baseball/example-2026-05-03/</loc>
             <news:news><news:title>Sports story</news:title><news:publication_date>2026-05-03T01:00:00Z</news:publication_date></news:news>
           </url>
           <url>
             <loc>https://www.reuters.com/world/us/trump-says-us-could-restart-iran-strikes-2026-05-02/</loc>
-            <news:news><news:title>Trump says US could restart Iran strikes if they misbehave</news:title><news:publication_date>2026-05-02T22:41:43Z</news:publication_date></news:news>
+            <news:news>
+              <news:title>Trump says US could restart Iran strikes if they misbehave</news:title>
+              <news:publication_date>2026-05-02T22:41:43Z</news:publication_date>
+              <news:keywords><![CDATA[GUID:tag:reuters.com,2026:newsml_KBN3RK170,USN:KBN3RK170]]></news:keywords>
+              <news:stock_tickers>.DJI,.INX</news:stock_tickers>
+            </news:news>
+            <image:image><image:caption>U.S. President Donald Trump speaks at the White House. REUTERS/File Photo</image:caption></image:image>
           </url>
         </urlset>
         """
@@ -184,6 +235,9 @@ def test_reuters_news_sitemap_restores_official_urls():
     assert items[0]["source_url"].startswith("https://www.reuters.com/world/")
     assert items[0]["_reuters_source"] == "news_sitemap"
     assert "Published at 2026-05-02" in items[0]["content"]
+    assert "Reuters image context" in items[0]["content"]
+    assert "Reuters stock tickers: .DJI,.INX" in items[0]["content"]
+    assert "Reuters news codes: KBN3RK170" in items[0]["content"]
 
 
 def test_reuters_news_sitemap_metadata_does_not_trigger_blocked_detail_requests():
@@ -216,3 +270,69 @@ def test_reuters_news_sitemap_metadata_does_not_trigger_blocked_detail_requests(
     assert result.status == "partial"
     assert result.strategy == "news_sitemap_metadata"
     assert calls == {"post": 0, "fetch": 0}
+
+
+def test_reuters_persisted_news_sitemap_metadata_is_used_after_save():
+    crawler = ReutersCrawler()
+    calls = {"post": 0, "fetch": 0}
+
+    def fake_post(*args, **kwargs):
+        calls["post"] += 1
+        raise RuntimeError("article api blocked")
+
+    def fake_fetch(*args, **kwargs):
+        calls["fetch"] += 1
+        raise RuntimeError("article page blocked")
+
+    crawler.session.post = fake_post
+    crawler.fetch = fake_fetch
+
+    result = crawler.resolve_detail(
+        {
+            "title": "S&P 500, Nasdaq futures rise ahead of key data",
+            "content": (
+                "S&P 500, Nasdaq futures rise ahead of key data. Reuters category: world / china. "
+                "Reuters Published at 2026-05-13T10:29:47.46Z according to its official news sitemap. "
+                "Reuters image context: Traders work on the floor at the New York Stock Exchange. "
+                "The official image caption identifies the location, market setting and Reuters photo context, "
+                "which gives the downstream event analysis a factual clue even when the article page is blocked. "
+                "Reuters stock tickers: .DJI,.INX,.IXIC. "
+                "Reuters news codes: KBN3RK170, L4N41Q0TL. "
+                "Official Reuters URL: https://www.reuters.com/world/china/example-2026-05-13/"
+            ),
+            "source_url": "https://www.reuters.com/world/china/example-2026-05-13/",
+        }
+    )
+
+    assert result.status == "complete"
+    assert result.strategy == "news_sitemap_metadata"
+    assert result.content_length >= 300
+    assert calls == {"post": 0, "fetch": 0}
+
+
+def test_reuters_blocked_article_detail_keeps_http_failure_reason():
+    crawler = ReutersCrawler()
+
+    class BlockedResponse:
+        status_code = 403
+
+        def raise_for_status(self):
+            raise requests.HTTPError("403 Client Error", response=self)
+
+        def json(self):
+            return {}
+
+    crawler.session.post = lambda *args, **kwargs: BlockedResponse()
+    crawler.fetch = lambda *args, **kwargs: (_ for _ in ()).throw(requests.HTTPError("403 Client Error", response=BlockedResponse()))
+
+    result = crawler.resolve_detail(
+        {
+            "title": "Global markets rise as officials meet",
+            "content": "Reuters reported market participants were watching policy signals.",
+            "source_url": "https://www.reuters.com/world/example/",
+        }
+    )
+
+    assert result.status == "list_only"
+    assert result.failure_reason == "http_403_blocked"
+    assert "http_403" in result.matched_rules

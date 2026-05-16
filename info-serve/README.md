@@ -6,7 +6,7 @@
 
 - `info_aggregation` 负责采集、清洗、详情补全、事件构建和写入 MySQL。
 - `info-serve` 负责读取 MySQL 并提供业务 API。
-- `info-max` 负责用户端展示。
+- `info-mvp` 负责用户端展示。
 - `info-admin` 负责管理后台展示。
 
 `info-serve` 不负责爬虫采集，不直接渲染页面，不把管理后台页面逻辑混入服务端。
@@ -50,6 +50,14 @@ root:root1234@tcp(localhost:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Lo
 INFO_SERVE_MYSQL_DSN
 INFO_SERVE_HTTP_ADDR
 INFO_SERVE_SESSION_SECRET
+REDIS_ADDR
+REDIS_PASSWORD
+REDIS_DB
+AGGREGATION_COMMAND_STREAM
+AGGREGATION_RESULT_PREFIX
+AGGREGATION_RESULT_WAIT_MS
+AGGREGATION_HTTP_BASE_URL
+AGGREGATION_LLM_TIMEOUT_MS
 ```
 
 ## 本地测试
@@ -91,5 +99,5 @@ go run ./cmd/create-admin -email admin@example.com -password StrongerPass123
 ## API 版本化计划
 
 - Pro 当前阶段已补充 `/api/v1/*` 等价入口，并继续保留 `/api/*` 旧路径。
-- `info-admin` 已切换到 `/api/v1/*`，`info-max` 仍保留旧路径，等待用户侧接口从旧 FastAPI 平滑迁入 `info-serve`。
-- 前端全部切换完成后，再评估是否废弃旧路径；废弃前必须更新文档、联调清单和回归测试。
+- `info-admin` 和 `info-mvp` 已统一通过 `/api/v1/*` 访问 `info-serve`。
+- `/api/*` 旧路径仅作为服务端兼容入口保留；废弃前必须更新文档、联调清单和回归测试。

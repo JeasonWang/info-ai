@@ -5,8 +5,8 @@ from fastapi.testclient import TestClient
 from api import app
 import api
 from crawlers.registry import crawler_registry
-from database import Category, Channel, Event, Info
-from services.event_builder import rebuild_events
+from database import Category, Channel, Event, EventItemLink, Info
+from services.analysis.event_builder import _group_related_items, rebuild_events
 
 
 def seed_event_data(session):
@@ -258,6 +258,52 @@ def test_rebuild_events_prefers_high_quality_source_as_event_lead(session):
     assert "API 接入节奏" in item["one_line_summary"]
 
 
+def test_rebuild_events_orders_event_links_by_quality_not_time(session):
+    tech = Category(name="科技", code="tech", description="科技事件")
+    session.add(tech)
+    session.flush()
+    channel = Channel(name="36氪", code="36kr", base_url="https://36kr.com", category_id=tech.id)
+    session.add(channel)
+    session.flush()
+    older_quality = Info(
+        title="OpenAI 新模型完整分析",
+        content=(
+            "OpenAI 新模型发布后，开发者关注 API 接入节奏、推理性能、上下文窗口、部署成本和企业迁移方案。"
+            "企业团队正在评估数据隔离、权限控制、稳定性、调用价格和监控能力。"
+        ),
+        category_id=tech.id,
+        channel_id=channel.id,
+        source_id="quality-primary-old",
+        source_url="https://example.com/quality-primary-old",
+        event_time=datetime(2026, 4, 20, 9, 0, 0),
+        core_entity="OpenAI",
+        detail_fetch_status="complete",
+        detail_score=92,
+        detail_content_length=120,
+    )
+    newer_weak = Info(
+        title="OpenAI 新模型热议",
+        content="OpenAI 新模型热议，网友继续讨论。",
+        category_id=tech.id,
+        channel_id=channel.id,
+        source_id="quality-secondary-new",
+        source_url="https://example.com/quality-secondary-new",
+        event_time=datetime(2026, 4, 20, 9, 20, 0),
+        core_entity="OpenAI",
+        detail_fetch_status="partial",
+        detail_score=58,
+        detail_content_length=20,
+    )
+    session.add_all([older_quality, newer_weak])
+    session.commit()
+
+    rebuild_events(session)
+
+    event = session.query(Event).filter(Event.title == "OpenAI 新模型完整分析").one()
+    primary_link = session.query(EventItemLink).filter(EventItemLink.event_id == event.id, EventItemLink.is_primary == 1).one()
+    assert primary_link.item_id == older_quality.id
+
+
 def test_list_events_deduplicates_source_badges(session):
     tech = Category(name="科技", code="tech", description="科技事件")
     session.add(tech)
@@ -436,10 +482,21 @@ def test_get_event_returns_timeline_and_summaries(session):
     assert payload["event"]["id"] == event_id
     assert "timeline" in payload
     assert payload["summaries"]["why_it_matters"]
+    assert payload["summaries"]["heat_reason"]
+    assert payload["summaries"]["risk_notice"]
+    assert payload["summaries"]["source_compare"]
+    assert payload["summaries"]["analysis_confidence"]
     assert len(payload["representative_sources"]) >= 1
+    assert payload["representative_sources"][0]["quality_level"]
+    assert payload["evidence_chain"]["usable_source_count"] >= 1
+    assert payload["evidence_chain"]["evidence_sources"]
+    assert payload["evidence_chain"]["platform_views"]
     assert payload["summaries"]["what_happened"] != payload["summaries"]["latest_update"]
     assert "推理" in payload["summaries"]["what_happened"] or "API" in payload["summaries"]["what_happened"]
     assert "OpenAI" in payload["summaries"]["why_it_matters"]
+    assert "热点价值" in payload["summaries"]["heat_reason"]
+    assert "持续校准" in payload["summaries"]["risk_notice"] or "暂未发现明显采集风险" in payload["summaries"]["risk_notice"]
+    assert "分析可信度" in payload["summaries"]["analysis_confidence"]
     assert "API" in payload["summaries"]["latest_update"] or "开发工具" in payload["summaries"]["latest_update"]
     assert payload["tech_context"]["topics"][0]["topic_type"] == "dev_tool" or payload["tech_context"]["topics"][0]["topic_type"] == "model_release"
     assert "OpenAI" in payload["tech_context"]["entities"]
@@ -457,6 +514,170 @@ def test_list_events_supports_keyword_filtering(session):
     payload = response.json()["data"]
     assert len(payload["items"]) == 1
     assert "OpenAI" in payload["items"][0]["title"]
+
+
+def test_rebuild_events_groups_related_titles_by_semantic_entity(session):
+    tech = Category(name="科技", code="tech", description="科技事件")
+    session.add(tech)
+    session.flush()
+
+    juejin = Channel(
+        name="掘金",
+        code="juejin",
+        base_url="https://juejin.cn",
+        category_id=tech.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    csdn = Channel(
+        name="CSDN",
+        code="csdn",
+        base_url="https://csdn.net",
+        category_id=tech.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add_all([juejin, csdn])
+    session.flush()
+
+    session.add_all(
+        [
+            Info(
+                title="OpenAI 发布新模型能力",
+                content="OpenAI 发布新模型后，开发者重点关注 API 接入节奏、推理性能和部署成本。" * 12,
+                category_id=tech.id,
+                channel_id=juejin.id,
+                source_id="semantic-event-1",
+                source_url="https://example.com/semantic-event-1",
+                event_time=datetime(2026, 5, 8, 9, 0, 0),
+                tech_entities="OpenAI,GPT-5",
+                tech_keywords="API,推理",
+                detail_fetch_status="complete",
+                detail_score=90,
+                detail_content_length=720,
+            ),
+            Info(
+                title="OpenAI 新模型价格方案曝光",
+                content="围绕 OpenAI 新模型价格方案，社区开始讨论调用成本、企业接入和模型推理效率。" * 12,
+                category_id=tech.id,
+                channel_id=csdn.id,
+                source_id="semantic-event-2",
+                source_url="https://example.com/semantic-event-2",
+                event_time=datetime(2026, 5, 8, 9, 30, 0),
+                tech_entities="OpenAI,GPT-5",
+                tech_keywords="价格,推理",
+                detail_fetch_status="complete",
+                detail_score=88,
+                detail_content_length=680,
+            ),
+        ]
+    )
+    session.commit()
+
+    rebuild_events(session)
+
+    event = session.query(Event).filter(Event.status == "active").one()
+    assert event.source_count == 2
+    assert "OpenAI" in event.title
+
+
+def test_rebuild_events_groups_cross_source_hot_titles_without_entity_fields(session):
+    hot = Category(name="热点事件", code="hot", description="热点")
+    session.add(hot)
+    session.flush()
+
+    toutiao = Channel(
+        name="今日头条",
+        code="toutiao",
+        base_url="https://toutiao.com",
+        category_id=hot.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    cctv = Channel(
+        name="央视新闻",
+        code="cctv",
+        base_url="https://news.cctv.com",
+        category_id=hot.id,
+        crawl_interval=30,
+        is_active=1,
+    )
+    session.add_all([toutiao, cctv])
+    session.flush()
+
+    session.add_all(
+        [
+            Info(
+                title="广西公交车坠翻致3死5伤",
+                content="广西梧州一辆公交车发生坠翻事故，当地通报已有人员伤亡，救援和原因调查正在推进。",
+                category_id=hot.id,
+                channel_id=toutiao.id,
+                source_id="hot-cross-source-1",
+                source_url="https://example.com/hot-cross-source-1",
+                event_time=datetime(2026, 5, 13, 9, 0, 0),
+                detail_fetch_status="complete",
+                detail_score=90,
+                detail_content_length=42,
+            ),
+            Info(
+                title="广西梧州公交事故救援进展",
+                content="广西梧州公交事故救援持续进行，伤者治疗和事故原因调查成为后续关注重点。",
+                category_id=hot.id,
+                channel_id=cctv.id,
+                source_id="hot-cross-source-2",
+                source_url="https://example.com/hot-cross-source-2",
+                event_time=datetime(2026, 5, 13, 9, 20, 0),
+                detail_fetch_status="complete",
+                detail_score=88,
+                detail_content_length=36,
+            ),
+        ]
+    )
+    session.commit()
+
+    rebuild_events(session)
+
+    event = session.query(Event).filter(Event.status == "active").one()
+    assert event.source_count == 2
+    assert session.query(EventItemLink).filter(EventItemLink.event_id == event.id).count() == 2
+
+
+def test_related_grouping_does_not_merge_unrelated_social_titles():
+    items = [
+        Info(category_id=1, title="浏阳烟花厂爆炸事故已有29人出院", content="浏阳烟花厂爆炸事故救援处置继续推进。"),
+        Info(category_id=1, title="豆包 我不敢动饶雪漫这四个字", content="网友围绕影视娱乐内容展开讨论。"),
+        Info(category_id=1, title="带儿子出门VS带女儿出门", content="社交平台用户分享亲子出行体验。"),
+        Info(category_id=1, title="女子称儿子遭奶奶侵害 警方已立案", content="警方已立案调查，后续情况等待通报。"),
+        Info(category_id=1, title="上海居民恢复金门马祖游 首批游客成行", content="上海居民赴金门马祖旅游恢复，首批游客已经成行。"),
+    ]
+
+    grouped = _group_related_items(items)
+
+    assert len(grouped) == 5
+
+
+def test_related_grouping_does_not_merge_unrelated_developer_titles():
+    items = [
+        Info(
+            category_id=4,
+            title="2026 Android 开发，现在还能入行吗？",
+            content="Android 开发者讨论职业路径和移动端岗位变化。",
+        ),
+        Info(
+            category_id=4,
+            title="Next.js + wagmi v2 踩坑实录：开发 NFT 交易市场时，我如何处理离线签名和链下元数据",
+            content="Web3 项目开发中需要处理离线签名、链下元数据和交易流程。",
+        ),
+        Info(
+            category_id=4,
+            title="别让 Claude Code 果奔，用 Claude Code MCP 与 Skills 打造自动化开发",
+            content="AI 编程工具开发流程可以通过 MCP 和 Skills 管理权限与自动化任务。",
+        ),
+    ]
+
+    grouped = _group_related_items(items)
+
+    assert len(grouped) == 3
 
 
 def test_list_events_supports_latest_sort(session):
@@ -517,6 +738,8 @@ def test_list_infos_returns_acquisition_quality_fields(session):
     assert target["detail_score"] == 86
     assert target["detail_content_length"] == 188
     assert target["detail_fetched_at"] == "2026-04-20 08:30:00"
+    assert target["acquisition_quality"]["quality_level"]
+    assert target["acquisition_quality"]["completeness_score"] > 0
     assert target["tech_topic_type"] == "model_release"
     assert target["tech_keywords"] == ["推理", "API"]
 
@@ -535,5 +758,6 @@ def test_get_info_returns_tech_semantic_fields(session):
 
     payload = response.json()["data"]
     assert payload["tech_topic_type"] == "dev_tool"
+    assert payload["acquisition_quality"]["summary"]
     assert payload["tech_entities"] == ["OpenAI", "MCP"]
     assert payload["tech_keywords"] == ["API", "开发工具"]

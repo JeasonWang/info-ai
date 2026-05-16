@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 
 from crawlers.registry import crawler_registry
-from database import Category, Channel, CrawlRunLog, CrawlTask, DetailJob, Info, InfoAcquisitionLog
+from database import Category, Channel, CrawlRunLog, CrawlTask, DetailJob, Event, EventAnalysisRun, EventItemLink, Info, InfoAcquisitionLog
 from scheduler import _fetch_details_for_items, _save_crawled_data, crawl_by_category, process_detail_jobs
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def test_process_detail_jobs_enqueues_and_processes_low_quality_infos(session):
@@ -44,6 +44,62 @@ def test_process_detail_jobs_enqueues_and_processes_low_quality_infos(session):
     assert result["process"] == {"succeeded_count": 1, "failed_count": 0}
     assert session.query(DetailJob).one().status == "succeeded"
     assert session.get(Info, info.id).detail_strategy == "scheduler_runner"
+
+
+def test_process_detail_jobs_rebuilds_stale_event_analysis_after_detail_success(session):
+    category = Category(name="AI", code="ai", description="AI")
+    session.add(category)
+    session.flush()
+    channel = Channel(name="掘金", code="juejin", base_url="https://juejin.cn", category_id=category.id)
+    session.add(channel)
+    session.flush()
+    info = Info(
+        title="Agent 意图识别",
+        content="短",
+        category_id=category.id,
+        channel_id=channel.id,
+        source_id="scheduler-reanalysis-001",
+        source_url="https://example.com/reanalysis",
+        detail_fetch_status="list_only",
+        detail_score=10,
+        detail_content_length=2,
+        core_entity="Agent",
+    )
+    event = Event(
+        title="Agent 意图识别",
+        one_line_summary="旧摘要",
+        primary_category_id=category.id,
+        status="active",
+        source_count=1,
+        last_updated_at=datetime.now(),
+    )
+    session.add_all([info, event])
+    session.flush()
+    session.add_all(
+        [
+            EventItemLink(event_id=event.id, item_id=info.id, role="primary", is_primary=1, weight=20),
+            EventAnalysisRun(event_id=event.id, analysis_version="v1", mode="rule", provider="rule", status="succeeded"),
+        ]
+    )
+    session.commit()
+
+    def runner(item):
+        return DetailPipelineResult(
+            content="Agent 意图识别方案补齐了完整正文，解释了规则路由、大模型调用成本和复杂请求处理流程。",
+            status="complete",
+            strategy="scheduler_runner",
+            score=92,
+            content_length=40,
+            failure_reason="",
+            matched_rules=[],
+        )
+
+    result = process_detail_jobs(session=session, runner=runner, enqueue_limit=20, process_limit=20)
+
+    assert result["reanalyze"]["rebuilt"] is True
+    assert result["reanalyze"]["stale_count"] == 1
+    assert session.query(EventAnalysisRun).filter(EventAnalysisRun.status == "stale").count() == 0
+    assert session.query(EventAnalysisRun).filter(EventAnalysisRun.status == "succeeded").count() >= 1
 
 
 def test_save_crawled_data_marks_embedded_search_content_complete(session):

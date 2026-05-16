@@ -110,6 +110,17 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (PublicUser
 	return toPublicUser(user), nil
 }
 
+func (s *Service) RegisterAndLogin(ctx context.Context, input RegisterInput) (LoginResult, error) {
+	user, err := s.Register(ctx, input)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	return s.Login(ctx, LoginInput{
+		Email:    user.Email,
+		Password: input.Password,
+	})
+}
+
 func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
 	email, err := normalizeEmail(input.Email)
 	if err != nil {

@@ -35,6 +35,14 @@ func (s stubAdminStore) ListChannelHealth(ctx context.Context) ([]admin.ChannelH
 	return []admin.ChannelHealth{{ChannelCode: "weibo", ChannelName: "微博", HealthScore: 92, HealthLevel: "healthy"}}, nil
 }
 
+func (s stubAdminStore) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
+	return map[string]any{"summary": map[string]any{}, "channels": []any{}}, nil
+}
+
+func (s stubAdminStore) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
+	return map[string]any{"summary": map[string]any{}, "risk_events": []any{}}, nil
+}
+
 func (s stubAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]admin.QualitySnapshot, error) {
 	return []admin.QualitySnapshot{{CategoryCode: "all", TotalCount: 611}}, nil
 }
@@ -68,7 +76,11 @@ func (s stubAdminStore) BatchCancelDetailJobs(ctx context.Context, filter admin.
 }
 
 func (s stubAdminStore) ListCrawlTasks(ctx context.Context) ([]admin.CrawlTask, error) {
-	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", Status: "active"}}, nil
+	return []admin.CrawlTask{{TaskCode: "weibo-hot", TaskName: "微博热点", ChannelID: 1, EffectiveIntervalMinutes: 30, IsActive: 1, Status: "active"}}, nil
+}
+
+func (s stubAdminStore) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload admin.CrawlTaskConfigPayload) error {
+	return nil
 }
 
 func (s stubAdminStore) ListCategories(ctx context.Context) ([]admin.Category, error) {
@@ -95,8 +107,47 @@ func (s stubAdminStore) UpdateChannel(ctx context.Context, id int64, payload adm
 	return admin.Channel{ID: id, Name: payload.Name, Code: payload.Code, CategoryID: payload.CategoryID, CrawlInterval: payload.CrawlInterval, IsActive: payload.IsActive}, nil
 }
 
+func (s stubAdminStore) ListLLMModelConfigs(ctx context.Context) (any, error) {
+	return []any{map[string]any{"provider_code": "qwen"}}, nil
+}
+
+func (s stubAdminStore) CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error) {
+	payload["id"] = int64(1)
+	return payload, nil
+}
+
+func (s stubAdminStore) UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error) {
+	payload["id"] = id
+	return payload, nil
+}
+
+func (s stubAdminStore) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "cookie_configured": false}, nil
+}
+
+func (s stubAdminStore) UpdateChannelCredentials(ctx context.Context, channelCode string, payload admin.ChannelCredentialPayload) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "updated_by": payload.UpdatedBy}, nil
+}
+
+func (s stubAdminStore) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode}, nil
+}
+
 func (s stubAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]admin.AuditLog, error) {
 	return []admin.AuditLog{{ID: 1, AdminEmail: "admin@example.com", Action: "GET /api/v1/admin/overview"}}, nil
+}
+
+func (s stubAdminStore) GetEventAnalysisRuns(ctx context.Context, eventID int64) (admin.EventAnalysisRunsResult, error) {
+	return admin.EventAnalysisRunsResult{EventID: eventID, EventTitle: "测试事件", Runs: []admin.AnalysisRun{}}, nil
+}
+
+func (s stubAdminStore) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (admin.EventAnalysisSourcesResult, error) {
+	return admin.EventAnalysisSourcesResult{
+		EventID:    eventID,
+		EventTitle: "测试事件",
+		Run:        admin.AnalysisRun{RunID: runID, Status: "succeeded"},
+		Sources:    []admin.AnalysisSource{},
+	}, nil
 }
 
 func (s notFoundAdminStore) UpdateCategory(ctx context.Context, id int64, payload admin.CategoryPayload) (admin.Category, error) {
@@ -128,6 +179,28 @@ func TestAdminHandlerReturnsOverviewAndConfigurations(t *testing.T) {
 	handler.CreateCategory(createRes, createReq)
 	if createRes.Code != http.StatusCreated {
 		t.Fatalf("create category status = %d, want %d", createRes.Code, http.StatusCreated)
+	}
+}
+
+func TestAdminHandlerChatsWithLLM(t *testing.T) {
+	handler := NewAdminHandler(admin.NewServiceWithActions(stubAdminStore{}, admin.NewMemoryActionRunner()))
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/llm-model-configs/chat", strings.NewReader(`{"message":"你好","timeout_seconds":240}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	handler.ChatLLM(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("chat llm status = %d, want %d, body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid chat json: %v", err)
+	}
+	if body.Data["user_text"] != "你好" {
+		t.Fatalf("chat data = %+v", body.Data)
 	}
 }
 

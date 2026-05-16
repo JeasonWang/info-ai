@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from urllib.parse import urljoin
 
-from services.detail_pipeline import limit_detail_content
+from services.collection.detail_pipeline import limit_detail_content
 
 
 SPORTS_SKIP_KEYWORDS = (

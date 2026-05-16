@@ -1,6 +1,21 @@
 # 历史单服务部署文件，仅用于单独调试采集服务。
 # Max 版本正式上线请使用仓库根目录 docker-compose.yml，它包含 MySQL、采集服务、业务 API、用户端和管理端。
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: info-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   info-aggregation:
     image: info-aggregation:latest
     container_name: info-aggregation
@@ -18,12 +33,34 @@ services:
       DB_USER: ${DB_USER:-}
       DB_PASSWORD: ${DB_PASSWORD:-}
       DB_NAME: ${DB_NAME:-info-max}
+      AUTO_INIT_DB_SCHEMA: ${AUTO_INIT_DB_SCHEMA:-0}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DETAIL_JOB_RUNNING_TIMEOUT_MINUTES: ${DETAIL_JOB_RUNNING_TIMEOUT_MINUTES:-30}
+      EVENT_ANALYSIS_MODE: ${EVENT_ANALYSIS_MODE:-hybrid}
+      EVENT_ANALYSIS_ENABLE_LLM: ${EVENT_ANALYSIS_ENABLE_LLM:-0}
+      EVENT_ANALYSIS_PROVIDER: ${EVENT_ANALYSIS_PROVIDER:-openai_compatible}
+      EVENT_ANALYSIS_BASE_URL: ${EVENT_ANALYSIS_BASE_URL:-http://host.docker.internal:8001/v1}
+      EVENT_ANALYSIS_API_KEY: ${EVENT_ANALYSIS_API_KEY:-}
+      EVENT_ANALYSIS_MODEL: ${EVENT_ANALYSIS_MODEL:-qwen2.5-14b-instruct}
+      EVENT_ANALYSIS_TIMEOUT: ${EVENT_ANALYSIS_TIMEOUT:-60}
+      EVENT_ANALYSIS_MAX_INPUT_CHARS: ${EVENT_ANALYSIS_MAX_INPUT_CHARS:-12000}
+      EVENT_ANALYSIS_TEMPERATURE: ${EVENT_ANALYSIS_TEMPERATURE:-0.2}
+      EVENT_ANALYSIS_FALLBACK_TO_RULE: ${EVENT_ANALYSIS_FALLBACK_TO_RULE:-1}
       ENABLE_SEED_DATA: ${ENABLE_SEED_DATA:-false}
-      ZHIHU_COOKIE: ${ZHIHU_COOKIE:-}
-      ZHIHU_ZSE_93: ${ZHIHU_ZSE_93:-}
-      ZHIHU_ZSE_96: ${ZHIHU_ZSE_96:-}
-      WEIBO_COOKIE: ${WEIBO_COOKIE:-}
-      XHS_COOKIE: ${XHS_COOKIE:-}
+      REBUILD_EVENTS_ON_STARTUP: ${REBUILD_EVENTS_ON_STARTUP:-false}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      ENABLE_REDIS_COMMAND_CONSUMER: ${ENABLE_REDIS_COMMAND_CONSUMER:-1}
+      AGGREGATION_COMMAND_STREAM: ${AGGREGATION_COMMAND_STREAM:-info_ai:aggregation:commands}
+      AGGREGATION_COMMAND_CONSUMER_GROUP: ${AGGREGATION_COMMAND_CONSUMER_GROUP:-info_aggregation}
+      AGGREGATION_COMMAND_CONSUMER_NAME: ${AGGREGATION_COMMAND_CONSUMER_NAME:-}
+      AGGREGATION_COMMAND_PENDING_IDLE_MS: ${AGGREGATION_COMMAND_PENDING_IDLE_MS:-60000}
+      AGGREGATION_RESULT_PREFIX: ${AGGREGATION_RESULT_PREFIX:-info_ai:aggregation:results:}
+      AGGREGATION_RESULT_TTL_SECONDS: ${AGGREGATION_RESULT_TTL_SECONDS:-86400}
     volumes:
       - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy

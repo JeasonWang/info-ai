@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from api import app
 from database import Category, Channel, DetailJob, Info
-from services.detail_job_report import build_detail_job_report
+from services.quality.detail_job_report import build_detail_job_report
 
 
 def _seed_detail_job_report_data(session):
@@ -27,7 +27,14 @@ def _seed_detail_job_report_data(session):
     session.flush()
     session.add_all(
         [
-            DetailJob(info_id=info.id, channel_code="36kr", status="pending", priority=80, last_failure_reason="low_detail_score"),
+            DetailJob(
+                info_id=info.id,
+                channel_code="36kr",
+                status="pending",
+                priority=80,
+                last_failure_reason="low_detail_score",
+                strategy_hint="retry_detail_quality_pipeline",
+            ),
             DetailJob(info_id=info.id, channel_code="36kr", status="failed", priority=80, last_failure_reason="empty_content"),
         ]
     )
@@ -78,8 +85,10 @@ def test_build_detail_job_report_counts_status_and_samples(session):
     assert report["total"] == 2
     assert report["status_counts"] == {"failed": 1, "pending": 1}
     assert report["channel_counts"] == {"36kr": 2}
+    assert report["strategy_counts"] == {"auto": 1, "retry_detail_quality_pipeline": 1}
     assert report["top_failure_reasons"] == [{"reason": "empty_content", "count": 1}, {"reason": "low_detail_score", "count": 1}]
     assert report["pending_samples"][0]["title"] == "OpenAI 发布新模型"
+    assert report["pending_samples"][0]["strategy_hint"] == "retry_detail_quality_pipeline"
 
 
 def test_build_detail_job_report_filters_by_channel_and_failure_reason(session):

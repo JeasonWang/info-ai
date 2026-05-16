@@ -2,8 +2,8 @@
 信息聚合系统 - 数据库模型定义
 使用SQLAlchemy ORM定义渠道表、分类表、信息主表
 """
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint, JSON
+from datetime import date, datetime
+from sqlalchemy import Boolean, Column, Date, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -51,7 +51,6 @@ class Channel(Base):
     code = Column(String(50), nullable=False, unique=True, comment="渠道编码")
     base_url = Column(String(255), default="", comment="渠道基础URL")
     category_id = Column(Integer, ForeignKey("category.id"), nullable=False, comment="关联分类ID")
-    crawl_interval = Column(Integer, default=60, comment="爬取间隔(分钟)")
     base_interval_minutes = Column(Integer, default=60, comment="基础采集间隔(分钟)，由管理后台配置")
     hot_interval_minutes = Column(Integer, default=10, comment="热点加速采集间隔(分钟)")
     min_interval_minutes = Column(Integer, default=3, comment="允许的最小采集间隔(分钟)")
@@ -60,11 +59,27 @@ class Channel(Base):
     effective_interval_minutes = Column(Integer, default=60, comment="当前实际生效采集间隔(分钟)")
     schedule_version = Column(Integer, default=1, comment="调度配置版本，用于调度器热更新")
     is_active = Column(Integer, default=1, comment="是否启用 1-启用 0-禁用")
+    cookies = Column(Text, default="", comment="采集Cookie凭证(JSON格式)")
+    extra_credentials = Column(JSON, default=None, comment="扩展凭证(如知乎zse_93/zse_96)")
+    credentials_updated_at = Column(DateTime, default=None, comment="凭证最后更新时间")
+    credentials_updated_by = Column(String(100), default="", comment="最后更新人")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     infos = relationship("Info", back_populates="channel", lazy="dynamic")
     category_rel = relationship("Category", lazy="joined")
+
+    @property
+    def crawl_interval(self) -> int:
+        """旧接口兼容字段，实际由 base_interval_minutes 承载。"""
+        return self.base_interval_minutes or self.effective_interval_minutes or 60
+
+    @crawl_interval.setter
+    def crawl_interval(self, value: int) -> None:
+        interval = int(value or 60)
+        self.base_interval_minutes = interval
+        if not self.effective_interval_minutes:
+            self.effective_interval_minutes = interval
 
     def __repr__(self):
         return f"<Channel(id={self.id}, name='{self.name}', code='{self.code}')>"
@@ -86,6 +101,10 @@ class Channel(Base):
             "effective_interval_minutes": self.effective_interval_minutes,
             "schedule_version": self.schedule_version,
             "is_active": self.is_active,
+            "cookies": self.cookies or "",
+            "extra_credentials": self.extra_credentials,
+            "credentials_updated_at": self.credentials_updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.credentials_updated_at else None,
+            "credentials_updated_by": self.credentials_updated_by or "",
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None,
         }
@@ -222,6 +241,7 @@ class DetailJob(Base):
         Index("idx_detail_job_info_status", "info_id", "status"),
         Index("idx_detail_job_status_priority", "status", "priority", "next_run_at"),
         Index("idx_detail_job_channel_status", "channel_code", "status"),
+        Index("idx_detail_job_status_updated", "status", "updated_at"),
     )
 
 
@@ -236,21 +256,50 @@ class Event(Base):
     one_line_summary = Column(String(255), default="", comment="一句话看懂")
     primary_category_id = Column(Integer, ForeignKey("category.id"), nullable=False, comment="主分类ID")
     status = Column(String(20), default="active", comment="事件状态")
+    display_quality_score = Column(Integer, default=0, comment="展示质量分")
+    display_quality_level = Column(String(20), default="", comment="展示质量等级: excellent/good/weak/blocked")
+    display_quality_reason = Column(String(500), default="", comment="展示质量原因，逗号分隔")
     heat_score = Column(Integer, default=0, comment="热度分")
     freshness_score = Column(Integer, default=0, comment="时效分")
     composite_score = Column(Integer, default=0, comment="综合分")
     source_count = Column(Integer, default=0, comment="来源数")
     started_at = Column(DateTime, comment="事件开始时间")
     last_updated_at = Column(DateTime, comment="事件最后更新时间")
+    # 历史脉络字段
+    previous_event_id = Column(Integer, ForeignKey("event.id"), nullable=True, comment="同实体前序事件ID")
+    event_generation = Column(Integer, default=1, comment="事件代数(同类事件的迭代次数)")
+    evolution_stage = Column(String(20), default="emerging", comment="演变阶段: emerging/peak/declining/resolved/recurring")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     category = relationship("Category", lazy="joined")
+    previous_event = relationship("Event", remote_side=[id], lazy="joined")
 
     __table_args__ = (
         UniqueConstraint("event_key", name="uk_event_key"),
         Index("idx_event_category_score", "primary_category_id", "composite_score", "last_updated_at"),
         Index("idx_event_status_updated", "status", "last_updated_at"),
+        Index("idx_event_core_entity", "event_key", "event_generation"),
+    )
+
+
+class EventEvolution(Base):
+    """事件演变记录表：记录同实体事件的演变关系和关键变化。"""
+
+    __tablename__ = "event_evolution"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="演变记录ID")
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False, comment="当前事件ID")
+    previous_event_id = Column(Integer, ForeignKey("event.id"), nullable=True, comment="前序事件ID")
+    evolution_type = Column(String(30), default="", comment="演变类型: escalation/expansion/correction/recurrence/none")
+    evolution_summary = Column(Text, default="", comment="演变摘要: 本事件相比前序事件的增量变化")
+    source_count_delta = Column(Integer, default=0, comment="来源数变化(正=增加)")
+    key_change = Column(Text, default="", comment="关键变化描述")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_evolution_event_id", "event_id"),
+        Index("idx_event_evolution_previous_event_id", "previous_event_id"),
     )
 
 
@@ -274,16 +323,18 @@ class EventItemLink(Base):
 
 
 class EventTimelineEntry(Base):
-    """事件时间线节点表。"""
+    """事件时间线节点表（已合并event_timeline_analysis必要字段）。"""
 
     __tablename__ = "event_timeline_entry"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="时间线节点ID")
     event_id = Column(Integer, ForeignKey("event.id"), nullable=False, comment="事件ID")
+    run_id = Column(Integer, nullable=True, comment="关联分析运行ID")
     occurred_at = Column(DateTime, nullable=False, comment="发生时间")
     summary = Column(String(255), nullable=False, comment="节点摘要")
     source_item_id = Column(Integer, ForeignKey("info.id"), nullable=False, comment="来源内容项ID")
     confidence = Column(Float, default=0.0, comment="置信度")
+    evidence = Column(JSON, default=None, comment="证据JSON(分析增强时填充)")
     display_order = Column(Integer, default=0, comment="展示顺序")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
 
@@ -306,6 +357,173 @@ class EventSummarySnapshot(Base):
 
     __table_args__ = (
         Index("idx_event_summary_lookup", "event_id", "summary_type", "version"),
+    )
+
+
+class EventAnalysisRun(Base):
+    """事件分析运行表：记录规则或大模型分析的一次完整执行。"""
+
+    __tablename__ = "event_analysis_run"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件分析运行ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    analysis_version = Column(String(30), default="v1", nullable=False, comment="分析版本")
+    mode = Column(String(30), default="rule", nullable=False, comment="分析模式: rule/hybrid/llm")
+    provider = Column(String(50), default="rule", nullable=False, comment="分析提供方")
+    model_name = Column(String(100), default="", comment="模型名称")
+    status = Column(String(20), default="succeeded", nullable=False, comment="运行状态")
+    input_item_count = Column(Integer, default=0, comment="输入来源数量")
+    quality_score = Column(Float, default=0.0, comment="分析质量分")
+    confidence = Column(Float, default=0.0, comment="分析置信度")
+    fallback_used = Column(Integer, default=0, comment="是否使用规则回退")
+    failure_reason = Column(String(500), default="", comment="失败原因")
+    started_at = Column(DateTime, default=datetime.now, comment="开始时间")
+    finished_at = Column(DateTime, comment="结束时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_analysis_run_event_time", "event_id", "created_at"),
+        Index("idx_event_analysis_run_status", "status", "provider"),
+    )
+
+
+class EventAnalysisSource(Base):
+    """事件分析信息来源追溯表：记录每次分析使用的具体信息源。"""
+
+    __tablename__ = "event_analysis_source"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="分析来源ID")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，对应 event_analysis_run.id")
+    info_id = Column(Integer, nullable=False, comment="信息源ID，对应 info.id")
+    info_title = Column(String(200), default="", comment="信息标题快照（去关联查表）")
+    role = Column(String(20), default="media", comment="角色: primary/media/background")
+    weight = Column(Integer, default=0, comment="权重（来自质量分）")
+    quality_score = Column(Integer, default=0, comment="当时该条信息的质量分")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_analysis_source_run_id", "run_id"),
+        Index("idx_event_analysis_source_info_id", "info_id"),
+        UniqueConstraint("run_id", "info_id", name="uq_event_analysis_source_run_info"),
+    )
+
+
+class EventFactSnapshot(Base):
+    """事件事实快照表：保存从来源中抽取的关键事实和证据。"""
+
+    __tablename__ = "event_fact_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件事实ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，由代码约束关联event_analysis_run.id")
+    fact_type = Column(String(50), nullable=False, comment="事实类型")
+    content = Column(Text, default="", comment="事实内容")
+    source_item_id = Column(Integer, comment="来源内容ID，由代码约束关联info.id")
+    confidence = Column(Float, default=0.0, comment="事实置信度")
+    evidence = Column(JSON, comment="证据JSON")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_fact_event_type", "event_id", "fact_type"),
+        Index("idx_event_fact_run", "run_id"),
+    )
+
+
+class EventAnalysisSnapshot(Base):
+    """事件分析快照表：保存结构化分析输出。"""
+
+    __tablename__ = "event_analysis_snapshot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件分析快照ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，由代码约束关联event_analysis_run.id")
+    analysis_type = Column(String(50), nullable=False, comment="分析类型")
+    content = Column(Text, default="", comment="分析内容")
+    provider = Column(String(50), default="rule", nullable=False, comment="分析提供方")
+    model_name = Column(String(100), default="", comment="模型名称")
+    quality_score = Column(Float, default=0.0, comment="质量分")
+    confidence = Column(Float, default=0.0, comment="置信度")
+    version = Column(Integer, default=1, comment="版本号")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_analysis_snapshot_lookup", "event_id", "analysis_type", "version"),
+        Index("idx_event_analysis_snapshot_run", "run_id"),
+    )
+
+
+class EventTimelineAnalysis(Base):
+    """事件时间线分析表：保存升级后的时间线节点。"""
+
+    __tablename__ = "event_timeline_analysis"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="事件时间线分析ID")
+    event_id = Column(Integer, nullable=False, comment="事件ID，由代码约束关联event.id")
+    run_id = Column(Integer, nullable=False, comment="分析运行ID，由代码约束关联event_analysis_run.id")
+    occurred_at = Column(DateTime, nullable=False, comment="节点发生时间")
+    summary = Column(String(255), nullable=False, comment="节点摘要")
+    source_item_id = Column(Integer, comment="来源内容ID，由代码约束关联info.id")
+    confidence = Column(Float, default=0.0, comment="节点置信度")
+    evidence = Column(JSON, comment="证据JSON")
+    display_order = Column(Integer, default=0, comment="展示顺序")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_event_timeline_analysis_event_time", "event_id", "occurred_at"),
+        Index("idx_event_timeline_analysis_run", "run_id"),
+    )
+
+
+class LLMModelConfig(Base):
+    """大模型配置表：支持管理端维护多个事件分析模型。"""
+
+    __tablename__ = "llm_model_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="大模型配置ID")
+    provider_name = Column(String(50), nullable=False, comment="模型供应商名称")
+    provider_code = Column(String(50), nullable=False, comment="模型供应商编码")
+    base_url = Column(String(255), default="", nullable=False, comment="OpenAI兼容接口地址")
+    api_key = Column(String(500), default="", comment="API密钥")
+    model_name = Column(String(100), default="", nullable=False, comment="模型名称")
+    is_enabled = Column(Integer, default=0, nullable=False, comment="是否启用: 1启用 0停用")
+    daily_call_limit = Column(Integer, default=0, nullable=False, comment="每日调用上限，0表示不限")
+    daily_call_count = Column(Integer, default=0, nullable=False, comment="当日已调用次数")
+    last_call_date = Column(Date, default=date.today, comment="最近调用日期")
+    priority = Column(Integer, default=100, nullable=False, comment="选择优先级，数值越小越优先")
+    consecutive_failure_count = Column(Integer, default=0, nullable=False, comment="连续失败次数，用于自动熔断")
+    circuit_open_until = Column(DateTime, comment="熔断结束时间，未到期前跳过该模型")
+    last_failure_reason = Column(String(500), default="", comment="最近失败原因")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        UniqueConstraint("provider_code", "model_name", name="uq_llm_provider_model"),
+        Index("idx_llm_enabled_priority", "is_enabled", "priority", "id"),
+        Index("idx_llm_circuit_open_until", "circuit_open_until"),
+    )
+
+
+class LLMCallLog(Base):
+    """大模型调用日志表：记录模型调用请求、响应、成功失败和耗时。"""
+
+    __tablename__ = "llm_call_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="大模型调用日志ID")
+    config_id = Column(Integer, nullable=False, comment="大模型配置ID，由代码约束关联llm_model_config.id")
+    provider_code = Column(String(50), nullable=False, comment="供应商编码")
+    model_name = Column(String(100), nullable=False, comment="模型名称")
+    status = Column(String(20), nullable=False, comment="调用状态: succeeded/failed")
+    latency_ms = Column(Integer, default=0, nullable=False, comment="调用耗时毫秒")
+    input_item_count = Column(Integer, default=0, nullable=False, comment="输入来源数量")
+    request_payload = Column(JSON, default=None, comment="请求参数快照，包含消息内容")
+    response_content = Column(Text, default="", comment="模型返回文本")
+    response_payload = Column(JSON, default=None, comment="模型原始响应快照")
+    error_message = Column(String(500), default="", comment="错误信息")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_llm_call_config_time", "config_id", "created_at"),
+        Index("idx_llm_call_status_time", "status", "created_at"),
     )
 
 
@@ -334,6 +552,27 @@ class CrawlTask(Base):
     )
 
 
+class RebuildCheckpoint(Base):
+    """事件重建检查点表：记录增量/全量重建的进度和状态。"""
+
+    __tablename__ = "rebuild_checkpoint"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="检查点ID")
+    checkpoint_type = Column(String(30), default="incremental", comment="incremental / full")
+    max_info_id_processed = Column(Integer, default=0, comment="已处理的最大InfoID")
+    max_event_time_processed = Column(DateTime, nullable=True, comment="已处理的最大事件时间")
+    events_created = Column(Integer, default=0, comment="本次新建事件数")
+    events_updated = Column(Integer, default=0, comment="本次更新事件数")
+    items_processed = Column(Integer, default=0, comment="本次处理Info数")
+    started_at = Column(DateTime, default=datetime.now, comment="开始时间")
+    finished_at = Column(DateTime, nullable=True, comment="结束时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_rebuild_checkpoint_type", "checkpoint_type", "created_at"),
+    )
+
+
 class CrawlRunLog(Base):
     """采集运行日志表：记录每次采集执行结果。"""
 
@@ -359,25 +598,6 @@ class CrawlRunLog(Base):
     __table_args__ = (
         Index("idx_crawl_run_channel_time", "channel_code", "started_at"),
         Index("idx_crawl_run_task_time", "task_id", "started_at"),
-    )
-
-
-class CrawlHealthSnapshot(Base):
-    """采集健康快照表：保存渠道采集稳定性指标。"""
-
-    __tablename__ = "crawl_health_snapshot"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, comment="采集健康快照ID")
-    channel_code = Column(String(50), nullable=False, comment="渠道编码")
-    success_rate = Column(Float, default=0.0, comment="最近采集成功率")
-    detail_complete_rate = Column(Float, default=0.0, comment="详情完整率")
-    avg_detail_score = Column(Float, default=0.0, comment="平均详情质量分")
-    last_success_at = Column(DateTime, comment="最近成功时间")
-    last_failed_at = Column(DateTime, comment="最近失败时间")
-    snapshot_at = Column(DateTime, default=datetime.now, comment="快照时间")
-
-    __table_args__ = (
-        Index("idx_crawl_health_channel_time", "channel_code", "snapshot_at"),
     )
 
 

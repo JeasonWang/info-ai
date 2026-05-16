@@ -10,8 +10,8 @@ from typing import Callable
 from urllib.parse import quote
 
 from .base import BaseCrawler
-from services.credential_provider import get_credential
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.credential_provider import get_credential
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 RenderedFetcher = Callable[[str], str]
@@ -261,7 +261,7 @@ class ZhihuCrawler(BaseCrawler):
             excerpt = target.get("excerpt", title)[:500]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": excerpt,
                 "source_url": f"https://www.zhihu.com/question/{question_id}",
                 "event_time": datetime.now(),
@@ -295,7 +295,7 @@ class ZhihuCrawler(BaseCrawler):
             source_id = hashlib.md5(f"zhihu_{question_id}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": f"https://www.zhihu.com/question/{question_id}",
                 "event_time": datetime.now(),

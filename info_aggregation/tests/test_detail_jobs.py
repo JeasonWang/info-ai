@@ -1,5 +1,5 @@
 from database import Category, Channel, DetailJob, Info
-from services.detail_jobs import enqueue_low_quality_detail_jobs
+from services.collection.detail_jobs import enqueue_low_quality_detail_jobs
 
 
 def _seed_channel(session):
@@ -41,10 +41,11 @@ def test_enqueue_low_quality_detail_jobs_creates_pending_jobs(session):
     assert result == {"created_count": 1, "skipped_count": 0}
     job = session.query(DetailJob).one()
     assert job.status == "pending"
-    assert job.priority == 80
+    assert job.priority == 84
     assert job.attempt_count == 0
     assert job.channel_code == "36kr"
-    assert job.last_failure_reason == "low_detail_score"
+    assert job.last_failure_reason == "detail_list_only"
+    assert job.strategy_hint == "retry_full_article_detail"
 
 
 def test_enqueue_low_quality_detail_jobs_skips_existing_open_job(session):
@@ -103,6 +104,34 @@ def test_enqueue_low_quality_detail_jobs_reuses_existing_failed_job(session):
     assert session.query(DetailJob).count() == 1
     job = session.get(DetailJob, failed_job.id)
     assert job.status == "pending"
-    assert job.priority == 80
+    assert job.priority == 88
     assert job.attempt_count == 0
-    assert job.last_failure_reason == "low_detail_score"
+    assert job.last_failure_reason == "detail_failed"
+    assert job.strategy_hint == "retry_full_article_detail"
+
+
+def test_enqueue_low_quality_detail_jobs_requeues_short_article_even_with_medium_score(session):
+    category, channel = _seed_channel(session)
+    short_article = "本文介绍 Agent 意图识别架构，但只有很短一段。"
+    session.add(
+        Info(
+            title="agent设计系统-大模型意图识别",
+            content=short_article,
+            category_id=category.id,
+            channel_id=channel.id,
+            source_id="detail-job-short-article",
+            source_url="https://example.com/short-article",
+            detail_fetch_status="complete",
+            detail_score=70,
+            detail_content_length=len(short_article),
+        )
+    )
+    session.commit()
+
+    result = enqueue_low_quality_detail_jobs(session, limit=20)
+
+    assert result == {"created_count": 1, "skipped_count": 0}
+    job = session.query(DetailJob).one()
+    assert job.last_failure_reason == "below_channel_required_length"
+    assert job.priority == 76
+    assert job.strategy_hint == "retry_full_article_detail"

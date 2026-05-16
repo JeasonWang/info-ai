@@ -11,6 +11,7 @@ const loading = ref(true)
 const error = ref('')
 const eventId = ref(0)
 const timelineExpanded = ref(false)
+const sourceExpanded = ref(false)
 
 onLoad((options) => {
   const id = Number(options?.id)
@@ -48,6 +49,10 @@ function toggleTimeline() {
   timelineExpanded.value = !timelineExpanded.value
 }
 
+function toggleSource() {
+  sourceExpanded.value = !sourceExpanded.value
+}
+
 function shareEvent() {
   // #ifdef H5
   const url = `${window.location.origin}/#/pages/event-detail/event-detail?id=${eventId.value}`
@@ -82,8 +87,171 @@ const latestUpdate = computed(() => {
   return event.value.summaries.latest_update || event.value.summaries['最新进展'] || ''
 })
 
+const heatReason = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.heat_reason || event.value.summaries['为什么热'] || ''
+})
+
+const riskNotice = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.risk_notice || event.value.summaries['风险提示'] || ''
+})
+
+const sourceCompare = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.source_compare || event.value.summaries['来源对比'] || ''
+})
+
+const analysisConfidence = computed(() => {
+  if (!event.value) return ''
+  return event.value.summaries.analysis_confidence || event.value.summaries['分析可信度'] || ''
+})
+
 const hasWhyMatters = computed(() => whyMatters.value.trim().length > 0)
 const hasLatestUpdate = computed(() => latestUpdate.value.trim().length > 0)
+const hasHeatReason = computed(() => heatReason.value.trim().length > 0)
+const hasRiskNotice = computed(() => riskNotice.value.trim().length > 0)
+const hasSourceCompare = computed(() => sourceCompare.value.trim().length > 0)
+const hasAnalysisConfidence = computed(() => analysisConfidence.value.trim().length > 0)
+const intelligenceBrief = computed(() => event.value?.intelligence_brief || null)
+const hasIntelligenceBrief = computed(() => {
+  const brief = intelligenceBrief.value
+  return !!brief && (brief.stage || brief.confidence_reason || brief.decision_hint || brief.follow_up_questions?.length)
+})
+const followUpQuestions = computed(() => {
+  return (intelligenceBrief.value?.follow_up_questions || []).filter(Boolean).slice(0, 3)
+})
+const controversyBrief = computed(() => event.value?.controversy_brief || null)
+const hasControversyBrief = computed(() => {
+  const brief = controversyBrief.value
+  return !!brief && brief.level !== 'none' && (brief.summary || brief.action_hint || brief.signals?.length)
+})
+const relatedEvents = computed(() => {
+  return (event.value?.related_events || []).filter((item) => item.id && item.title).slice(0, 5)
+})
+const intelligenceItems = computed(() => {
+  const items = [
+    { label: '核心事实', value: primarySummary.value, tone: 'blue' },
+    { label: '最新进展', value: latestUpdate.value, tone: 'green' },
+    { label: '为什么重要', value: whyMatters.value, tone: 'purple' },
+    { label: '风险提示', value: riskNotice.value || eventQualityReason.value, tone: 'orange' },
+  ]
+  return items.filter((item) => item.value && item.value.trim().length > 0).slice(0, 4)
+})
+const showDetailedSummarySections = computed(() => intelligenceItems.value.length === 0)
+const detailStatusText = computed(() => {
+  const current = event.value?.event
+  if (!current) return ''
+  if (current.status === 'monitoring' || current.display_quality_level === 'weak') return '观察中，证据不足，不宜直接当作事实'
+  if ((current.source_count || 0) >= 3) return '多来源交叉验证'
+  return '可信事件'
+})
+
+const primarySource = computed(() => {
+  if (!event.value) return null
+  return event.value.representative_sources.find((source) => (source.content || '').trim().length >= 80) || null
+})
+
+function normalizeForCompare(value: string) {
+  return (value || '').replace(/\s+/g, '').replace(/[，。！？；：、,.!?;:\-—_]/g, '').trim()
+}
+
+function isRedundantWithSource(value: string) {
+  const source = normalizeForCompare(primarySource.value?.content || '')
+  const current = normalizeForCompare(value)
+  if (!source || !current || current.length < 40) return false
+  return source.includes(current.slice(0, Math.min(120, current.length)))
+}
+
+const shouldShowPrimarySummary = computed(() => {
+  return primarySummary.value.trim().length > 0 && !isRedundantWithSource(primarySummary.value)
+})
+
+function cleanupArticleText(rawContent: string, title: string) {
+  let text = (rawContent || '').replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ').trim()
+  if (title && text.startsWith(title)) {
+    text = text.slice(title.length).trim()
+  }
+  text = text
+    .replace(/\s+([，。！？；：、,.!?;:])/g, '$1')
+    .replace(/([（《【])\s+/g, '$1')
+    .replace(/\s+([）》】])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/(?:^|。)\s*(?:\d{4}-\d{2}-\d{2}|阅读\d+分钟|[\d,]+ 阅读\d+分钟)\s*。?/g, '。')
+    .replace(/^([A-Za-z0-9_\-\u4e00-\u9fa5]{2,24})。(?=.{20,})/, '')
+    .replace(/^(。|\s)+/, '')
+    .trim()
+  return text
+}
+
+function buildArticleParagraphs(rawContent: string, title: string) {
+  const cleaned = cleanupArticleText(rawContent, title)
+  if (!cleaned) return []
+  const lineParts = cleaned.split(/\n{1,}/).map((part) => part.trim()).filter(Boolean)
+  if (lineParts.length >= 2) return lineParts
+
+  const sentences = cleaned.match(/[^。！？!?]+[。！？!?]?/g)?.map((part) => part.trim()).filter(Boolean) || [cleaned]
+  const paragraphs: string[] = []
+  let current = ''
+  for (const sentence of sentences) {
+    current = current ? `${current}${sentence}` : sentence
+    if (current.length >= 180 || /[：:]$/.test(sentence)) {
+      paragraphs.push(current)
+      current = ''
+    }
+  }
+  if (current) paragraphs.push(current)
+  return paragraphs.filter((part) => normalizeForCompare(part).length >= 8)
+}
+
+const primarySourceContent = computed(() => {
+  const paragraphs = buildArticleParagraphs(primarySource.value?.content || '', primarySource.value?.title || '')
+  const visibleParagraphs = sourceExpanded.value ? paragraphs : paragraphs.slice(0, 4)
+  return visibleParagraphs
+})
+
+const primarySourceHasMore = computed(() => {
+  const paragraphs = buildArticleParagraphs(primarySource.value?.content || '', primarySource.value?.title || '')
+  return paragraphs.length > 4
+})
+
+const sourceQualityText = computed(() => {
+  const source = primarySource.value
+  if (!source) return ''
+  const length = source.detail_content_length || source.content.length
+  return `${source.channel_name} · 评分 ${source.detail_score || 0} · ${length}字`
+})
+
+const eventQualityText = computed(() => {
+  const current = event.value?.event
+  if (!current) return ''
+  const score = current.display_quality_score ?? 0
+  const level = current.display_quality_level || ''
+  if (level === 'excellent') return `高可信 · ${score}`
+  if (level === 'good') return `可信 · ${score}`
+  if (level === 'weak') return `观察中 · ${score}`
+  if (score > 0) return `质量 · ${score}`
+  return ''
+})
+
+const eventQualityReason = computed(() => {
+  const reason = event.value?.event.display_quality_reason || ''
+  const labels: Record<string, string> = {
+    empty_sources: '暂缺可核验来源',
+    single_weak_source: '当前只有单一弱来源，建议观察',
+    low_value_content: '正文信息量偏低',
+    social_signal_without_fact_source: '已有热度，等待媒体/官方事实源确认',
+    missing_complete_source: '来源信息不完整，结论需谨慎',
+    missing_usable_source: '缺少可用事实来源',
+    mixed_unrelated_sources: '来源疑似串台，等待重新拆分核验',
+  }
+  return reason
+    .split(',')
+    .map((item) => labels[item.trim()] || item.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(' / ')
+})
 
 const isLatestUpdateRedundant = computed(() => {
   if (!hasLatestUpdate.value || !primarySummary.value) return false
@@ -137,11 +305,16 @@ function onShareAppMessage() {
             <text>{{ event.event.primary_category.name }}</text>
           </view>
           <text class="update-time">{{ formatRelativeTime(event.event.last_updated_at) }}更新</text>
+          <text v-if="eventQualityText" class="quality-tag">{{ eventQualityText }}</text>
         </view>
 
         <text class="hero-title">{{ event.event.title }}</text>
 
         <text class="hero-summary">{{ event.event.one_line_summary }}</text>
+
+        <view v-if="eventQualityReason" class="quality-note">
+          <text>{{ eventQualityReason }}</text>
+        </view>
 
         <view class="hero-actions">
           <view class="action-btn" @click="shareEvent">
@@ -162,10 +335,74 @@ function onShareAppMessage() {
             <text class="stat-label">来源</text>
           </view>
         </view>
+
+        <view v-if="detailStatusText" class="detail-verdict">
+          <text>{{ detailStatusText }}</text>
+        </view>
+      </view>
+
+      <view v-if="hasIntelligenceBrief && intelligenceBrief" class="section section--intel-brief">
+        <view class="section-header">
+          <view class="section-dot" />
+          <text class="section-title">情报判断</text>
+        </view>
+        <view class="intel-brief-card">
+          <view class="intel-brief-top">
+            <text v-if="intelligenceBrief.stage" class="intel-stage">{{ intelligenceBrief.stage }}</text>
+            <text v-if="intelligenceBrief.decision_hint" class="intel-decision">{{ intelligenceBrief.decision_hint }}</text>
+          </view>
+          <text v-if="intelligenceBrief.confidence_reason" class="intel-confidence">
+            {{ intelligenceBrief.confidence_reason }}
+          </text>
+          <view v-if="followUpQuestions.length" class="follow-up-list">
+            <view v-for="question in followUpQuestions" :key="question" class="follow-up-item">
+              <view class="follow-up-dot" />
+              <text>{{ question }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="hasControversyBrief && controversyBrief" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-orange);" />
+          <text class="section-title">反转/争议提示</text>
+        </view>
+        <view class="controversy-card" :class="`controversy-card--${controversyBrief.level}`">
+          <view class="controversy-top">
+            <text class="controversy-title">{{ controversyBrief.title }}</text>
+            <text v-if="controversyBrief.has_rumor_signal" class="controversy-tag">核验中</text>
+          </view>
+          <text v-if="controversyBrief.summary" class="controversy-summary">{{ controversyBrief.summary }}</text>
+          <view v-if="controversyBrief.signals.length" class="controversy-signals">
+            <text v-for="signal in controversyBrief.signals.slice(0, 3)" :key="signal" class="controversy-signal">
+              {{ signal }}
+            </text>
+          </view>
+          <text v-if="controversyBrief.action_hint" class="controversy-action">{{ controversyBrief.action_hint }}</text>
+        </view>
+      </view>
+
+      <view v-if="intelligenceItems.length" class="section section--briefing">
+        <view class="section-header">
+          <view class="section-dot" />
+          <text class="section-title">情报摘要</text>
+        </view>
+        <view class="briefing-grid">
+          <view
+            v-for="item in intelligenceItems"
+            :key="item.label"
+            class="briefing-card"
+            :class="`briefing-card--${item.tone}`"
+          >
+            <text class="briefing-card-label">{{ item.label }}</text>
+            <text class="briefing-card-text">{{ item.value }}</text>
+          </view>
+        </view>
       </view>
 
       <!-- ========== 发生了什么 ========== -->
-      <view v-if="primarySummary" class="section">
+      <view v-if="showDetailedSummarySections && shouldShowPrimarySummary" class="section">
         <view class="section-header">
           <view class="section-dot" />
           <text class="section-title">发生了什么</text>
@@ -176,7 +413,7 @@ function onShareAppMessage() {
       </view>
 
       <!-- ========== 为什么重要 ========== -->
-      <view v-if="hasWhyMatters" class="section">
+      <view v-if="showDetailedSummarySections && hasWhyMatters" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-purple);" />
           <text class="section-title">为什么重要</text>
@@ -186,8 +423,19 @@ function onShareAppMessage() {
         </view>
       </view>
 
+      <!-- ========== 为什么热 ========== -->
+      <view v-if="hasHeatReason" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-rose);" />
+          <text class="section-title">为什么热</text>
+        </view>
+        <view class="fact-card">
+          <text class="fact-text">{{ heatReason }}</text>
+        </view>
+      </view>
+
       <!-- ========== 最新进展 ========== -->
-      <view v-if="hasLatestUpdate && !isLatestUpdateRedundant" class="section">
+      <view v-if="showDetailedSummarySections && hasLatestUpdate && !isLatestUpdateRedundant" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-teal);" />
           <text class="section-title">最新进展</text>
@@ -197,16 +445,130 @@ function onShareAppMessage() {
         </view>
       </view>
 
+      <!-- ========== 风险提示 ========== -->
+      <view v-if="showDetailedSummarySections && hasRiskNotice" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-orange);" />
+          <text class="section-title">风险提示</text>
+        </view>
+        <view class="fact-card fact-card--warning">
+          <text class="fact-text">{{ riskNotice }}</text>
+        </view>
+      </view>
+
+      <!-- ========== 分析可信度 ========== -->
+      <view v-if="hasAnalysisConfidence" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-purple);" />
+          <text class="section-title">分析可信度</text>
+        </view>
+        <view class="fact-card">
+          <text class="fact-text">{{ analysisConfidence }}</text>
+        </view>
+      </view>
+
+      <!-- ========== 代表原文 ========== -->
+      <view v-if="primarySource" class="section">
+        <view class="section-header section-header--clickable" @click="toggleSource">
+          <view class="section-header-left">
+            <view class="section-dot" style="background: var(--cat-orange);" />
+            <text class="section-title">代表原文</text>
+          </view>
+          <text class="source-quality">{{ sourceQualityText }}</text>
+        </view>
+        <view class="article-source-card" @click="toggleSource">
+          <text class="article-source-title">{{ primarySource.title }}</text>
+          <view class="article-source-body">
+            <text
+              v-for="(paragraph, index) in primarySourceContent"
+              :key="index"
+              class="article-source-paragraph"
+            >
+              {{ paragraph }}
+            </text>
+          </view>
+          <text v-if="primarySourceHasMore" class="article-source-toggle">
+            {{ sourceExpanded ? '收起正文' : '展开完整正文' }}
+          </text>
+        </view>
+      </view>
+
       <!-- ========== 多源视角 ========== -->
       <view v-if="event.source_views.length > 0" class="section">
         <view class="section-header">
           <view class="section-dot" style="background: var(--cat-blue);" />
           <text class="section-title">多源视角</text>
         </view>
+        <view v-if="hasSourceCompare" class="fact-card source-compare-card">
+          <text class="fact-text">{{ sourceCompare }}</text>
+        </view>
         <view class="source-view-grid">
           <view v-for="view in event.source_views" :key="view.channel_name" class="source-view-card">
-            <text class="source-view-channel">{{ view.channel_name }}</text>
+            <view class="source-view-head">
+              <text class="source-view-channel">{{ view.channel_name }}</text>
+              <text v-if="view.focus" class="source-view-focus">{{ view.focus }}</text>
+            </view>
+            <text v-if="view.stance" class="source-view-stance">{{ view.stance }}</text>
             <text class="source-view-summary">{{ view.summary }}</text>
+            <text v-if="view.difference_hint" class="source-view-hint">{{ view.difference_hint }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- ========== 证据链 ========== -->
+      <view v-if="event.evidence_chain && (event.evidence_chain.evidence_sources.length > 0 || event.evidence_chain.weak_sources.length > 0)" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-green);" />
+          <text class="section-title">证据链</text>
+        </view>
+        <view class="evidence-card">
+          <text class="evidence-summary">
+            可用来源 {{ event.evidence_chain.usable_source_count }} 条，需谨慎来源 {{ event.evidence_chain.weak_source_count }} 条
+          </text>
+          <view v-if="event.evidence_chain.platform_views.length > 0" class="evidence-platforms">
+            <text
+              v-for="platform in event.evidence_chain.platform_views.slice(0, 4)"
+              :key="platform.channel_name"
+              class="evidence-platform"
+            >
+              {{ platform.channel_name }} {{ platform.source_count }}
+            </text>
+          </view>
+          <view
+            v-for="source in event.evidence_chain.evidence_sources.slice(0, 3)"
+            :key="source.info_id"
+            class="evidence-source"
+            @click="uni.navigateTo({ url: `/pages/info-detail/info-detail?id=${source.info_id}` })"
+          >
+            <text class="evidence-source-title">{{ source.title }}</text>
+            <text class="evidence-source-meta">{{ source.channel_name }} · 质量 {{ source.detail_score }} · {{ source.quality_level }}</text>
+          </view>
+          <view v-if="event.evidence_chain.weak_sources.length > 0" class="evidence-warning">
+            <text>风险来源：{{ event.evidence_chain.weak_sources[0].quality_summary }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- ========== 历史关联 ========== -->
+      <view v-if="relatedEvents.length > 0" class="section">
+        <view class="section-header">
+          <view class="section-dot" style="background: var(--cat-purple);" />
+          <text class="section-title">历史关联</text>
+        </view>
+        <view class="related-list">
+          <view
+            v-for="related in relatedEvents"
+            :key="related.id"
+            class="related-card"
+            @click="uni.navigateTo({ url: `/pages/event-detail/event-detail?id=${related.id}` })"
+          >
+            <view class="related-head">
+              <text class="related-label">{{ related.relation_label || '相关事件' }}</text>
+              <text v-if="related.last_updated_at" class="related-time">{{ formatRelativeTime(related.last_updated_at) }}</text>
+            </view>
+            <text class="related-title">{{ related.title }}</text>
+            <text v-if="related.one_line_summary" class="related-summary">{{ related.one_line_summary }}</text>
+            <text v-if="related.relation_reason" class="related-reason">{{ related.relation_reason }}</text>
           </view>
         </view>
       </view>
@@ -321,6 +683,7 @@ function onShareAppMessage() {
 .hero-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16rpx;
   margin-bottom: 20rpx;
 }
@@ -341,6 +704,14 @@ function onShareAppMessage() {
   color: var(--text-muted);
 }
 
+.quality-tag {
+  font-size: 22rpx;
+  color: #117a4f;
+  background: rgba(17, 122, 79, 0.1);
+  padding: 6rpx 14rpx;
+  border-radius: var(--radius-sm);
+}
+
 .hero-title {
   display: block;
   font-size: 40rpx;
@@ -356,6 +727,18 @@ function onShareAppMessage() {
   color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 24rpx;
+}
+
+.quality-note {
+  margin: -8rpx 0 24rpx;
+  padding: 12rpx 16rpx;
+  border-radius: var(--radius-sm);
+  background: rgba(246, 162, 58, 0.12);
+}
+
+.quality-note text {
+  font-size: 24rpx;
+  color: var(--cat-orange);
 }
 
 .hero-actions {
@@ -398,6 +781,20 @@ function onShareAppMessage() {
   padding: 20rpx 0;
 }
 
+.detail-verdict {
+  margin-top: 18rpx;
+  padding: 14rpx 18rpx;
+  background: rgba(31, 41, 55, 0.06);
+  border-radius: var(--radius-md);
+}
+
+.detail-verdict text {
+  color: #1f2937;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .stat-item {
   flex: 1;
   display: flex;
@@ -427,6 +824,14 @@ function onShareAppMessage() {
 /* ========== Sections ========== */
 .section {
   margin-bottom: 32rpx;
+}
+
+.section--briefing {
+  margin-top: -8rpx;
+}
+
+.section--intel-brief {
+  margin-top: -4rpx;
 }
 
 .section-header {
@@ -475,11 +880,196 @@ function onShareAppMessage() {
   box-shadow: var(--shadow-sm);
 }
 
+.fact-card--warning {
+  background: rgba(255, 247, 237, 0.96);
+  border: 1rpx solid rgba(234, 88, 12, 0.16);
+}
+
 .fact-text {
   display: block;
   font-size: 28rpx;
   color: var(--text-primary);
   line-height: 1.8;
+}
+
+.intel-brief-card {
+  padding: 28rpx;
+  background: var(--card-bg);
+  border: 1rpx solid rgba(16, 185, 129, 0.18);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.intel-brief-top {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.intel-stage {
+  flex-shrink: 0;
+  padding: 8rpx 18rpx;
+  color: #047857;
+  font-size: 23rpx;
+  font-weight: 900;
+  line-height: 1.2;
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: var(--radius-pill);
+}
+
+.intel-decision {
+  color: var(--text-primary);
+  font-size: 29rpx;
+  font-weight: 850;
+  line-height: 1.5;
+}
+
+.intel-confidence {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 26rpx;
+  line-height: 1.7;
+}
+
+.follow-up-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 22rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgba(15, 23, 42, 0.08);
+}
+
+.follow-up-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.follow-up-dot {
+  width: 10rpx;
+  height: 10rpx;
+  flex-shrink: 0;
+  margin-top: 14rpx;
+  background: var(--brand-accent);
+  border-radius: 50%;
+}
+
+.follow-up-item text {
+  color: var(--text-primary);
+  font-size: 25rpx;
+  line-height: 1.65;
+}
+
+.controversy-card {
+  padding: 28rpx;
+  background: rgba(255, 247, 237, 0.96);
+  border: 1rpx solid rgba(234, 88, 12, 0.18);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.controversy-card--high {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(254, 242, 242, 0.96);
+}
+
+.controversy-top {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 12rpx;
+}
+
+.controversy-title {
+  color: var(--text-primary);
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.controversy-tag {
+  flex-shrink: 0;
+  padding: 6rpx 14rpx;
+  color: #b45309;
+  font-size: 22rpx;
+  font-weight: 900;
+  background: rgba(245, 158, 11, 0.16);
+  border-radius: var(--radius-pill);
+}
+
+.controversy-summary,
+.controversy-action {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 26rpx;
+  line-height: 1.75;
+}
+
+.controversy-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin: 18rpx 0;
+}
+
+.controversy-signal {
+  padding: 8rpx 16rpx;
+  color: #9a3412;
+  font-size: 23rpx;
+  font-weight: 700;
+  background: rgba(251, 146, 60, 0.14);
+  border-radius: var(--radius-pill);
+}
+
+.controversy-action {
+  color: #7c2d12;
+  font-weight: 800;
+}
+
+.briefing-grid {
+  display: grid;
+  gap: 16rpx;
+}
+
+.briefing-card {
+  padding: 24rpx;
+  background: var(--card-bg);
+  border-left: 8rpx solid var(--brand-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.briefing-card--green {
+  border-left-color: var(--cat-teal);
+}
+
+.briefing-card--purple {
+  border-left-color: var(--cat-purple);
+}
+
+.briefing-card--orange {
+  border-left-color: var(--cat-orange);
+  background: rgba(255, 247, 237, 0.96);
+}
+
+.briefing-card-label,
+.briefing-card-text {
+  display: block;
+}
+
+.briefing-card-label {
+  color: var(--text-muted);
+  font-size: 22rpx;
+  font-weight: 800;
+  margin-bottom: 8rpx;
+}
+
+.briefing-card-text {
+  color: var(--text-primary);
+  font-size: 27rpx;
+  line-height: 1.75;
 }
 
 /* ========== Tag Card ========== */
@@ -533,9 +1123,63 @@ function onShareAppMessage() {
   color: var(--cat-orange);
 }
 
+.source-quality {
+  font-size: 22rpx;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.article-source-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.article-source-title,
+.article-source-body,
+.article-source-paragraph,
+.article-source-toggle {
+  display: block;
+}
+
+.article-source-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 16rpx;
+}
+
+.article-source-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.article-source-paragraph {
+  display: block;
+  font-size: 27rpx;
+  color: var(--text-primary);
+  line-height: 1.85;
+  text-align: justify;
+  word-break: break-word;
+}
+
+.article-source-toggle {
+  margin-top: 18rpx;
+  color: var(--brand-accent);
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
 .source-view-grid {
   display: grid;
   gap: 16rpx;
+}
+
+.source-compare-card {
+  margin-bottom: 16rpx;
 }
 
 .source-view-card {
@@ -545,7 +1189,18 @@ function onShareAppMessage() {
   box-shadow: var(--shadow-sm);
 }
 
+.source-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 10rpx;
+}
+
 .source-view-channel,
+.source-view-focus,
+.source-view-stance,
+.source-view-hint,
 .source-view-summary {
   display: block;
 }
@@ -554,13 +1209,171 @@ function onShareAppMessage() {
   color: var(--brand-accent);
   font-size: 24rpx;
   font-weight: 700;
-  margin-bottom: 10rpx;
+}
+
+.source-view-focus {
+  flex-shrink: 0;
+  padding: 6rpx 14rpx;
+  color: #1d4ed8;
+  font-size: 22rpx;
+  font-weight: 800;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: var(--radius-pill);
+}
+
+.source-view-stance {
+  color: var(--text-primary);
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 1.5;
+  margin-bottom: 8rpx;
 }
 
 .source-view-summary {
   color: var(--text-secondary);
   font-size: 27rpx;
   line-height: 1.7;
+}
+
+.source-view-hint {
+  margin-top: 12rpx;
+  color: var(--text-muted);
+  font-size: 24rpx;
+  line-height: 1.55;
+}
+
+/* ========== Evidence Chain ========== */
+.evidence-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.evidence-summary,
+.evidence-source-title,
+.evidence-source-meta,
+.evidence-warning {
+  display: block;
+}
+
+.evidence-summary {
+  font-size: 27rpx;
+  color: var(--text-primary);
+  font-weight: 700;
+  margin-bottom: 16rpx;
+}
+
+.evidence-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+}
+
+.evidence-platform {
+  padding: 8rpx 16rpx;
+  border-radius: var(--radius-pill);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--brand-accent);
+  font-size: 23rpx;
+}
+
+.evidence-source {
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--divider);
+}
+
+.evidence-source-title {
+  font-size: 27rpx;
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.5;
+  margin-bottom: 6rpx;
+}
+
+.evidence-source-meta {
+  font-size: 23rpx;
+  color: var(--text-muted);
+}
+
+.evidence-warning {
+  margin-top: 12rpx;
+  padding: 16rpx;
+  border-radius: var(--radius-md);
+  background: rgba(255, 247, 237, 0.96);
+  color: var(--cat-orange);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+/* ========== Related Events ========== */
+.related-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.related-card {
+  padding: 24rpx;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.related-card:active {
+  transform: scale(0.995);
+}
+
+.related-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.related-label,
+.related-time,
+.related-title,
+.related-summary,
+.related-reason {
+  display: block;
+}
+
+.related-label {
+  padding: 6rpx 14rpx;
+  color: #6d28d9;
+  font-size: 22rpx;
+  font-weight: 900;
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: var(--radius-pill);
+}
+
+.related-time {
+  color: var(--text-muted);
+  font-size: 22rpx;
+}
+
+.related-title {
+  color: var(--text-primary);
+  font-size: 28rpx;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.related-summary {
+  margin-top: 10rpx;
+  color: var(--text-secondary);
+  font-size: 25rpx;
+  line-height: 1.65;
+}
+
+.related-reason {
+  margin-top: 12rpx;
+  color: var(--text-muted);
+  font-size: 24rpx;
+  line-height: 1.55;
 }
 
 /* ========== Timeline ========== */

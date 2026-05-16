@@ -31,8 +31,8 @@ function validatePassword(value: string): boolean {
     passwordError.value = '请输入密码'
     return false
   }
-  if (value.length < 6) {
-    passwordError.value = '密码至少6位'
+  if (value.length < 8) {
+    passwordError.value = '密码至少8位'
     return false
   }
   return true
@@ -110,7 +110,7 @@ function toggleMode() {
             class="input"
             :class="{ 'input--error': passwordError }"
             type="password"
-            placeholder="密码（至少6位）"
+            placeholder="密码（至少8位）"
             @blur="validatePassword(password)"
           />
         </view>
@@ -154,7 +154,7 @@ function toggleMode() {
 }
 
 .hero {
-  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  background: linear-gradient(135deg, #fffaf5 0%, #ffffff 100%);
   padding: 80rpx 40rpx 60rpx;
   border-radius: 0 0 40rpx 40rpx;
   display: flex;
@@ -172,7 +172,7 @@ function toggleMode() {
   right: -20%;
   width: 400rpx;
   height: 400rpx;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(240, 90, 61, 0.08) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -242,7 +242,7 @@ function toggleMode() {
 
 .input-wrap:focus-within {
   border-color: var(--brand-accent);
-  box-shadow: 0 0 0 3rpx rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3rpx rgba(240, 90, 61, 0.1);
 }
 
 .input-icon {
@@ -288,13 +288,13 @@ function toggleMode() {
   align-items: center;
   justify-content: center;
   opacity: 1;
-  box-shadow: 0 8rpx 24rpx rgba(37, 99, 235, 0.25);
+  box-shadow: 0 8rpx 24rpx rgba(240, 90, 61, 0.25);
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .submit-btn:active {
   transform: scale(0.98);
-  box-shadow: 0 4rpx 12rpx rgba(37, 99, 235, 0.2);
+  box-shadow: 0 4rpx 12rpx rgba(240, 90, 61, 0.2);
 }
 
 .submit-btn[disabled] {
@@ -316,7 +316,7 @@ function toggleMode() {
     justify-content: center;
     align-items: center;
     padding: 48px;
-    background: linear-gradient(135deg, #f7f8fa 0%, #eef5ff 100%);
+    background: linear-gradient(135deg, #f3ece1 0%, #fffaf5 100%);
   }
 
   .hero,

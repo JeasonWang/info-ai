@@ -1,4 +1,4 @@
-from services.tech_content_parser import parse_tech_content
+from services.enrichment.tech_content_parser import parse_tech_content
 
 
 def test_parse_tech_content_extracts_topic_entity_and_keywords():

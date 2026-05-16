@@ -12,12 +12,49 @@ type ActionResult struct {
 // ActionRunner 定义管理后台可触发的采集和治理动作。
 type ActionRunner interface {
 	TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error)
-	GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error)
+	EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error)
+	PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error)
+	RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error)
 	RebuildEvents(ctx context.Context) (ActionResult, error)
 	RefreshQuality(ctx context.Context) (ActionResult, error)
 	RetryLowQualityDetails(ctx context.Context, limit int) (ActionResult, error)
 	ArchiveLowQuality(ctx context.Context) (ActionResult, error)
 	ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error)
+	TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
+	InvalidateCredentials(ctx context.Context, channelCode string) (ActionResult, error)
+	TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error)
+	ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error)
+}
+
+type LLMActionRunner interface {
+	TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error)
+	ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error)
+}
+
+type CompositeActionRunner struct {
+	ActionRunner
+	llmRunner LLMActionRunner
+}
+
+func NewCompositeActionRunner(base ActionRunner, llmRunner LLMActionRunner) *CompositeActionRunner {
+	if base == nil {
+		base = NewMemoryActionRunner()
+	}
+	return &CompositeActionRunner{ActionRunner: base, llmRunner: llmRunner}
+}
+
+func (r *CompositeActionRunner) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	if r.llmRunner != nil {
+		return r.llmRunner.TestLLMChat(ctx, payload)
+	}
+	return r.ActionRunner.TestLLMChat(ctx, payload)
+}
+
+func (r *CompositeActionRunner) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	if r.llmRunner != nil {
+		return r.llmRunner.ChatLLM(ctx, payload)
+	}
+	return r.ActionRunner.ChatLLM(ctx, payload)
 }
 
 // MemoryActionRunner 是测试和本地空依赖模式使用的动作执行器。
@@ -35,39 +72,27 @@ func (r *MemoryActionRunner) TriggerCrawl(ctx context.Context, channelCode strin
 	}, nil
 }
 
-func (r *MemoryActionRunner) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
-	return map[string]any{
-		"summary": map[string]any{
-			"real_count":               2,
-			"complete_count":           1,
-			"high_value_partial_count": 1,
-			"usable_count":             2,
-			"needs_attention_count":    0,
-			"complete_ratio":           50.0,
-			"usable_ratio":             100.0,
-			"needs_attention_ratio":    0.0,
-			"weak_channels":            []any{},
-		},
-		"channels": []any{
-			map[string]any{
-				"channel_code":              "weibo",
-				"channel_name":              "微博",
-				"real_count":                2,
-				"complete_count":            1,
-				"complete_ratio":            50.0,
-				"high_value_partial_count":  1,
-				"usable_count":              2,
-				"usable_ratio":              100.0,
-				"needs_attention_count":     0,
-				"needs_attention_ratio":     0.0,
-				"avg_detail_score":          82.5,
-				"avg_detail_content_length": 320.0,
-				"top_failure_reasons":       []any{},
-				"top_detail_strategies":     []any{map[string]any{"strategy": "mobile_search", "count": 2}},
-				"credential_health":         map[string]any{"health": "ready"},
-				"weak_samples":              []any{},
-			},
-		},
+func (r *MemoryActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
+	return ActionResult{
+		Action:  "event_analysis_detail_jobs",
+		Message: "本地测试模式已模拟入队事件分析弱来源",
+		Data:    map[string]any{"limit": limit, "created_count": 0, "skipped_count": 0},
+	}, nil
+}
+
+func (r *MemoryActionRunner) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	return ActionResult{
+		Action:  "prioritize_weak_source_governance",
+		Message: "本地测试模式已模拟优先治理弱来源事件",
+		Data:    map[string]any{"limit": limit, "enqueue": map[string]any{}, "process": map[string]any{}, "fact_source": map[string]any{}},
+	}, nil
+}
+
+func (r *MemoryActionRunner) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
+	return ActionResult{
+		Action:  "rebuild_stale_event_analysis",
+		Message: "本地测试模式已模拟处理过期事件分析",
+		Data:    map[string]any{"limit": limit, "rebuilt": false},
 	}, nil
 }
 
@@ -93,4 +118,41 @@ func (r *MemoryActionRunner) ArchiveLowQuality(ctx context.Context) (ActionResul
 
 func (r *MemoryActionRunner) ArchiveDuplicateTitles(ctx context.Context) (ActionResult, error) {
 	return ActionResult{Action: "archive_duplicate_titles", Message: "本地测试模式已模拟归档重复标题", Data: map[string]any{}}, nil
+}
+
+func (r *MemoryActionRunner) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{
+		"channel_code":  channelCode,
+		"success":       false,
+		"response_code": 0,
+		"message":       "本地测试模式：需要连接真实采集服务验证凭证",
+	}, nil
+}
+
+func (r *MemoryActionRunner) InvalidateCredentials(ctx context.Context, channelCode string) (ActionResult, error) {
+	return ActionResult{
+		Action:  "invalidate_credentials",
+		Message: "本地测试模式已模拟刷新采集凭证缓存",
+		Data:    map[string]any{"channel_code": channelCode},
+	}, nil
+}
+
+func (r *MemoryActionRunner) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	return map[string]any{
+		"ok":        false,
+		"status":    "local_stub",
+		"message":   "本地测试模式：需要连接真实采集服务验证大模型",
+		"prompt":    payload.Prompt,
+		"config_id": payload.ConfigID,
+	}, nil
+}
+
+func (r *MemoryActionRunner) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	return map[string]any{
+		"ok":        false,
+		"status":    "local_stub",
+		"message":   "本地测试模式：需要连接真实采集服务调用大模型",
+		"user_text": payload.Message,
+		"config_id": payload.ConfigID,
+	}, nil
 }

@@ -1,5 +1,5 @@
 from crawlers.xiaohongshu import XiaohongshuCrawler
-from services.detail_pipeline import DetailStrategyResult
+from services.collection.detail_pipeline import DetailStrategyResult
 
 
 def test_xiaohongshu_resolve_detail_uses_initial_state_note_content():
@@ -169,3 +169,31 @@ def test_xiaohongshu_rendered_login_shell_is_rejected():
 
     assert result.status == "failed"
     assert result.failure_reason == "shell_page"
+
+
+def test_xiaohongshu_html_shell_records_anti_crawl_reason():
+    crawler = XiaohongshuCrawler()
+
+    class LoginResponse:
+        text = """
+        <html>
+          <body>
+            <main>请先登录 登录后查看 验证后继续访问 滑块验证 小红书</main>
+          </body>
+        </html>
+        """
+
+    crawler.fetch = lambda *args, **kwargs: LoginResponse()
+    crawler._fetch_rendered_detail = lambda item: None
+
+    result = crawler.resolve_detail(
+        {
+            "title": "AI 工具真实体验",
+            "content": "AI 工具真实体验",
+            "source_url": "https://www.xiaohongshu.com/explore/abc",
+        }
+    )
+
+    assert result.status == "failed"
+    assert result.strategy == "html_shell_diagnostic"
+    assert result.failure_reason == "anti_crawl_blocked"

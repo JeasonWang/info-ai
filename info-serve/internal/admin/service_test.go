@@ -9,6 +9,8 @@ type fakeAdminStore struct {
 	overview         Overview
 	crawlRuns        []CrawlRunSummary
 	channelHealth    []ChannelHealth
+	channelQuality   map[string]any
+	analysisQuality  map[string]any
 	qualitySnapshots []QualitySnapshot
 	lowQualityInfos  []LowQualityInfo
 	detailJobReport  DetailJobReport
@@ -22,6 +24,8 @@ type fakeActionRunner struct {
 	action      string
 	channelCode string
 	limit       int
+	llmPayload  LLMChatTestPayload
+	chatPayload LLMChatPayload
 }
 
 func (r *fakeActionRunner) TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error) {
@@ -30,15 +34,22 @@ func (r *fakeActionRunner) TriggerCrawl(ctx context.Context, channelCode string)
 	return ActionResult{Action: r.action, Message: "已触发采集", Data: map[string]any{"channel_code": channelCode}}, nil
 }
 
-func (r *fakeActionRunner) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
-	r.action = "channel_quality_report"
-	r.limit = sampleLimit
-	return map[string]any{
-		"summary": map[string]any{"usable_ratio": 88.0},
-		"channels": []any{
-			map[string]any{"channel_code": "weibo", "usable_ratio": 88.0},
-		},
-	}, nil
+func (r *fakeActionRunner) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "event_analysis_detail_jobs"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已入队事件分析弱来源", Data: map[string]any{"limit": limit}}, nil
+}
+
+func (r *fakeActionRunner) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "prioritize_weak_source_governance"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已优先治理弱来源", Data: map[string]any{"limit": limit}}, nil
+}
+
+func (r *fakeActionRunner) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
+	r.action = "rebuild_stale_event_analysis"
+	r.limit = limit
+	return ActionResult{Action: r.action, Message: "已处理过期事件分析", Data: map[string]any{"limit": limit}}, nil
 }
 
 func (r *fakeActionRunner) RebuildEvents(ctx context.Context) (ActionResult, error) {
@@ -67,6 +78,30 @@ func (r *fakeActionRunner) ArchiveDuplicateTitles(ctx context.Context) (ActionRe
 	return ActionResult{Action: r.action, Message: "已归档重复标题"}, nil
 }
 
+func (r *fakeActionRunner) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	r.action = "test_channel_credentials"
+	r.channelCode = channelCode
+	return map[string]any{"channel_code": channelCode, "success": true}, nil
+}
+
+func (r *fakeActionRunner) InvalidateCredentials(ctx context.Context, channelCode string) (ActionResult, error) {
+	r.action = "invalidate_credentials"
+	r.channelCode = channelCode
+	return ActionResult{Action: r.action, Message: "已刷新凭证缓存", Data: map[string]any{"channel_code": channelCode}}, nil
+}
+
+func (r *fakeActionRunner) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	r.action = "test_llm_chat"
+	r.llmPayload = payload
+	return map[string]any{"ok": true, "prompt": payload.Prompt, "timeout_seconds": payload.TimeoutSeconds}, nil
+}
+
+func (r *fakeActionRunner) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	r.action = "chat_llm"
+	r.chatPayload = payload
+	return map[string]any{"ok": true, "answer": "pong", "message": payload.Message, "timeout_seconds": payload.TimeoutSeconds}, nil
+}
+
 func (s fakeAdminStore) GetOverview(ctx context.Context) (Overview, error) {
 	return s.overview, nil
 }
@@ -77,6 +112,20 @@ func (s fakeAdminStore) ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRu
 
 func (s fakeAdminStore) ListChannelHealth(ctx context.Context) ([]ChannelHealth, error) {
 	return s.channelHealth, nil
+}
+
+func (s fakeAdminStore) GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error) {
+	if s.channelQuality != nil {
+		return s.channelQuality, nil
+	}
+	return map[string]any{"summary": map[string]any{}, "channels": []any{}}, nil
+}
+
+func (s fakeAdminStore) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
+	if s.analysisQuality != nil {
+		return s.analysisQuality, nil
+	}
+	return map[string]any{"summary": map[string]any{}, "risk_events": []any{}}, nil
 }
 
 func (s fakeAdminStore) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
@@ -113,6 +162,10 @@ func (s fakeAdminStore) BatchCancelDetailJobs(ctx context.Context, filter Detail
 
 func (s fakeAdminStore) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
 	return s.crawlTasks, nil
+}
+
+func (s fakeAdminStore) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error {
+	return nil
 }
 
 func (s fakeAdminStore) ListCategories(ctx context.Context) ([]Category, error) {
@@ -155,8 +208,47 @@ func (s fakeAdminStore) UpdateChannel(ctx context.Context, id int64, payload Cha
 	}, nil
 }
 
+func (s fakeAdminStore) ListLLMModelConfigs(ctx context.Context) (any, error) {
+	return []any{map[string]any{"provider_code": "qwen"}}, nil
+}
+
+func (s fakeAdminStore) CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error) {
+	payload["id"] = int64(1)
+	return payload, nil
+}
+
+func (s fakeAdminStore) UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error) {
+	payload["id"] = id
+	return payload, nil
+}
+
+func (s fakeAdminStore) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "cookie_configured": false}, nil
+}
+
+func (s fakeAdminStore) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "updated_by": payload.UpdatedBy}, nil
+}
+
+func (s fakeAdminStore) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	return map[string]any{"channel_code": channelCode, "success": true}, nil
+}
+
 func (s fakeAdminStore) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
 	return s.auditLogs[:min(limit, len(s.auditLogs))], nil
+}
+
+func (s fakeAdminStore) GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error) {
+	return EventAnalysisRunsResult{EventID: eventID, EventTitle: "测试事件", Runs: []AnalysisRun{}}, nil
+}
+
+func (s fakeAdminStore) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error) {
+	return EventAnalysisSourcesResult{
+		EventID:    eventID,
+		EventTitle: "测试事件",
+		Run:        AnalysisRun{RunID: runID, Status: "succeeded"},
+		Sources:    []AnalysisSource{},
+	}, nil
 }
 
 func TestServiceReturnsOverview(t *testing.T) {
@@ -360,6 +452,89 @@ func TestServiceRunsAdminActions(t *testing.T) {
 	}
 	if runner.limit != 50 {
 		t.Fatalf("retry limit = %d, want 50", runner.limit)
+	}
+
+	report, err := service.GetEventAnalysisQualityReport(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("GetEventAnalysisQualityReport returned error: %v", err)
+	}
+	if report["summary"] == nil {
+		t.Fatalf("event analysis report missing summary: %+v", report)
+	}
+
+	configs, err := service.ListLLMModelConfigs(context.Background())
+	if err != nil {
+		t.Fatalf("ListLLMModelConfigs returned error: %v", err)
+	}
+	if configs == nil {
+		t.Fatalf("llm configs = %+v", configs)
+	}
+
+	created, err := service.CreateLLMModelConfig(context.Background(), LLMModelConfigPayload{
+		ProviderName: "千问", ProviderCode: "qwen", BaseURL: "http://127.0.0.1:8001/v1", ModelName: "qwen-local", IsEnabled: 1, DailyCallLimit: 10, Priority: 10,
+	})
+	if err != nil {
+		t.Fatalf("CreateLLMModelConfig returned error: %v", err)
+	}
+	if created == nil {
+		t.Fatalf("created llm config = %+v", created)
+	}
+
+	result, err = service.EnqueueEventAnalysisDetailJobs(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("EnqueueEventAnalysisDetailJobs returned error: %v", err)
+	}
+	if result.Action != "event_analysis_detail_jobs" {
+		t.Fatalf("action = %q, want event_analysis_detail_jobs", result.Action)
+	}
+	if runner.limit != 100 {
+		t.Fatalf("event analysis enqueue limit = %d, want 100", runner.limit)
+	}
+
+	result, err = service.RebuildStaleEventAnalysis(context.Background(), 2000)
+	if err != nil {
+		t.Fatalf("RebuildStaleEventAnalysis returned error: %v", err)
+	}
+	if result.Action != "rebuild_stale_event_analysis" {
+		t.Fatalf("action = %q, want rebuild_stale_event_analysis", result.Action)
+	}
+	if runner.limit != 1000 {
+		t.Fatalf("stale event analysis limit = %d, want 1000", runner.limit)
+	}
+
+	result, err = service.PrioritizeWeakSourceGovernance(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("PrioritizeWeakSourceGovernance returned error: %v", err)
+	}
+	if result.Action != "prioritize_weak_source_governance" {
+		t.Fatalf("action = %q, want prioritize_weak_source_governance", result.Action)
+	}
+	if runner.limit != 100 {
+		t.Fatalf("weak source governance limit = %d, want 100", runner.limit)
+	}
+
+	llmResult, err := service.TestLLMChat(context.Background(), LLMChatTestPayload{
+		ConfigID:       7,
+		Prompt:         " ping ",
+		TimeoutSeconds: 3,
+	})
+	if err != nil {
+		t.Fatalf("TestLLMChat returned error: %v", err)
+	}
+	if llmResult["ok"] != true || runner.llmPayload.Prompt != "ping" || runner.llmPayload.TimeoutSeconds != 10 {
+		t.Fatalf("llm test result = %+v, payload = %+v", llmResult, runner.llmPayload)
+	}
+
+	chatResult, err := service.ChatLLM(context.Background(), LLMChatPayload{
+		ConfigID:       7,
+		Message:        " hello ",
+		TimeoutSeconds: 3,
+	})
+	if err != nil {
+		t.Fatalf("ChatLLM returned error: %v", err)
+	}
+	if chatResult["ok"] != true || runner.chatPayload.Message != "hello" || runner.chatPayload.TimeoutSeconds != 10 {
+		t.Fatalf("llm chat result = %+v, payload = %+v", chatResult, runner.chatPayload)
 	}
 }
 

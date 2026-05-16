@@ -75,6 +75,14 @@ export interface ChannelQualityWeakSample {
   detail_score: number
   detail_content_length: number
   detail_fetch_error: string
+  quality_level?: string
+  completeness_score?: number
+  value_score?: number
+  required_length?: number
+  attention_priority?: number
+  risk_reasons?: string[]
+  recommended_action?: string
+  quality_summary?: string
 }
 
 export interface ChannelQualityWeakChannel {
@@ -105,11 +113,19 @@ export interface ChannelQualityItem {
   seed_count: number
   complete_count: number
   complete_ratio: number
+  partial_count?: number
+  list_only_count?: number
+  failed_count?: number
+  pending_count?: number
   high_value_partial_count: number
   usable_count: number
   usable_ratio: number
   needs_attention_count: number
   needs_attention_ratio: number
+  quality_rank_score: number
+  governance_advice: string[]
+  primary_issue?: string
+  next_action?: string
   avg_detail_score: number
   avg_detail_content_length: number
   top_failure_reasons: ChannelQualityFailureReason[]
@@ -121,6 +137,82 @@ export interface ChannelQualityItem {
 export interface ChannelQualityReport {
   summary: ChannelQualitySummary
   channels: ChannelQualityItem[]
+  core_sources?: ChannelQualityItem[]
+}
+
+export interface EventAnalysisQualitySummary {
+  active_event_count: number
+  analyzed_count: number
+  missing_analysis_count: number
+  low_confidence_count: number
+  fallback_count: number
+  weak_source_event_count: number
+  avg_confidence: number
+  avg_quality_score: number
+  risk_event_count: number
+}
+
+export interface EventAnalysisRiskEvent {
+  event_id: number
+  title: string
+  one_line_summary: string
+  source_count: number
+  weak_source_count: number
+  issue_reasons: string[]
+  governance_advice: string[]
+  primary_issue?: string
+  next_action?: string
+  risk_score: number
+  run_id: number | null
+  mode: string
+  provider: string
+  model_name: string
+  status: string
+  quality_score: number
+  confidence: number
+  fallback_used: boolean
+  failure_reason: string
+  last_analyzed_at: string
+}
+
+export interface EventAnalysisQualityReport {
+  summary: EventAnalysisQualitySummary
+  risk_events: EventAnalysisRiskEvent[]
+  display_quality: EventDisplayQualityReport
+}
+
+export interface EventDisplayQualityReasonCount {
+  reason: string
+  count: number
+}
+
+export interface EventDisplayQualitySummary {
+  tracked_event_count: number
+  display_ready_count: number
+  blocked_count: number
+  display_ready_ratio: number
+  status_counts: Record<string, number>
+  level_counts: Record<string, number>
+  top_block_reasons: EventDisplayQualityReasonCount[]
+}
+
+export interface EventDisplayQualityBlockedSample {
+  event_id: number
+  title: string
+  one_line_summary: string
+  status: string
+  source_count: number
+  display_quality_score: number
+  display_quality_level: string
+  display_quality_reasons: string[]
+  primary_issue?: string
+  next_action?: string
+  last_updated_at: string
+}
+
+export interface EventDisplayQualityReport {
+  summary: EventDisplayQualitySummary
+  blocked_samples: EventDisplayQualityBlockedSample[]
 }
 
 export interface AdminOverview {
@@ -157,6 +249,24 @@ export interface LowQualityInfo {
   updated_at: string
 }
 
+export interface RetryLowQualitySelectedSample {
+  info_id: number
+  title: string
+  channel_code: string
+  attention_priority: number
+  quality_level: string
+  risk_reasons: string[]
+  recommended_action: string
+  quality_summary: string
+}
+
+export interface RetryLowQualityActionData {
+  selected_count?: number
+  selected_samples?: RetryLowQualitySelectedSample[]
+  detail_success_count?: number
+  detail_failed_count?: number
+}
+
 export interface DetailJobFailureReason {
   reason: string
   count: number
@@ -169,6 +279,7 @@ export interface DetailJobSample {
   channel_code: string
   status: string
   priority: number
+  strategy_hint: string
   attempt_count: number
   max_attempts: number
   last_failure_reason: string
@@ -181,6 +292,7 @@ export interface DetailJobReport {
   total: number
   status_counts: Record<string, number>
   channel_counts: Record<string, number>
+  strategy_counts: Record<string, number>
   top_failure_reasons: DetailJobFailureReason[]
   pending_samples: DetailJobSample[]
   failed_samples: DetailJobSample[]
@@ -197,11 +309,14 @@ export interface DetailJobDetail extends DetailJobSample {
 export interface CrawlTask {
   task_code: string
   task_name: string
+  channel_id: number
   channel_code: string
   channel_name: string
   schedule_type: string
   schedule_value: string
   status: string
+  effective_interval_minutes: number
+  is_active: number
   last_run_at: string
   next_run_at: string
 }
@@ -239,6 +354,8 @@ export interface AdminChannel {
   is_active: number
   created_at: string
   updated_at: string
+  cookie_status: string
+  requires_credential: boolean
 }
 
 export interface ChannelPayload {
@@ -256,6 +373,82 @@ export interface ChannelPayload {
   is_active: number
 }
 
+export interface LLMModelConfig {
+  id: number
+  provider_name: string
+  provider_code: string
+  base_url: string
+  api_key: string
+  model_name: string
+  is_enabled: number
+  daily_call_limit: number
+  daily_call_count: number
+  last_call_date: string
+  priority: number
+  consecutive_failure_count: number
+  circuit_open_until: string
+  last_failure_reason: string
+  success_count: number
+  failure_count: number
+  success_rate?: number
+  avg_latency_ms: number
+  last_error_message: string
+  created_at: string
+  updated_at: string
+}
+
+export interface LLMModelConfigPayload {
+  provider_name: string
+  provider_code: string
+  base_url: string
+  api_key: string
+  model_name: string
+  is_enabled: number
+  daily_call_limit: number
+  daily_call_count: number
+  priority: number
+}
+
+export interface LLMChatTestPayload {
+  config_id?: number
+  prompt: string
+  timeout_seconds: number
+}
+
+export interface LLMChatTestResult {
+  ok: boolean
+  status: string
+  config_id?: number
+  provider_code?: string
+  model_name?: string
+  latency_ms?: number
+  status_code?: number
+  content?: string
+  json?: Record<string, unknown> | null
+  usage?: Record<string, unknown>
+  message?: string
+}
+
+export interface LLMChatPayload {
+  config_id?: number
+  message: string
+  timeout_seconds: number
+}
+
+export interface LLMChatResult {
+  ok: boolean
+  status: string
+  answer?: string
+  content?: string
+  config_id?: number
+  provider_code?: string
+  model_name?: string
+  latency_ms?: number
+  status_code?: number
+  usage?: Record<string, unknown>
+  message?: string
+}
+
 export interface AuditLog {
   id: number
   admin_user_id: number
@@ -270,5 +463,5 @@ export interface AuditLog {
 export interface AdminActionResult {
   action: string
   message: string
-  data: Record<string, unknown>
+  data: RetryLowQualityActionData & Record<string, unknown>
 }

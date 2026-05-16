@@ -1,5 +1,5 @@
-from services.detail_strategy_chain import DetailContext
-from services.html_article_extractor import HtmlArticleExtractor, StaticHtmlArticleStrategy
+from services.collection.detail_strategy_chain import DetailContext
+from services.collection.html_article_extractor import HtmlArticleExtractor, StaticHtmlArticleStrategy
 
 
 def test_html_article_extractor_prefers_article_text():

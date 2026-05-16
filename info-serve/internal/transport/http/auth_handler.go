@@ -25,7 +25,7 @@ func NewAuthHandler(service *auth.Service) *AuthHandler {
 	return &AuthHandler{service: service}
 }
 
-// Register 完成邮箱注册，并通过服务层写入用户存储。
+// Register 完成邮箱注册并直接创建会话，避免用户注册后还要再次手动登录。
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -33,7 +33,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.service.Register(r.Context(), auth.RegisterInput{
+	result, err := h.service.RegisterAndLogin(r.Context(), auth.RegisterInput{
 		Email:    req.Email,
 		Password: req.Password,
 	})
@@ -50,7 +50,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.Created(w, user)
+	response.Created(w, result)
 }
 
 // Login 完成邮箱密码登录，并返回会话 token。

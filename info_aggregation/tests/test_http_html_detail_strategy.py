@@ -1,5 +1,5 @@
-from services.detail_strategy_chain import DetailContext, DetailStrategyChain
-from services.http_html_detail_strategy import HttpHtmlDetailStrategy, TrafilaturaArticleExtractor
+from services.collection.detail_strategy_chain import DetailContext, DetailStrategyChain
+from services.collection.http_html_detail_strategy import HttpHtmlDetailStrategy, TrafilaturaArticleExtractor
 
 
 def test_trafilatura_extractor_is_preferred_and_falls_back_to_html_extractor():

@@ -134,6 +134,32 @@ func TestServiceLoginCreatesTokenAndCurrentUserCanReadIt(t *testing.T) {
 	}
 }
 
+func TestServiceRegisterAndLoginCreatesUsableSession(t *testing.T) {
+	service := NewService(newFakeStore())
+
+	result, err := service.RegisterAndLogin(context.Background(), RegisterInput{
+		Email:    "new-user@example.com",
+		Password: "StrongerPass123",
+	})
+	if err != nil {
+		t.Fatalf("RegisterAndLogin returned error: %v", err)
+	}
+	if result.Token == "" {
+		t.Fatal("register token should not be empty")
+	}
+	if result.User.Email != "new-user@example.com" {
+		t.Fatalf("register user email = %q", result.User.Email)
+	}
+
+	current, err := service.CurrentUser(context.Background(), result.Token)
+	if err != nil {
+		t.Fatalf("CurrentUser returned error: %v", err)
+	}
+	if current.ID != result.User.ID {
+		t.Fatalf("current user id = %d, want %d", current.ID, result.User.ID)
+	}
+}
+
 func TestServiceRejectsWrongPassword(t *testing.T) {
 	service := NewService(newFakeStore())
 	_, err := service.Register(context.Background(), RegisterInput{

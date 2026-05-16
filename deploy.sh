@@ -56,32 +56,63 @@ create_env_file() {
 
     cat > .env <<EOF
 # 数据库配置
+# 当前 docker-compose.yml 不启动 MySQL 容器，服务默认连接容器主机上的 MySQL 3306。
+# 首次部署前请把 DB_PASSWORD / INFO_SERVE_MYSQL_DSN 改成主机 MySQL 的真实账号密码。
 MYSQL_ROOT_PASSWORD=${mysql_password}
 MYSQL_DATABASE=info-max
 DB_TYPE=mysql
+DB_HOST=host.docker.internal
+DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=${mysql_password}
 DB_NAME=info-max
 LOG_LEVEL=INFO
 TZ=Asia/Shanghai
 APP_TIMEZONE=Asia/Shanghai
+CRAWLER_MAX_CONTENT_LENGTH=12000
+ENABLE_PUBLIC_API=1
+EVENT_ANALYSIS_MODE=hybrid
+EVENT_ANALYSIS_ENABLE_LLM=0
+EVENT_ANALYSIS_PROVIDER=openai_compatible
+EVENT_ANALYSIS_BASE_URL=http://host.docker.internal:8001/v1
+EVENT_ANALYSIS_API_KEY=
+EVENT_ANALYSIS_MODEL=qwen2.5-14b-instruct
+EVENT_ANALYSIS_TIMEOUT=60
+EVENT_ANALYSIS_MAX_INPUT_CHARS=12000
+EVENT_ANALYSIS_TEMPERATURE=0.2
+EVENT_ANALYSIS_FALLBACK_TO_RULE=1
+EVENT_ANALYSIS_LLM_RETRY_TIMES=2
+EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD=3
+EVENT_ANALYSIS_LLM_COOLDOWN_MINUTES=30
 ENABLE_SEED_DATA=false
+AUTO_INIT_DB_SCHEMA=0
+DETAIL_JOB_RUNNING_TIMEOUT_MINUTES=30
+REBUILD_EVENTS_ON_STARTUP=false
+
+# Redis 命令总线配置
+REDIS_HOST=host.docker.internal
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+REDIS_ADDR=host.docker.internal:6379
+ENABLE_REDIS_COMMAND_CONSUMER=1
+AGGREGATION_COMMAND_STREAM=info_ai:aggregation:commands
+AGGREGATION_COMMAND_CONSUMER_GROUP=info_aggregation
+AGGREGATION_COMMAND_CONSUMER_NAME=
+AGGREGATION_COMMAND_PENDING_IDLE_MS=60000
+AGGREGATION_RESULT_PREFIX=info_ai:aggregation:results:
+AGGREGATION_RESULT_WAIT_MS=5000
+AGGREGATION_HTTP_BASE_URL=http://info-aggregation:8000
+AGGREGATION_LLM_TIMEOUT_MS=240000
+AGGREGATION_RESULT_TTL_SECONDS=86400
 
 # info-serve 配置
-INFO_SERVE_MYSQL_DSN=root:${mysql_password}@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
+INFO_SERVE_MYSQL_DSN=root:${mysql_password}@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
 INFO_SERVE_SESSION_SECRET=${session_secret}
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=${admin_password}
 
-# 渠道凭据配置。
-# 知乎渠道凭据。知乎高质量采集需要有效登录态；不配置时可运行，但知乎详情会降级。
-ZHIHU_COOKIE=
-ZHIHU_ZSE_93=
-ZHIHU_ZSE_96=
-# 微博渠道凭据。用于提升话题搜索、移动搜索和网页搜索详情抓取成功率。
-WEIBO_COOKIE=
-# 小红书渠道凭据。用于提升动态详情页和渲染兜底成功率。
-XHS_COOKIE=
+# 渠道登录态 Cookie / ZSE 已迁移到数据库，请在管理后台“凭证管理”维护。
 
 # 前端接口配置。
 # 生产 Docker 默认同源 /api，经由前端容器 Nginx 代理到 info-serve。

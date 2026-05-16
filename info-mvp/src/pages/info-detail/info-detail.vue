@@ -95,6 +95,11 @@ function onShareAppMessage() {
 
       <!-- Article Body -->
       <view class="article-body">
+        <view v-if="info.quality_summary" class="quality-card" :class="{ 'quality-card--weak': info.needs_attention }">
+          <text class="quality-title">{{ info.needs_attention ? '详情质量待补偿' : '详情质量' }}</text>
+          <text class="quality-text">{{ info.quality_summary }}</text>
+        </view>
+
         <!-- #ifdef H5 -->
         <view class="article" v-html="info.content" />
         <!-- #endif -->
@@ -183,6 +188,37 @@ function onShareAppMessage() {
   background: var(--card-bg);
   padding: 32rpx;
   margin-bottom: 16rpx;
+}
+
+.quality-card {
+  padding: 20rpx 24rpx;
+  margin-bottom: 28rpx;
+  border-radius: var(--radius-md);
+  background: rgba(37, 99, 235, 0.08);
+  border: 1rpx solid rgba(37, 99, 235, 0.12);
+}
+
+.quality-card--weak {
+  background: rgba(255, 247, 237, 0.98);
+  border-color: rgba(234, 88, 12, 0.16);
+}
+
+.quality-title,
+.quality-text {
+  display: block;
+}
+
+.quality-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8rpx;
+}
+
+.quality-text {
+  font-size: 25rpx;
+  line-height: 1.65;
+  color: var(--text-secondary);
 }
 
 .article {

@@ -15,7 +15,7 @@ from .sports_utils import (
     normalize_url,
     stable_source_id,
 )
-from services.detail_pipeline import DetailStrategyResult, run_detail_pipeline
+from services.collection.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 
 
 class SinaSportsCrawler(BaseCrawler):
@@ -77,7 +77,7 @@ class SinaSportsCrawler(BaseCrawler):
     def _build_item(self, title: str, source_url: str) -> dict:
         return {
             "source_id": stable_source_id(self.channel_code, source_url),
-            "title": title[:40],
+            "title": title[:200],
             "content": f"{title}。来自新浪体育的赛事与体育新闻，后续将持续跟进比赛结果和相关动态。"[:500],
             "source_url": source_url,
             "event_time": infer_datetime_from_url(source_url),

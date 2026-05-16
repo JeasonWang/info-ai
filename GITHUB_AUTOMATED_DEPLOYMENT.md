@@ -1,14 +1,14 @@
-# 信息达人 Max GitHub 自动化部署指南
+# 信息达人 GitHub 自动化部署指南
 
-本文档说明如何通过 GitHub Actions 将信息达人 Max 部署到远程服务器。当前生产用户端使用 `info-mvp`，不再部署 `info-max`。
+本文档说明如何通过 GitHub Actions 将信息达人部署到远程服务器。当前生产用户端使用 `info-mvp`，不再部署 `info-max`。完整上线流程、数据库初始化、迁移顺序、回滚和脚本教程以 [docs/ops/部署上线手册.md](docs/ops/部署上线手册.md) 为准。
 
 ## 1. 部署架构
 
-生产环境会启动以下容器：
+生产环境会启动以下容器。当前 `docker-compose.yml` 启动 Redis 和四个应用容器，MySQL 默认连接宿主机或独立数据库，不在本 compose 中启动。
 
 | 服务 | 说明 | 默认访问 |
 | --- | --- | --- |
-| `mysql` | 生产数据库 | 仅服务器本机 `127.0.0.1:13306` |
+| `redis` | 命令总线与任务结果缓存 | 仅服务器本机 `127.0.0.1:16379` |
 | `info-aggregation` | 数据采集底座 | 仅服务器本机 `127.0.0.1:18000` |
 | `info-serve` | 业务 API | `服务器IP:8085` |
 | `info-mvp` | 用户端 H5/PC 页面 | `服务器IP:8082` |
@@ -55,32 +55,45 @@ docker compose version
 
 ## 4. 服务器 `.env` 配置
 
-第一次部署前，建议先在服务器创建 `/opt/info-ai/.env`。如果不创建，`deploy.sh` 会自动生成随机数据库密码、会话密钥和管理员密码。
+第一次部署前，建议先在服务器创建 `/opt/info-ai/.env`。当前 `docker-compose.yml` 不启动 MySQL 容器，四个应用容器默认连接容器主机上的 MySQL 3306，因此数据库账号密码必须和服务器本机 MySQL 保持一致。
 
 手动创建示例：
 
 ```bash
 cd /opt/info-ai
 cat > .env <<'EOF'
-MYSQL_ROOT_PASSWORD=请替换为强密码
-MYSQL_DATABASE=info-max
 DB_TYPE=mysql
+DB_HOST=host.docker.internal
+DB_PORT=3306
 DB_USER=root
-DB_PASSWORD=请替换为同一个MySQL密码
+DB_PASSWORD=请替换为主机MySQL密码
 DB_NAME=info-max
 LOG_LEVEL=INFO
+TZ=Asia/Shanghai
+APP_TIMEZONE=Asia/Shanghai
+CRAWLER_MAX_CONTENT_LENGTH=12000
+ENABLE_PUBLIC_API=1
+EVENT_ANALYSIS_MODE=hybrid
+EVENT_ANALYSIS_ENABLE_LLM=0
+EVENT_ANALYSIS_LLM_RETRY_TIMES=2
+EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD=3
+EVENT_ANALYSIS_LLM_COOLDOWN_MINUTES=30
 ENABLE_SEED_DATA=false
 
-INFO_SERVE_MYSQL_DSN=root:请替换为同一个MySQL密码@tcp(mysql:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
+REDIS_PASSWORD=
+REDIS_DB=0
+ENABLE_REDIS_COMMAND_CONSUMER=1
+AGGREGATION_COMMAND_STREAM=info_ai:aggregation:commands
+AGGREGATION_COMMAND_CONSUMER_GROUP=info_aggregation
+AGGREGATION_RESULT_PREFIX=info_ai:aggregation:results:
+AGGREGATION_RESULT_WAIT_MS=5000
+AGGREGATION_HTTP_BASE_URL=http://info-aggregation:8000
+AGGREGATION_LLM_TIMEOUT_MS=240000
+
+INFO_SERVE_MYSQL_DSN=root:请替换为主机MySQL密码@tcp(host.docker.internal:3306)/info-max?charset=utf8mb4&parseTime=true&loc=Local
 INFO_SERVE_SESSION_SECRET=请替换为强随机字符串
 INFO_ADMIN_EMAIL=admin@info-daren.local
 INFO_ADMIN_PASSWORD=请替换为强密码
-
-ZHIHU_COOKIE=
-ZHIHU_ZSE_93=
-ZHIHU_ZSE_96=
-WEIBO_COOKIE=
-XHS_COOKIE=
 
 VITE_API_BASE_URL=/api
 
@@ -91,7 +104,7 @@ PUBLIC_AGGREGATION_URL=http://127.0.0.1:18000
 EOF
 ```
 
-渠道 Cookie 只放服务器 `.env`，不要提交到 GitHub。
+渠道 Cookie / ZSE 不再放服务器 `.env`。初始化脚本会在数据库 `channel.cookies` 和 `channel.extra_credentials` 中写入 `status=sample` 的格式样例，真实登录态请部署后进入管理后台“凭证管理”保存。
 
 ## 5. 自动部署流程
 
@@ -100,7 +113,7 @@ EOF
 1. 拉取代码。
 2. 构建 `info-aggregation`、`info-serve`、`info-mvp`、`info-admin` 镜像。
 3. 导出镜像包 `images/info-ai-images.tar.gz`。
-4. 上传镜像包、`docker-compose.yml`、`deploy.sh`、`mysql_schema_pro.sql`、`mysql_migration_max.sql` 到服务器。
+4. 上传镜像包、`docker-compose.yml`、`deploy.sh`、`mysql8_init.sql` 到服务器。
 5. 在服务器执行：
 
 ```bash
@@ -137,32 +150,32 @@ curl http://127.0.0.1:18000/health
 
 `info-aggregation` 和 MySQL 默认只绑定服务器本机地址，不应该直接从公网访问。
 
-## 7. 数据库初始化和迁移说明
+## 7. 数据库初始化说明
 
-数据库脚本分工：
-
-```text
-info_aggregation/sql/mysql_schema_pro.sql      创建数据库和完整表结构
-info_aggregation/sql/mysql_migration_max.sql   初始化必要数据
-```
-
-如果使用容器 MySQL，首次初始化时应按顺序执行：
+首版上线只保留一个 MySQL 8 初始化入口：
 
 ```text
-01-schema.sql
-02-init-data.sql
+info_aggregation/sql/mysql8_init.sql
 ```
+
+如果是全新生产库，首次初始化时执行：
+
+```bash
+mysql -h 127.0.0.1 -uroot -p < info_aggregation/sql/mysql8_init.sql
+```
+
+该脚本会创建 `info-max`、27 张核心表，并初始化基础分类、12 个渠道、采集任务、默认管理员、质量快照和默认 LLM 配置。开发期拆分 SQL 已归档到 `docs/archive/数据库历史材料/sql开发期迁移脚本/`，不作为首版生产部署入口。
 
 注意：
 
-- 如果 `mysql_data` volume 已经存在，MySQL 不会重复执行 `/docker-entrypoint-initdb.d` 下的初始化脚本。
-- 全新生产库直接部署即可。
-- 已有生产库升级时，应先备份数据库，再手动执行增量迁移脚本。
+- 当前 compose 不创建 MySQL 容器，也不自动执行数据库初始化。
+- 全新生产库需要先初始化表结构和必要数据，再启动应用。
+- `mysql8_init.sql` 默认不删除已有库和已有数据；如需重建，必须先备份并由运维明确执行 `DROP DATABASE`。
 
 备份示例：
 
 ```bash
-docker compose exec mysql mysqldump -uroot -p info-max > backup-info-max.sql
+mysqldump -h 127.0.0.1 -uroot -p info-max > backup-info-max.sql
 ```
 
 ## 8. 常用运维命令
@@ -195,7 +208,7 @@ docker compose restart info-aggregation
 docker compose down
 ```
 
-不要随意删除 `mysql_data` volume，否则会删除生产数据库。
+不要随意删除 `redis_data` 和 `aggregation_data` volume；MySQL 数据不在当前 compose volume 中，按你的宿主机或独立数据库备份策略管理。
 
 ## 9. 生产安全建议
 
@@ -219,13 +232,11 @@ cd /opt/info-ai
 docker compose ps
 docker compose logs --tail=200 info-serve
 docker compose logs --tail=200 info-aggregation
-docker compose logs --tail=200 mysql
 ```
 
 如果管理员账号初始化失败，通常是 `info-serve` 未连上 MySQL 或数据库表未初始化完成。先看：
 
 ```bash
-docker compose logs --tail=200 mysql
 docker compose logs --tail=200 info-serve
 ```
 

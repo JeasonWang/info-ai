@@ -7,8 +7,8 @@ import re
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
-from services.html_article_extractor import HtmlArticleExtractor
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.html_article_extractor import HtmlArticleExtractor
 
 
 class CnblogsCrawler(BaseCrawler):
@@ -66,7 +66,7 @@ class CnblogsCrawler(BaseCrawler):
             source_id = hashlib.md5(f"cnblogs_{post_id}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": post_url,
                 "event_time": datetime.now(),

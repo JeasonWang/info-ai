@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 一键关闭本地个服务。
+# 一键关闭本地四个服务。
 # 本脚本不停止 MySQL，不操作 Docker。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -71,6 +71,18 @@ cleanup_port() {
 
   echo "$name: 清理端口 $port 残留进程 PID: $pids"
   kill $pids 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    if [[ -z "$pids" ]]; then
+      return
+    fi
+    sleep 1
+  done
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$pids" ]]; then
+    echo "$name: 强制清理端口 $port 残留进程 PID: $pids"
+    kill -9 $pids 2>/dev/null || true
+  fi
 }
 
 mkdir -p "$LOG_DIR"

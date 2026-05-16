@@ -7,7 +7,7 @@ from api import app
 from crawlers.registry import crawler_registry
 from database import Category, Channel, Event, Info, InfoAcquisitionLog
 from scheduler import _fetch_details_for_items
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 def test_admin_rebuild_events_refreshes_event_tables(session):
@@ -74,6 +74,9 @@ def test_rebuild_events_uses_latest_infos_when_table_exceeds_limit(session):
                 source_url=f"https://example.com/old-sports-{index}",
                 event_time=datetime(2026, 4, 21, 9, index, 0),
                 core_entity=f"旧体育新闻 {index}",
+                detail_fetch_status="complete",
+                detail_score=90,
+                detail_content_length=80,
             )
         )
 
@@ -87,6 +90,9 @@ def test_rebuild_events_uses_latest_infos_when_table_exceeds_limit(session):
             source_url="https://example.com/today-sports",
             event_time=datetime(2026, 4, 24, 9, 0, 0),
             core_entity="今日体育新闻",
+            detail_fetch_status="complete",
+            detail_score=90,
+            detail_content_length=80,
         )
     )
     session.commit()
@@ -126,6 +132,9 @@ def test_admin_rebuild_events_keeps_stable_event_identity_for_user_dependencies(
             source_url="https://example.com/rebuild-user-dependency-001",
             event_time=datetime(2026, 4, 22, 9, 0, 0),
             core_entity="大模型工具",
+            detail_fetch_status="complete",
+            detail_score=90,
+            detail_content_length=80,
         )
     )
     session.commit()

@@ -9,9 +9,11 @@ import re
 from datetime import datetime
 from xml.etree import ElementTree
 
+import requests
+
 from .base import BaseCrawler
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
-from services.html_article_extractor import HtmlArticleExtractor
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.html_article_extractor import HtmlArticleExtractor
 
 
 class ReutersCrawler(BaseCrawler):
@@ -86,6 +88,7 @@ class ReutersCrawler(BaseCrawler):
         ns = {
             "sm": "http://www.sitemaps.org/schemas/sitemap/0.9",
             "news": "http://www.google.com/schemas/sitemap-news/0.9",
+            "image": "http://www.google.com/schemas/sitemap-image/1.1",
         }
         results = []
         seen = set()
@@ -95,21 +98,32 @@ class ReutersCrawler(BaseCrawler):
                 continue
             title = url_node.findtext("news:news/news:title", default="", namespaces=ns).strip()
             published_at = url_node.findtext("news:news/news:publication_date", default="", namespaces=ns).strip()
+            keywords = url_node.findtext("news:news/news:keywords", default="", namespaces=ns).strip()
+            tickers = url_node.findtext("news:news/news:stock_tickers", default="", namespaces=ns).strip()
+            captions = [
+                caption.text.strip()
+                for caption in url_node.findall("image:image/image:caption", ns)
+                if caption.text and caption.text.strip()
+            ]
             if not title or source_url in seen:
                 continue
             seen.add(source_url)
             source_id = hashlib.md5(f"reuters_sitemap_{source_url}".encode()).hexdigest()[:16]
             metadata = self._merge_distinct_parts([
                 title,
+                f"Reuters category: {self._category_from_url(source_url)}." if self._category_from_url(source_url) else "",
                 f"Reuters Published at {published_at} according to its official news sitemap." if published_at else "Reuters published this item according to its official news sitemap.",
+                f"Reuters image context: {' '.join(captions[:2])}" if captions else "",
+                f"Reuters stock tickers: {tickers}." if tickers else "",
+                f"Reuters news codes: {', '.join(self._extract_news_codes(keywords)[:5])}." if keywords else "",
                 f"Official Reuters URL: {source_url}",
             ])
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
-                "content": metadata[:500],
+                "title": title[:200],
+                "content": metadata[:800],
                 "source_url": source_url,
-                "event_time": datetime.now(),
+                "event_time": self._parse_reuters_datetime(published_at) or datetime.now(),
                 "core_entity": title[:20],
                 "location": "",
                 "indicator_name": "published_at" if published_at else "",
@@ -120,6 +134,28 @@ class ReutersCrawler(BaseCrawler):
             if len(results) >= 20:
                 break
         return results
+
+    def _parse_reuters_datetime(self, value: str) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return None
+
+    def _category_from_url(self, source_url: str) -> str:
+        match = re.search(r"reuters\.com/([^/]+(?:/[^/]+)?)/", source_url or "")
+        return match.group(1).replace("/", " / ") if match else ""
+
+    def _extract_news_codes(self, keywords: str) -> list[str]:
+        codes: list[str] = []
+        seen: set[str] = set()
+        for code in re.findall(r"(?:USN|newsml)_([A-Z0-9]+)", keywords or ""):
+            if code in seen:
+                continue
+            seen.add(code)
+            codes.append(code)
+        return codes
 
     def _crawl_api(self) -> list:
         headers = self._build_headers()
@@ -145,7 +181,7 @@ class ReutersCrawler(BaseCrawler):
                 article_url = f"https://www.reuters.com/world/{article_id}/"
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": summary,
                 "source_url": article_url,
                 "event_time": datetime.now(),
@@ -173,7 +209,7 @@ class ReutersCrawler(BaseCrawler):
             desc = desc.strip() if desc else title
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": desc[:500],
                 "source_url": link.strip(),
                 "event_time": datetime.now(),
@@ -203,7 +239,7 @@ class ReutersCrawler(BaseCrawler):
             source_id = hashlib.md5(f"reuters_{path}".encode()).hexdigest()[:16]
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": title[:500],
                 "source_url": url,
                 "event_time": datetime.now(),
@@ -241,7 +277,7 @@ class ReutersCrawler(BaseCrawler):
             summary = description or f"Reuters indexed news item: {title}"
             results.append({
                 "source_id": source_id,
-                "title": title[:40],
+                "title": title[:200],
                 "content": summary[:500],
                 "source_url": source_url,
                 "event_time": datetime.now(),
@@ -276,6 +312,7 @@ class ReutersCrawler(BaseCrawler):
         candidates = []
         is_google_index = item.get("_reuters_source") == "google_news_index" or "news.google.com" in item.get("source_url", "")
         has_official_url = str(item.get("source_url", "")).startswith("https://www.reuters.com/")
+        is_sitemap_metadata = item.get("_reuters_source") == "news_sitemap" or self._looks_like_sitemap_metadata(item)
         if is_google_index and not has_official_url:
             summary = self._clean_detail_text(item.get("content", ""))
             if len(summary) >= 50:
@@ -286,7 +323,7 @@ class ReutersCrawler(BaseCrawler):
                     strategy_results=candidates,
                     channel_code=self.channel_code,
                 )
-        if item.get("_reuters_source") == "news_sitemap":
+        if is_sitemap_metadata:
             metadata = self._clean_detail_text(item.get("content", ""))
             if len(metadata) >= 50:
                 candidates.append(DetailStrategyResult(strategy="news_sitemap_metadata", content=limit_detail_content(metadata)))
@@ -313,12 +350,20 @@ class ReutersCrawler(BaseCrawler):
             summary = self._clean_detail_text(item.get("content", ""))
             if len(summary) >= 50:
                 candidates.append(DetailStrategyResult(strategy="news_index_summary", content=limit_detail_content(summary)))
-
         return run_detail_pipeline(
             title=item.get("title", ""),
             list_content=item.get("content", ""),
             strategy_results=candidates,
             channel_code=self.channel_code,
+        )
+
+    def _looks_like_sitemap_metadata(self, item: dict) -> bool:
+        content = item.get("content", "") or ""
+        source_url = item.get("source_url", "") or ""
+        return (
+            source_url.startswith("https://www.reuters.com/")
+            and "official news sitemap" in content
+            and "Official Reuters URL:" in content
         )
 
     def _fetch_article_api_detail(self, item: dict):
@@ -336,23 +381,39 @@ class ReutersCrawler(BaseCrawler):
                 headers=post_headers,
                 timeout=15,
             )
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
             article = response.json().get("result", {})
-            texts = []
-            for part in article.get("content_items", []) or []:
-                if part.get("type") != "paragraph":
-                    continue
-                text = self._clean_detail_text(part.get("content", ""))
-                if text:
-                    texts.append(text)
+            texts = self._extract_article_api_paragraphs(article)
             rn_text = self._clean_detail_text(article.get("rn_text", ""))
             if rn_text:
                 texts.append(rn_text)
             combined = self._merge_distinct_parts(texts)
             if len(combined) >= 50:
                 return DetailStrategyResult(strategy="reuters_article_api", content=limit_detail_content(combined))
+        except requests.HTTPError as e:
+            result = self._http_failure_result("reuters_article_api", e)
+            self.logger.warning(f"路透社详情 API 被阻断: {result.failure_reason}")
+            return result
         except Exception as e:
             self.logger.warning(f"路透社详情爬取失败: {e}")
         return None
+
+    def _extract_article_api_paragraphs(self, node) -> list[str]:
+        texts: list[str] = []
+        if isinstance(node, dict):
+            if node.get("type") == "paragraph":
+                text = self._clean_detail_text(node.get("content", ""))
+                if text:
+                    texts.append(text)
+            for key in ("content_items", "items", "children", "body", "article"):
+                value = node.get(key)
+                if value:
+                    texts.extend(self._extract_article_api_paragraphs(value))
+        elif isinstance(node, list):
+            for child in node:
+                texts.extend(self._extract_article_api_paragraphs(child))
+        return texts
 
     def _fetch_json_ld_detail(self, item: dict):
         source_url = item.get("source_url", "")
@@ -378,6 +439,10 @@ class ReutersCrawler(BaseCrawler):
                     body = self._clean_detail_text(node.get("articleBody", ""))
                     if len(body) >= 50:
                         return DetailStrategyResult(strategy="reuters_json_ld", content=limit_detail_content(body))
+        except requests.HTTPError as e:
+            result = self._http_failure_result("reuters_json_ld", e)
+            self.logger.warning(f"路透社JSON-LD详情请求被阻断: {result.failure_reason}")
+            return result
         except Exception as e:
             self.logger.warning(f"路透社JSON-LD详情解析失败: {e}")
         return None
@@ -393,9 +458,23 @@ class ReutersCrawler(BaseCrawler):
             text = HtmlArticleExtractor().extract(html)
             if len(text) >= 50:
                 return DetailStrategyResult(strategy="html_article", content=limit_detail_content(text))
+        except requests.HTTPError as e:
+            result = self._http_failure_result("html_article", e)
+            self.logger.warning(f"路透社HTML正文请求被阻断: {result.failure_reason}")
+            return result
         except Exception as e:
             self.logger.warning(f"路透社HTML正文兜底失败: {e}")
         return None
+
+    def _http_failure_result(self, strategy: str, error: requests.HTTPError) -> DetailStrategyResult:
+        status_code = error.response.status_code if error.response is not None else 0
+        if status_code in (401, 403):
+            reason = f"http_{status_code}_blocked"
+        elif status_code == 404:
+            reason = "http_404_not_found"
+        else:
+            reason = f"http_{status_code}_error" if status_code else "http_error"
+        return DetailStrategyResult(strategy=strategy, content="", failure_reason=reason, matched_rules=[f"http_{status_code}"] if status_code else ["http_error"])
 
     def _clean_detail_text(self, value: str) -> str:
         text = re.sub(r"<[^>]+>", " ", value or "")

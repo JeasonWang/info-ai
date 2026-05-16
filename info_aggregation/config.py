@@ -12,6 +12,7 @@ APP_TIMEZONE = os.getenv("APP_TIMEZONE", os.getenv("TZ", "Asia/Shanghai"))
 # ==================== 数据库配置 ====================
 DEFAULT_DB_TYPE = "sqlite" if APP_ENV == "test" else "mysql"
 DB_TYPE = os.getenv("DB_TYPE", DEFAULT_DB_TYPE)
+AUTO_INIT_DB_SCHEMA = os.getenv("AUTO_INIT_DB_SCHEMA", "1" if APP_ENV in {"local", "test"} else "0") == "1"
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
@@ -38,6 +39,23 @@ CRAWLER_USER_AGENTS = [
 CRAWLER_REQUEST_TIMEOUT = 15
 CRAWLER_RETRY_TIMES = 3
 CRAWLER_RETRY_INTERVAL = 300
+CRAWLER_MAX_CONTENT_LENGTH = int(os.getenv("CRAWLER_MAX_CONTENT_LENGTH", "12000"))
+DETAIL_JOB_RUNNING_TIMEOUT_MINUTES = int(os.getenv("DETAIL_JOB_RUNNING_TIMEOUT_MINUTES", "30"))
+
+# ==================== 事件分析配置 ====================
+EVENT_ANALYSIS_MODE = os.getenv("EVENT_ANALYSIS_MODE", "hybrid")
+EVENT_ANALYSIS_ENABLE_LLM = os.getenv("EVENT_ANALYSIS_ENABLE_LLM", "0") == "1"
+EVENT_ANALYSIS_PROVIDER = os.getenv("EVENT_ANALYSIS_PROVIDER", "openai_compatible")
+EVENT_ANALYSIS_BASE_URL = os.getenv("EVENT_ANALYSIS_BASE_URL", "http://127.0.0.1:8001/v1")
+EVENT_ANALYSIS_API_KEY = os.getenv("EVENT_ANALYSIS_API_KEY", "")
+EVENT_ANALYSIS_MODEL = os.getenv("EVENT_ANALYSIS_MODEL", "qwen2.5-14b-instruct")
+EVENT_ANALYSIS_TIMEOUT = int(os.getenv("EVENT_ANALYSIS_TIMEOUT", "60"))
+EVENT_ANALYSIS_MAX_INPUT_CHARS = int(os.getenv("EVENT_ANALYSIS_MAX_INPUT_CHARS", "12000"))
+EVENT_ANALYSIS_TEMPERATURE = float(os.getenv("EVENT_ANALYSIS_TEMPERATURE", "0.2"))
+EVENT_ANALYSIS_FALLBACK_TO_RULE = os.getenv("EVENT_ANALYSIS_FALLBACK_TO_RULE", "1") == "1"
+EVENT_ANALYSIS_LLM_RETRY_TIMES = int(os.getenv("EVENT_ANALYSIS_LLM_RETRY_TIMES", "2"))
+EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD = int(os.getenv("EVENT_ANALYSIS_LLM_FAILURE_THRESHOLD", "3"))
+EVENT_ANALYSIS_LLM_COOLDOWN_MINUTES = int(os.getenv("EVENT_ANALYSIS_LLM_COOLDOWN_MINUTES", "30"))
 
 # ==================== 定时任务配置 ====================
 #热点事件爬取
@@ -60,6 +78,7 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # ==================== API配置 ====================
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
+ENABLE_PUBLIC_API = os.getenv("ENABLE_PUBLIC_API", "1" if APP_ENV == "test" else "0") == "1"
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -68,6 +87,19 @@ CORS_ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+
+# ==================== Redis 命令总线配置 ====================
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+ENABLE_REDIS_COMMAND_CONSUMER = os.getenv("ENABLE_REDIS_COMMAND_CONSUMER", "1") == "1"
+AGGREGATION_COMMAND_STREAM = os.getenv("AGGREGATION_COMMAND_STREAM", "info_ai:aggregation:commands")
+AGGREGATION_COMMAND_CONSUMER_GROUP = os.getenv("AGGREGATION_COMMAND_CONSUMER_GROUP", "info_aggregation")
+AGGREGATION_COMMAND_CONSUMER_NAME = os.getenv("AGGREGATION_COMMAND_CONSUMER_NAME", "")
+AGGREGATION_COMMAND_PENDING_IDLE_MS = int(os.getenv("AGGREGATION_COMMAND_PENDING_IDLE_MS", "60000"))
+AGGREGATION_RESULT_PREFIX = os.getenv("AGGREGATION_RESULT_PREFIX", "info_ai:aggregation:results:")
+AGGREGATION_RESULT_TTL_SECONDS = int(os.getenv("AGGREGATION_RESULT_TTL_SECONDS", "86400"))
 
 # ==================== 信息分类枚举 ====================
 CATEGORY_HOT = "热点事件"

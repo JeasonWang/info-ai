@@ -5,10 +5,11 @@ from database import Category, Channel, Info
 from scheduler import _save_crawled_data
 from scheduler import _fetch_details_for_items
 from crawlers.registry import crawler_registry
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 from sql.init_data import init_all_data, init_mock_data
-from services.data_maintenance import refresh_info_semantics
+from services.quality.data_maintenance import refresh_info_semantics
 from crawlers.sports_utils import extract_article_text
+from services.quality.data_quality import is_low_value_content
 
 
 def test_clean_info_list_removes_near_duplicate_title_and_content():
@@ -50,6 +51,54 @@ def test_clean_info_list_filters_title_only_low_quality_items():
     )
 
     assert cleaned == []
+
+
+def test_clean_info_list_preserves_long_article_content():
+    body = "Agent 多层意图识别需要把简单请求快速分流，把复杂请求交给大模型处理。" * 80
+
+    cleaned = clean_info_list(
+        [
+            {
+                "source_id": "long-article-a",
+                "title": "agent设计系统-大模型意图识别",
+                "content": body,
+                "source_url": "https://example.com/article",
+                "event_time": datetime(2026, 5, 8, 10, 0, 0),
+            }
+        ]
+    )
+
+    assert len(cleaned) == 1
+    assert cleaned[0]["content"] == body
+    assert len(cleaned[0]["content"]) > 500
+
+
+def test_clean_title_preserves_long_english_headline_without_mid_sentence_cut():
+    title = "US tariff whiplash pushed toy factory in China to brink of collapse"
+
+    cleaned = clean_info_list(
+        [
+            {
+                "source_id": "reuters-long-title",
+                "title": title,
+                "content": "Reuters reported the factory faced pressure from tariff changes, according to company executives.",
+                "source_url": "https://www.reuters.com/world/example",
+                "event_time": datetime(2026, 5, 13, 10, 0, 0),
+            }
+        ]
+    )
+
+    assert cleaned[0]["title"] == title
+
+
+def test_low_value_content_detects_interaction_and_ranking_metadata():
+    assert is_low_value_content("夏日辣妹美甲", "互动：点赞2.8万")
+    assert is_low_value_content("南审偷拍男子违法失德记录伴随终身", "hot")
+    assert is_low_value_content("左航cos孙权", "热榜分类：艺人")
+    assert not is_low_value_content(
+        "广西公交车坠翻致3死5伤",
+        "广西梧州公交车坠翻事故已有官方通报，事故原因和救援进展得到多个渠道跟进。",
+    )
 
 
 def test_save_crawled_data_skips_existing_near_duplicate_content(session):

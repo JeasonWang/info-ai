@@ -1,6 +1,6 @@
 from tools.live_channel_quality_audit import audit_channels
 from crawlers.registry import crawler_registry
-from services.detail_pipeline import DetailPipelineResult
+from services.collection.detail_pipeline import DetailPipelineResult
 
 
 class FakeCrawler:

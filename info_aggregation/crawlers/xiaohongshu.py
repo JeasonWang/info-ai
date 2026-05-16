@@ -9,8 +9,8 @@ from http.cookies import SimpleCookie
 from datetime import datetime
 
 from .base import BaseCrawler
-from services.credential_provider import get_credential
-from services.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
+from services.collection.credential_provider import get_credential
+from services.collection.detail_pipeline import DetailStrategyResult, limit_detail_content, run_detail_pipeline
 
 
 class XiaohongshuCrawler(BaseCrawler):
@@ -149,7 +149,7 @@ class XiaohongshuCrawler(BaseCrawler):
         
         return {
             "source_id": source_id,
-            "title": title[:40],
+            "title": title[:200],
             "content": content[:500],
             "source_url": source_url,
             "event_time": datetime.now(),
@@ -213,12 +213,16 @@ class XiaohongshuCrawler(BaseCrawler):
         candidates = []
         html = self._fetch_detail_html(item)
         if html:
-            initial_state_detail = self._extract_initial_state_detail_from_html(html)
-            if initial_state_detail:
-                candidates.append(initial_state_detail)
-            html_text_detail = self._extract_html_text_detail_from_html(html)
-            if html_text_detail:
-                candidates.append(html_text_detail)
+            shell_detail = self._detect_shell_detail_from_html(html)
+            if shell_detail:
+                candidates.append(shell_detail)
+            else:
+                initial_state_detail = self._extract_initial_state_detail_from_html(html)
+                if initial_state_detail:
+                    candidates.append(initial_state_detail)
+                html_text_detail = self._extract_html_text_detail_from_html(html)
+                if html_text_detail:
+                    candidates.append(html_text_detail)
 
         initial_result = run_detail_pipeline(
             title=item.get("title", ""),
@@ -349,6 +353,22 @@ class XiaohongshuCrawler(BaseCrawler):
         except Exception as e:
             self.logger.warning(f"小红书详情HTML获取失败: {e}")
             return ""
+
+    def _detect_shell_detail_from_html(self, html: str):
+        text = self._extract_text_from_html(html)
+        if not text:
+            return None
+        if self._is_valid_content(text):
+            return None
+        failure_reason = "anti_crawl_blocked" if any(
+            marker in text for marker in ("请先登录", "登录后查看", "验证后继续访问", "滑块验证")
+        ) else "shell_page"
+        return DetailStrategyResult(
+            strategy="html_shell_diagnostic",
+            content=text[:1000],
+            failure_reason=failure_reason,
+            matched_rules=[failure_reason],
+        )
 
     def _extract_initial_state_detail_from_html(self, html: str):
         state = self._extract_initial_state(html)

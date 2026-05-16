@@ -9,7 +9,7 @@ from database import (
     Info,
 )
 from scheduler import _record_crawl_run, _sync_crawl_tasks
-from services.data_quality_report import save_data_quality_snapshot
+from services.quality.data_quality_report import save_data_quality_snapshot
 
 
 def test_record_crawl_run_persists_scheduler_metrics(session):

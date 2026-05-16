@@ -17,6 +17,8 @@ type Store interface {
 	GetOverview(ctx context.Context) (Overview, error)
 	ListCrawlRuns(ctx context.Context, limit int) ([]CrawlRunSummary, error)
 	ListChannelHealth(ctx context.Context) ([]ChannelHealth, error)
+	GetChannelQualityReport(ctx context.Context, sampleLimit int) (map[string]any, error)
+	GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error)
 	ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error)
 	ListLowQualityInfos(ctx context.Context, limit int) ([]LowQualityInfo, error)
 	GetDetailJobReport(ctx context.Context, filter DetailJobFilter) (DetailJobReport, error)
@@ -26,13 +28,22 @@ type Store interface {
 	BatchRetryDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error)
 	BatchCancelDetailJobs(ctx context.Context, filter DetailJobFilter) (ActionResult, error)
 	ListCrawlTasks(ctx context.Context) ([]CrawlTask, error)
+	UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error
 	ListCategories(ctx context.Context) ([]Category, error)
 	CreateCategory(ctx context.Context, payload CategoryPayload) (Category, error)
 	UpdateCategory(ctx context.Context, id int64, payload CategoryPayload) (Category, error)
 	ListChannels(ctx context.Context) ([]Channel, error)
 	CreateChannel(ctx context.Context, payload ChannelPayload) (Channel, error)
 	UpdateChannel(ctx context.Context, id int64, payload ChannelPayload) (Channel, error)
+	ListLLMModelConfigs(ctx context.Context) (any, error)
+	CreateLLMModelConfig(ctx context.Context, payload map[string]any) (any, error)
+	UpdateLLMModelConfig(ctx context.Context, id int64, payload map[string]any) (any, error)
+	GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
+	UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error)
+	DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error)
 	ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error)
+	GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error)
+	GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error)
 }
 
 type Service struct {
@@ -171,15 +182,23 @@ type DetailJobFilter struct {
 }
 
 type CrawlTask struct {
-	TaskCode      string `json:"task_code"`
-	TaskName      string `json:"task_name"`
-	ChannelCode   string `json:"channel_code"`
-	ChannelName   string `json:"channel_name"`
-	ScheduleType  string `json:"schedule_type"`
-	ScheduleValue string `json:"schedule_value"`
-	Status        string `json:"status"`
-	LastRunAt     string `json:"last_run_at"`
-	NextRunAt     string `json:"next_run_at"`
+	TaskCode                 string `json:"task_code"`
+	TaskName                 string `json:"task_name"`
+	ChannelID                int64  `json:"channel_id"`
+	ChannelCode              string `json:"channel_code"`
+	ChannelName              string `json:"channel_name"`
+	ScheduleType             string `json:"schedule_type"`
+	ScheduleValue            string `json:"schedule_value"`
+	Status                   string `json:"status"`
+	EffectiveIntervalMinutes int    `json:"effective_interval_minutes"`
+	IsActive                 int    `json:"is_active"`
+	LastRunAt                string `json:"last_run_at"`
+	NextRunAt                string `json:"next_run_at"`
+}
+
+type CrawlTaskConfigPayload struct {
+	EffectiveIntervalMinutes int `json:"effective_interval_minutes"`
+	IsActive                 int `json:"is_active"`
 }
 
 type Category struct {
@@ -215,6 +234,8 @@ type Channel struct {
 	IsActive                 int    `json:"is_active"`
 	CreatedAt                string `json:"created_at"`
 	UpdatedAt                string `json:"updated_at"`
+	CookieStatus             string `json:"cookie_status"`
+	RequiresCredential       bool   `json:"requires_credential"`
 }
 
 type ChannelPayload struct {
@@ -232,6 +253,52 @@ type ChannelPayload struct {
 	IsActive                 int    `json:"is_active"`
 }
 
+type LLMModelConfigPayload struct {
+	ProviderName   string `json:"provider_name"`
+	ProviderCode   string `json:"provider_code"`
+	BaseURL        string `json:"base_url"`
+	APIKey         string `json:"api_key"`
+	ModelName      string `json:"model_name"`
+	IsEnabled      int    `json:"is_enabled"`
+	DailyCallLimit int    `json:"daily_call_limit"`
+	DailyCallCount int    `json:"daily_call_count"`
+	Priority       int    `json:"priority"`
+}
+
+type LLMChatTestPayload struct {
+	ConfigID       int64  `json:"config_id"`
+	Prompt         string `json:"prompt"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
+type LLMChatPayload struct {
+	ConfigID       int64  `json:"config_id"`
+	Message        string `json:"message"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
+type ChannelCredentialPayload struct {
+	Cookies          string         `json:"cookies"`
+	ExtraCredentials map[string]any `json:"extra_credentials"`
+	UpdatedBy        string         `json:"updated_by"`
+}
+
+type ChannelCredentialInfo struct {
+	ChannelCode      string         `json:"channel_code"`
+	CookieConfigured bool           `json:"cookie_configured"`
+	CookiePreview    string         `json:"cookie_preview"`
+	CookieStatus     string         `json:"cookie_status"`
+	ExtraCredentials map[string]any `json:"extra_credentials"`
+	UpdatedAt        string         `json:"updated_at"`
+	UpdatedBy        string         `json:"updated_by"`
+}
+
+type CredentialTestResult struct {
+	ChannelCode  string `json:"channel_code"`
+	Success      bool   `json:"success"`
+	ResponseCode int    `json:"response_code"`
+}
+
 type AuditLog struct {
 	ID          int64  `json:"id"`
 	AdminUserID int64  `json:"admin_user_id"`
@@ -241,6 +308,49 @@ type AuditLog struct {
 	TargetID    string `json:"target_id"`
 	IPAddress   string `json:"ip_address"`
 	CreatedAt   string `json:"created_at"`
+}
+
+// 事件分析溯源相关类型
+type AnalysisRun struct {
+	RunID           int64   `json:"run_id"`
+	AnalysisVersion string  `json:"analysis_version"`
+	Mode            string  `json:"mode"`
+	Provider        string  `json:"provider"`
+	ModelName       string  `json:"model_name"`
+	Status          string  `json:"status"`
+	InputItemCount  int     `json:"input_item_count"`
+	QualityScore    float64 `json:"quality_score"`
+	Confidence      float64 `json:"confidence"`
+	FallbackUsed    bool    `json:"fallback_used"`
+	FailureReason   string  `json:"failure_reason"`
+	StartedAt       string  `json:"started_at"`
+	FinishedAt      string  `json:"finished_at"`
+	CreatedAt       string  `json:"created_at"`
+}
+
+type AnalysisSource struct {
+	SourceID     int64  `json:"source_id"`
+	InfoID       int64  `json:"info_id"`
+	Title        string `json:"title"`
+	Role         string `json:"role"`
+	Weight       int    `json:"weight"`
+	QualityScore int    `json:"quality_score"`
+	ChannelName  string `json:"channel_name"`
+	SourceURL    string `json:"source_url"`
+	EventTime    string `json:"event_time"`
+}
+
+type EventAnalysisRunsResult struct {
+	EventID    int64         `json:"event_id"`
+	EventTitle string        `json:"event_title"`
+	Runs       []AnalysisRun `json:"runs"`
+}
+
+type EventAnalysisSourcesResult struct {
+	EventID    int64            `json:"event_id"`
+	EventTitle string           `json:"event_title"`
+	Run        AnalysisRun      `json:"run"`
+	Sources    []AnalysisSource `json:"sources"`
 }
 
 func NewService(store Store) *Service {
@@ -279,7 +389,106 @@ func (s *Service) GetChannelQualityReport(ctx context.Context, sampleLimit int) 
 	if sampleLimit > 20 {
 		sampleLimit = 20
 	}
-	return s.runner.GetChannelQualityReport(ctx, sampleLimit)
+	return s.store.GetChannelQualityReport(ctx, sampleLimit)
+}
+
+func (s *Service) GetEventAnalysisQualityReport(ctx context.Context, limit int) (map[string]any, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.store.GetEventAnalysisQualityReport(ctx, limit)
+}
+
+func (s *Service) ListLLMModelConfigs(ctx context.Context) (any, error) {
+	return s.store.ListLLMModelConfigs(ctx)
+}
+
+func (s *Service) CreateLLMModelConfig(ctx context.Context, payload LLMModelConfigPayload) (any, error) {
+	normalized, err := normalizeLLMModelConfigPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.CreateLLMModelConfig(ctx, normalized)
+}
+
+func (s *Service) UpdateLLMModelConfig(ctx context.Context, id int64, payload LLMModelConfigPayload) (any, error) {
+	if id <= 0 {
+		return nil, ErrInvalidInput
+	}
+	normalized, err := normalizeLLMModelConfigPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.UpdateLLMModelConfig(ctx, id, normalized)
+}
+
+func (s *Service) TestLLMChat(ctx context.Context, payload LLMChatTestPayload) (map[string]any, error) {
+	normalized := payload
+	normalized.Prompt = strings.TrimSpace(normalized.Prompt)
+	if normalized.Prompt == "" {
+		normalized.Prompt = "请返回JSON：{\"ok\":true,\"summary\":\"大模型连接正常\"}"
+	}
+	if normalized.TimeoutSeconds <= 0 {
+		normalized.TimeoutSeconds = 180
+	}
+	if normalized.TimeoutSeconds < 10 {
+		normalized.TimeoutSeconds = 10
+	}
+	if normalized.TimeoutSeconds > 600 {
+		normalized.TimeoutSeconds = 600
+	}
+	return s.runner.TestLLMChat(ctx, normalized)
+}
+
+func (s *Service) ChatLLM(ctx context.Context, payload LLMChatPayload) (map[string]any, error) {
+	normalized := payload
+	normalized.Message = strings.TrimSpace(normalized.Message)
+	if normalized.Message == "" {
+		return nil, ErrInvalidInput
+	}
+	if normalized.TimeoutSeconds <= 0 {
+		normalized.TimeoutSeconds = 240
+	}
+	if normalized.TimeoutSeconds < 10 {
+		normalized.TimeoutSeconds = 10
+	}
+	if normalized.TimeoutSeconds > 600 {
+		normalized.TimeoutSeconds = 600
+	}
+	return s.runner.ChatLLM(ctx, normalized)
+}
+
+func (s *Service) EnqueueEventAnalysisDetailJobs(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.runner.EnqueueEventAnalysisDetailJobs(ctx, limit)
+}
+
+func (s *Service) RebuildStaleEventAnalysis(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	return s.runner.RebuildStaleEventAnalysis(ctx, limit)
+}
+
+func (s *Service) PrioritizeWeakSourceGovernance(ctx context.Context, limit int) (ActionResult, error) {
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.runner.PrioritizeWeakSourceGovernance(ctx, limit)
 }
 
 func (s *Service) ListQualitySnapshots(ctx context.Context, limit int) ([]QualitySnapshot, error) {
@@ -360,6 +569,20 @@ func (s *Service) ListCrawlTasks(ctx context.Context) ([]CrawlTask, error) {
 	return s.store.ListCrawlTasks(ctx)
 }
 
+func (s *Service) UpdateCrawlTaskConfig(ctx context.Context, channelCode string, payload CrawlTaskConfigPayload) error {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" {
+		return ErrInvalidInput
+	}
+	if payload.EffectiveIntervalMinutes < 1 {
+		return ErrInvalidInput
+	}
+	if payload.IsActive != 0 && payload.IsActive != 1 {
+		return ErrInvalidInput
+	}
+	return s.store.UpdateCrawlTaskConfig(ctx, channelCode, payload)
+}
+
 func (s *Service) ListCategories(ctx context.Context) ([]Category, error) {
 	return s.store.ListCategories(ctx)
 }
@@ -416,6 +639,66 @@ func (s *Service) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, err
 	return s.store.ListAuditLogs(ctx, limit)
 }
 
+func (s *Service) GetChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	return s.store.GetChannelCredentials(ctx, channelCode)
+}
+
+func (s *Service) UpdateChannelCredentials(ctx context.Context, channelCode string, payload ChannelCredentialPayload) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	payload.UpdatedBy = strings.TrimSpace(payload.UpdatedBy)
+	if payload.UpdatedBy == "" {
+		payload.UpdatedBy = "admin"
+	}
+	result, err := s.store.UpdateChannelCredentials(ctx, channelCode, payload)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.runner.InvalidateCredentials(ctx, channelCode)
+	return result, nil
+}
+
+func (s *Service) TestChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	return s.runner.TestChannelCredentials(ctx, channelCode)
+}
+
+func (s *Service) DeleteChannelCredentials(ctx context.Context, channelCode string) (map[string]any, error) {
+	channelCode = strings.TrimSpace(channelCode)
+	if channelCode == "" || len([]rune(channelCode)) > 80 {
+		return nil, ErrInvalidInput
+	}
+	result, err := s.store.DeleteChannelCredentials(ctx, channelCode)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.runner.InvalidateCredentials(ctx, channelCode)
+	return result, nil
+}
+
+func (s *Service) GetEventAnalysisRuns(ctx context.Context, eventID int64) (EventAnalysisRunsResult, error) {
+	if eventID < 1 {
+		return EventAnalysisRunsResult{}, ErrInvalidInput
+	}
+	return s.store.GetEventAnalysisRuns(ctx, eventID)
+}
+
+func (s *Service) GetEventAnalysisSources(ctx context.Context, eventID int64, runID int64) (EventAnalysisSourcesResult, error) {
+	if eventID < 1 || runID < 1 {
+		return EventAnalysisSourcesResult{}, ErrInvalidInput
+	}
+	return s.store.GetEventAnalysisSources(ctx, eventID, runID)
+}
+
 func (s *Service) TriggerCrawl(ctx context.Context, channelCode string) (ActionResult, error) {
 	channelCode = strings.TrimSpace(channelCode)
 	if channelCode == "" || len([]rune(channelCode)) > 80 {
@@ -470,6 +753,9 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 	if payload.BaseIntervalMinutes == 0 {
 		payload.BaseIntervalMinutes = payload.CrawlInterval
 	}
+	if payload.CrawlInterval == 0 {
+		payload.CrawlInterval = payload.BaseIntervalMinutes
+	}
 	if payload.HotIntervalMinutes == 0 {
 		payload.HotIntervalMinutes = 10
 	}
@@ -482,7 +768,7 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 	if payload.EffectiveIntervalMinutes == 0 {
 		payload.EffectiveIntervalMinutes = payload.CrawlInterval
 	}
-	if payload.Name == "" || payload.Code == "" || payload.CategoryID < 1 || payload.CrawlInterval < 1 {
+	if payload.Name == "" || payload.Code == "" || payload.CategoryID < 1 || payload.BaseIntervalMinutes < 1 {
 		return ChannelPayload{}, ErrInvalidInput
 	}
 	if payload.BaseIntervalMinutes < 1 || payload.HotIntervalMinutes < 1 || payload.MinIntervalMinutes < 1 || payload.MaxIntervalMinutes < 1 || payload.EffectiveIntervalMinutes < 1 {
@@ -501,4 +787,34 @@ func normalizeChannelPayload(payload ChannelPayload) (ChannelPayload, error) {
 		return ChannelPayload{}, ErrInvalidInput
 	}
 	return payload, nil
+}
+
+func normalizeLLMModelConfigPayload(payload LLMModelConfigPayload) (map[string]any, error) {
+	payload.ProviderName = strings.TrimSpace(payload.ProviderName)
+	payload.ProviderCode = strings.TrimSpace(payload.ProviderCode)
+	payload.BaseURL = strings.TrimSpace(payload.BaseURL)
+	payload.ModelName = strings.TrimSpace(payload.ModelName)
+	if payload.ProviderName == "" || payload.ProviderCode == "" || payload.ModelName == "" {
+		return nil, ErrInvalidInput
+	}
+	if payload.IsEnabled != 0 && payload.IsEnabled != 1 {
+		return nil, ErrInvalidInput
+	}
+	if payload.DailyCallLimit < 0 || payload.DailyCallCount < 0 || payload.Priority < 1 {
+		return nil, ErrInvalidInput
+	}
+	if len([]rune(payload.ProviderName)) > 50 || len([]rune(payload.ProviderCode)) > 50 || len([]rune(payload.BaseURL)) > 255 || len([]rune(payload.ModelName)) > 100 || len([]rune(payload.APIKey)) > 500 {
+		return nil, ErrInvalidInput
+	}
+	return map[string]any{
+		"provider_name":    payload.ProviderName,
+		"provider_code":    payload.ProviderCode,
+		"base_url":         payload.BaseURL,
+		"api_key":          payload.APIKey,
+		"model_name":       payload.ModelName,
+		"is_enabled":       payload.IsEnabled,
+		"daily_call_limit": payload.DailyCallLimit,
+		"daily_call_count": payload.DailyCallCount,
+		"priority":         payload.Priority,
+	}, nil
 }

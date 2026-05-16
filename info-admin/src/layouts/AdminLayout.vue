@@ -29,6 +29,7 @@ const navGroups = [
     items: [
       { to: '/data-quality/report', label: '渠道质量' },
       { to: '/data-quality/snapshots', label: '质量快照' },
+      { to: '/data-quality/event-analysis', label: '事件分析质量' },
       { to: '/data-quality/low-quality', label: '低质量内容' },
       { to: '/data-quality/actions', label: '治理工具' },
     ],
@@ -37,7 +38,9 @@ const navGroups = [
     title: '系统配置',
     items: [
       { to: '/channels', label: '渠道管理' },
+      { to: '/credentials', label: '凭证管理' },
       { to: '/categories', label: '分类管理' },
+      { to: '/llm-models', label: '大模型配置' },
       { to: '/audit-logs', label: '审计日志' },
     ],
   },
@@ -71,7 +74,11 @@ async function logout() {
     <section class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">首页 / {{ currentTitle }}</p>
+          <nav class="breadcrumb">
+            <RouterLink to="/dashboard" class="breadcrumb-link">首页</RouterLink>
+            <span class="breadcrumb-sep">/</span>
+            <span>{{ currentTitle }}</span>
+          </nav>
           <h2>{{ currentTitle }}</h2>
         </div>
         <button class="ghost-button" type="button" @click="logout">

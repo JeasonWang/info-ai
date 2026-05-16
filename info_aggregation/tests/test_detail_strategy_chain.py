@@ -1,5 +1,5 @@
-from services.detail_pipeline import DetailStrategyResult
-from services.detail_strategy_chain import DetailContext, DetailStrategyChain
+from services.collection.detail_pipeline import DetailStrategyResult
+from services.collection.detail_strategy_chain import DetailContext, DetailStrategyChain
 
 
 class StaticStrategy:

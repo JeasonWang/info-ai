@@ -41,6 +41,10 @@ VITE_API_BASE_URL=/api
 - `POST /api/v1/admin/refresh-quality`
 - `POST /api/v1/admin/archive-low-quality`
 - `POST /api/v1/admin/archive-duplicate-titles`
+- `POST /api/v1/admin/retry-low-quality-details`
+- `POST /api/v1/admin/event-analysis-detail-jobs`
+- `POST /api/v1/admin/rebuild-stale-event-analysis`
+- `POST /api/v1/admin/prioritize-weak-source-governance`
 
 ## 测试和构建
 

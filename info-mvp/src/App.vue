@@ -84,12 +84,25 @@ page {
   --text-xl: 36rpx;
   --text-2xl: 44rpx;
 
-  /* Category accent colors (cycled for strips) */
+  /* Category colors (semantic) */
   --cat-blue: #f05a3d;
   --cat-purple: #b85c38;
   --cat-teal: #0f9f78;
   --cat-orange: #f6a23a;
   --cat-rose: #ef476f;
+  --cat-tech: #4A90D9;
+  --cat-finance: #F5A623;
+  --cat-sport: #34C759;
+  --cat-society: #D0021B;
+  --cat-ent: #BD10E0;
+  --cat-global: #50E3C2;
+
+  /* Evolution stage colors */
+  --stage-emerging: #34C759;
+  --stage-spreading: #F5A623;
+  --stage-confirmed: #4A90D9;
+  --stage-reversal: #D0021B;
+  --stage-cooling: #8b7568;
 
   /* Transitions */
   --transition-fast: 0.15s ease;
