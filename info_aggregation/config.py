@@ -12,11 +12,11 @@ APP_TIMEZONE = os.getenv("APP_TIMEZONE", os.getenv("TZ", "Asia/Shanghai"))
 # ==================== 数据库配置 ====================
 DEFAULT_DB_TYPE = "sqlite" if APP_ENV == "test" else "mysql"
 DB_TYPE = os.getenv("DB_TYPE", DEFAULT_DB_TYPE)
-AUTO_INIT_DB_SCHEMA = os.getenv("AUTO_INIT_DB_SCHEMA", "1" if APP_ENV in {"local", "test"} else "0") == "1"
+AUTO_INIT_DB_SCHEMA = os.getenv("AUTO_INIT_DB_SCHEMA", "0" if APP_ENV in {"local", "test"} else "0") == "1"
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "root1234")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "123456")
 DB_NAME = os.getenv("DB_NAME", "info-max")
 
 if DB_TYPE == "sqlite":

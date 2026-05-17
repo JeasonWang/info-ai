@@ -3,7 +3,8 @@
 使用SQLAlchemy ORM定义渠道表、分类表、信息主表
 """
 from datetime import date, datetime
-from sqlalchemy import Boolean, Column, Date, Integer, String, Text, DateTime, ForeignKey, Float, Index, UniqueConstraint, JSON
+from sqlalchemy import Boolean, Column, Date, Integer, String, Text, DateTime, ForeignKey, Float, Index, \
+    UniqueConstraint, JSON, BigInteger
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
