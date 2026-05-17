@@ -1,4 +1,4 @@
-package transporthttp
+﻿package transporthttp
 
 import (
 	"net/http"
@@ -12,7 +12,7 @@ import (
 	"info-serve/internal/user"
 )
 
-// Services 是 HTTP 层依赖的业务服务集合。
+// Services 鏄?HTTP 灞備緷璧栫殑涓氬姟鏈嶅姟闆嗗悎銆?
 type Services struct {
 	Auth    *auth.Service
 	Events  *events.Service
@@ -22,7 +22,7 @@ type Services struct {
 	User    *user.Service
 }
 
-// NewRouter 创建 info-serve HTTP 路由。
+// NewRouter 鍒涘缓 info-serve HTTP 璺敱銆?
 func NewRouter(services Services) http.Handler {
 	authService := resolveAuthService(services.Auth)
 	eventService := resolveEventService(services.Events)
@@ -63,6 +63,8 @@ func registerAPIRoutes(
 	mux.HandleFunc("GET "+prefix+"/infos", contentHandler.Infos)
 	mux.HandleFunc("GET "+prefix+"/infos/", contentHandler.InfoDetail)
 	mux.HandleFunc("GET "+prefix+"/stats", contentHandler.Stats)
+	mux.HandleFunc("GET "+prefix+"/daily-briefs", contentHandler.DailyBriefs)
+	mux.HandleFunc("GET "+prefix+"/daily-briefs/{date}", contentHandler.DailyBriefByDate)
 	mux.HandleFunc("POST "+prefix+"/auth/register", authHandler.Register)
 	mux.HandleFunc("POST "+prefix+"/auth/login", authHandler.Login)
 	mux.HandleFunc("POST "+prefix+"/auth/logout", authHandler.Logout)

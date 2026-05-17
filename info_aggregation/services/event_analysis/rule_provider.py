@@ -1,4 +1,4 @@
-from collections import Counter
+﻿from collections import Counter
 import re
 
 from services.collection.acquisition_quality import build_acquisition_quality_profile
@@ -224,17 +224,80 @@ def _build_one_line(items) -> str:
     return natural_clip(sentence, 120)
 
 
+
 def _build_what_happened(items) -> str:
-    lead = items[0]
-    if is_low_value_content(lead.title or "", lead.content or ""):
-        return "当前仍是热度线索，缺少完整事实来源支撑，暂不宜得出确定结论。"
-    sentences = split_sentences(remove_title_prefix(lead.content or "", lead.title or ""))
-    meaningful_sentences = [sentence for sentence in sentences if not is_low_value_content(lead.title or "", sentence)]
-    summary = "".join(meaningful_sentences[:2]) if meaningful_sentences else _best_sentence(lead)
-    keywords = _top_values(items, "tech_keywords", limit=2)
-    if keywords and all(keyword not in summary for keyword in keywords):
-        summary += f" 当前讨论还围绕{'、'.join(keywords)}展开。"
-    return natural_clip(summary, 360)
+    """Build a logically organized event narrative with temporal connectors."""
+    if not items:
+        return "暂无足够信息描述事件经过。"
+    seen = set()
+    sentences: list[tuple[str, str]] = []  # (time_label, sentence)
+    for item in items[:8]:
+        sentence = _best_sentence(item)
+        if not sentence or sentence in seen:
+            continue
+        seen.add(sentence)
+        time_label = (item.event_time or item.created_at).strftime("%m月%d日")
+        sentences.append((time_label, sentence))
+    if not sentences:
+        return _title_based_event_summary(items[0])
+    if len(sentences) == 1:
+        return ensure_sentence_end(sentences[0][1])
+    connectors = ["首先", "随后", "此后", "进而", "最新消息显示"]
+    parts: list[str] = []
+    for i, (time_label, sentence) in enumerate(sentences):
+        if i == 0:
+            parts.append(f"{time_label}，{sentence.rstrip("。！？")}")
+        elif i < len(sentences) - 1:
+            connector = connectors[min(i, len(connectors) - 1)]
+            parts.append(f"{connector}，{sentence.rstrip("。！？")}")
+        else:
+            connector = "截至目前"
+            parts.append(f"{connector}，{sentence.rstrip("。！？")}")
+    return ensure_sentence_end("；".join(parts))
+
+
+def _infer_impact_tags(items) -> list[str]:
+    """Infer semantic impact tags from item titles, content, entities and keywords."""
+    tags: list[str] = []
+    all_text = " ".join(
+        f"{(item.title or '')} {(item.content or '')}"
+        for item in items
+    )
+    all_entities = ",".join(getattr(item, "tech_entities", "") or "" for item in items)
+    all_keywords = ",".join(getattr(item, "tech_keywords", "") or "" for item in items)
+
+    # Financial impact
+    financial_kw = ("股价", "市值", "营收", "利润", "融资", "上市", "财报", "IPO", "破产", "收购", "并购")
+    if any(kw in all_text for kw in financial_kw):
+        tags.append("涉及经济影响")
+
+    # Industry landscape
+    company_suffixes = ("公司", "集团", "科技", "有限")
+    if any(suf in all_text for suf in company_suffixes) or any(suf in all_entities for suf in company_suffixes):
+        tags.append("涉及行业格局")
+
+    # Public safety
+    accident_kw = ("事故", "伤亡", "爆炸", "火灾", "救援", "失踪")
+    location_patterns = ("省", "市", "区", "县", "镇", "路", "街")
+    if any(kw in all_text for kw in accident_kw) and any(loc in all_text for loc in location_patterns):
+        tags.append("涉及公共安全")
+
+    # Policy & regulation
+    policy_kw = ("政策", "法规", "监管", "禁令", "批准", "制裁", "规范")
+    if any(kw in all_text for kw in policy_kw) or any(kw in all_keywords for kw in policy_kw):
+        tags.append("涉及政策监管")
+
+    # Tech innovation
+    tech_kw = ("发布", "突破", "首发", "创新", "里程碑", "首次")
+    if any(kw in all_text for kw in tech_kw) or any(kw in all_keywords for kw in tech_kw):
+        tags.append("涉及技术突破")
+
+    # Social attention
+    social_kw = ("舆论", "争议", "热搜", "刷屏", "网友", "质疑", "抵制")
+    if any(kw in all_text for kw in social_kw) or any(kw in all_keywords for kw in social_kw):
+        tags.append("引发社会关注")
+
+    return tags
 
 
 def _build_why_it_matters(items) -> str:
@@ -242,10 +305,17 @@ def _build_why_it_matters(items) -> str:
     entities = _top_values(items, "tech_entities", limit=2)
     keywords = _top_values(items, "tech_keywords", limit=2)
     if entities and keywords:
-        return ensure_sentence_end(f"事件已覆盖{count}个来源，核心实体包括{'、'.join(entities)}，讨论重点落在{'、'.join(keywords)}，具备持续观察价值")
-    if keywords:
-        return ensure_sentence_end(f"事件已覆盖{count}个来源，讨论集中在{'、'.join(keywords)}，说明相关影响正在从单点信息扩散")
-    return ensure_sentence_end(f"事件已覆盖{count}个来源，当前更适合结合后续来源持续验证其真实影响")
+        base = f"事件已覆盖{count}个来源，核心实体包括{'、'.join(entities)}，讨论重点落在{'、'.join(keywords)}，具备持续观察价值"
+    elif keywords:
+        base = f"事件已覆盖{count}个来源，讨论集中在{'、'.join(keywords)}，说明相关影响正在从单点信息扩散"
+    else:
+        base = f"事件已覆盖{count}个来源，当前更适合结合后续来源持续验证其真实影响"
+
+    tags = _infer_impact_tags(items)
+    if tags:
+        tag_text = "、".join(tags)
+        return ensure_sentence_end(f"{base}。事件{tag_text}")
+    return ensure_sentence_end(base)
 
 
 def _build_latest_update(chronological_items) -> str:
@@ -309,12 +379,23 @@ def _build_source_compare(items) -> str:
     return "当前来源渠道信息不足，暂时无法形成可靠的来源对比。"
 
 
+
 def _confidence_text(items) -> tuple[str, float, float]:
+    """Improved confidence scoring with channel credibility weighting."""
     profiles = [build_acquisition_quality_profile(item) for item in items]
+    TIER_WEIGHTS = {1: 1.5, 2: 1.0, 3: 0.6}
     count = _source_count(items)
-    usable = sum(1 for profile in profiles if profile.usable)
-    complete = sum(1 for profile in profiles if profile.status == "complete" and profile.usable)
-    avg = round(sum(profile.completeness_score for profile in profiles) / max(len(profiles), 1))
+    usable = sum(1 for p in profiles if p.usable)
+    complete = sum(1 for p in profiles if p.status == "complete" and p.usable)
+    total_weight = 0.0
+    weighted_score = 0.0
+    for item in items:
+        tier = getattr(item.channel, "credibility_tier", 2) if getattr(item, "channel", None) else 2
+        weight = TIER_WEIGHTS.get(tier, 1.0)
+        profile = build_acquisition_quality_profile(item)
+        total_weight += weight
+        weighted_score += profile.completeness_score * weight
+    avg = round(weighted_score / max(total_weight, 1))
     if count >= 3 and complete >= 2 and avg >= 70:
         level, confidence = "高", 0.86
     elif count >= 2 and usable >= 1:
@@ -343,17 +424,27 @@ def _facts(items) -> list[EventFact]:
     return facts
 
 
+
 def _timeline(chronological_items) -> list[TimelinePoint]:
+    """Build timeline points using the timeline builder for better quality."""
+    from .timeline_builder import build_timeline as build_enhanced_timeline
+    timeline = build_enhanced_timeline(
+        items=chronological_items,
+        chronological_items=chronological_items,
+        window_minutes=60,
+    )
     points: list[TimelinePoint] = []
-    for item in chronological_items:
-        summary = _best_sentence(item)
+    for node in timeline.nodes:
         points.append(
             TimelinePoint(
-                occurred_at=item.event_time or item.created_at,
-                summary=natural_clip(summary, 140),
-                source_item_id=item.id,
-                confidence=0.72,
-                evidence={"title": item.title, "url": item.source_url},
+                occurred_at=node.occurred_at,
+                summary=node.summary,
+                source_item_id=node.source_item_ids[0] if node.source_item_ids else None,
+                confidence=node.confidence,
+                evidence=node.evidence,
+                stage_label=node.stage_label,
+                merged_count=node.merged_count,
+                source_channels=node.source_channels,
             )
         )
     return points

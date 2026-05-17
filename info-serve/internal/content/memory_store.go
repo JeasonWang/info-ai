@@ -28,3 +28,11 @@ func (s *MemoryStore) GetInfoDetail(ctx context.Context, id int64) (InfoItem, er
 func (s *MemoryStore) GetStats(ctx context.Context) (Stats, error) {
 	return Stats{Categories: []CategoryStats{}}, nil
 }
+
+func (s *MemoryStore) GetDailyBriefs(ctx context.Context, limit int, offset int) (DailyBriefPage, error) {
+	return DailyBriefPage{Items: []DailyBriefItem{}}, nil
+}
+
+func (s *MemoryStore) GetDailyBriefByDate(ctx context.Context, date string) (DailyBriefItem, error) {
+	return DailyBriefItem{}, nil
+}

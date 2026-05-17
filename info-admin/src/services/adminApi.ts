@@ -1,4 +1,4 @@
-import { apiRequest } from '@/services/httpClient'
+﻿import { apiRequest } from '@/services/httpClient'
 import { apiV1 } from '@/services/apiPath'
 import type {
   AdminCategory,
@@ -335,4 +335,45 @@ export function getEventAnalysisRuns(eventId: number) {
 
 export function getEventAnalysisSources(eventId: number, runId: number) {
   return apiRequest<EventAnalysisSourcesResult>(apiV1(`/admin/events/${eventId}/analysis-sources?run_id=${runId}`))
+}
+
+export interface DailyBrief {
+  id: number
+  brief_date: string
+  headline: string
+  summary: string
+  content: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DailyBriefListResult {
+  total: number
+  items: DailyBrief[]
+}
+
+export function getDailyBriefs(limit = 20, offset = 0) {
+  return apiRequest<DailyBriefListResult>(apiV1(`/admin/daily-briefs?limit=${limit}&offset=${offset}`))
+}
+
+export function getLatestDailyBrief() {
+  return apiRequest<DailyBrief>(apiV1('/admin/daily-briefs/latest'))
+}
+
+export function getDailyBriefByDate(date: string) {
+  return apiRequest<DailyBrief>(apiV1('/admin/daily-briefs/' + encodeURIComponent(date)))
+}
+
+export function generateDailyBrief() {
+  return apiRequest<{ status: string }>(apiV1('/admin/daily-briefs/generate'), {
+    method: 'POST',
+  })
+}
+
+export function updateDailyBriefStatus(date: string, status: string) {
+  return apiRequest<DailyBrief>(apiV1('/admin/daily-briefs/' + encodeURIComponent(date) + '/status'), {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  })
 }

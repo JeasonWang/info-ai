@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"context"
@@ -263,3 +263,60 @@ ORDER BY c.id ASC`,
 	}
 	return stats, rows.Err()
 }
+
+func (s *ContentMySQLStore) GetDailyBriefs(ctx context.Context, limit int, offset int) (content.DailyBriefPage, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM daily_brief`).Scan(&total); err != nil {
+		return content.DailyBriefPage{}, err
+	}
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, DATE_FORMAT(brief_date, '%Y-%m-%d'),
+		       headline, COALESCE(summary, ''), COALESCE(content, ''),
+		       status,
+		       DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'),
+		       DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s')
+		FROM daily_brief
+		ORDER BY brief_date DESC
+		LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return content.DailyBriefPage{}, err
+	}
+	defer rows.Close()
+	items := []content.DailyBriefItem{}
+	for rows.Next() {
+		var item content.DailyBriefItem
+		if err := rows.Scan(&item.ID, &item.BriefDate, &item.Headline, &item.Summary, &item.Content, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return content.DailyBriefPage{}, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return content.DailyBriefPage{}, err
+	}
+	return content.DailyBriefPage{Total: total, Items: items}, nil
+}
+
+
+func (s *ContentMySQLStore) GetDailyBriefByDate(ctx context.Context, date string) (content.DailyBriefItem, error) {
+	var item content.DailyBriefItem
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT id, DATE_FORMAT(brief_date, '%Y-%m-%d'),
+		       headline, COALESCE(summary, ''), COALESCE(content, ''),
+		       status,
+		       DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'),
+		       DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s')
+		FROM daily_brief
+		WHERE brief_date = ?
+		LIMIT 1`,
+		date,
+	).Scan(&item.ID, &item.BriefDate, &item.Headline, &item.Summary, &item.Content, &item.Status, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		return content.DailyBriefItem{}, err
+	}
+	return item, nil
+}
+

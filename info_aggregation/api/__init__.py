@@ -1365,3 +1365,110 @@ def trigger_crawl(
             "trigger_type": "manual",
         },
     }
+
+
+@public_api_route("get", "/api/admin/daily-briefs")
+def admin_list_daily_briefs(
+    limit: int = Query(20, ge=1, le=100, description="Number of items to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+):
+    """List daily briefs (paginated)."""
+    with get_session() as session:
+        from database import DailyBrief
+        query = session.query(DailyBrief).order_by(DailyBrief.brief_date.desc())
+        total = query.count()
+        items = query.offset(offset).limit(limit).all()
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "total": total,
+                "items": [b.to_dict() for b in items],
+            },
+        }
+
+
+@public_api_route("get", "/api/admin/daily-briefs/latest")
+def admin_latest_daily_brief():
+    """Get the latest daily brief."""
+    with get_session() as session:
+        from database import DailyBrief
+        brief = session.query(DailyBrief).order_by(DailyBrief.brief_date.desc()).first()
+        if not brief:
+            return {
+                "code": 1,
+                "message": "No daily brief found",
+                "data": None,
+            }
+        return {
+            "code": 0,
+            "message": "success",
+            "data": brief.to_dict(),
+        }
+
+
+@public_api_route("get", "/api/admin/daily-briefs/{date}")
+def admin_daily_brief_by_date(date: str):
+    """Get a daily brief by date (YYYY-MM-DD)."""
+    with get_session() as session:
+        from database import DailyBrief
+        brief = session.query(DailyBrief).filter(DailyBrief.brief_date == date).first()
+        if not brief:
+            return {
+                "code": 1,
+                "message": f"Daily brief for {date} not found",
+                "data": None,
+            }
+        return {
+            "code": 0,
+            "message": "success",
+            "data": brief.to_dict(),
+        }
+
+
+class DailyBriefGenerateRequest(BaseModel):
+    pass
+
+
+@public_api_route("post", "/api/admin/daily-briefs/generate")
+def admin_generate_daily_brief(background_tasks: BackgroundTasks):
+    """Manually trigger daily brief generation for today."""
+    from services.daily_brief import generate_daily_brief
+
+    def _run():
+        with get_session() as session:
+            generate_daily_brief(session)
+
+    background_tasks.add_task(_run)
+    return {
+        "code": 0,
+        "message": "Daily brief generation started",
+        "data": {
+            "status": "accepted",
+        },
+    }
+
+
+class DailyBriefStatusUpdate(BaseModel):
+    status: str = Field(..., pattern=r"^(draft|published|archived)$")
+
+
+@public_api_route("put", "/api/admin/daily-briefs/{date}/status")
+def admin_update_daily_brief_status(date: str, body: DailyBriefStatusUpdate):
+    """Update daily brief status (draft/published/archived)."""
+    with get_session() as session:
+        from database import DailyBrief
+        brief = session.query(DailyBrief).filter(DailyBrief.brief_date == date).first()
+        if not brief:
+            return {
+                "code": 1,
+                "message": f"Daily brief for {date} not found",
+                "data": None,
+            }
+        brief.status = body.status
+        session.commit()
+        return {
+            "code": 0,
+            "message": "Status updated",
+            "data": brief.to_dict(),
+        }

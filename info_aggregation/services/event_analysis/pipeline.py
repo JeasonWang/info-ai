@@ -1,13 +1,7 @@
 import logging
 import time
 
-from config import (
-    EVENT_ANALYSIS_ENABLE_LLM,
-    EVENT_ANALYSIS_FALLBACK_TO_RULE,
-    EVENT_ANALYSIS_LLM_RETRY_TIMES,
-    EVENT_ANALYSIS_MODE,
-    EVENT_ANALYSIS_PROVIDER,
-)
+from services.analysis.system_config import get_config, get_config_bool, get_config_int
 
 from .providers import build_llm_provider
 from .providers import build_llm_provider_from_config
@@ -38,15 +32,15 @@ def analyze_event_sources(
     rule_result = normalize_result(rule_result, title=title)
 
     selected_config = select_available_llm_config_independent() if session is not None else None
-    if EVENT_ANALYSIS_MODE == "rule":
+    if get_config("event_analysis_mode", "rule") == "rule":
         return rule_result
-    if session is None and not EVENT_ANALYSIS_ENABLE_LLM:
+    if session is None and not get_config_bool("event_analysis_enable_llm", False):
         return rule_result
     if session is not None and selected_config is None:
         return rule_result
 
     try:
-        provider = build_llm_provider_from_config(selected_config) if selected_config is not None else build_llm_provider(EVENT_ANALYSIS_PROVIDER)
+        provider = build_llm_provider_from_config(selected_config) if selected_config is not None else build_llm_provider(get_config("event_analysis_provider", "openai_compatible"))
         started_at = time.perf_counter()
         llm_result = run_event_analysis_llm(
             provider,
@@ -54,7 +48,7 @@ def analyze_event_sources(
             chronological_items,
             history_context,
             title,
-            EVENT_ANALYSIS_LLM_RETRY_TIMES,
+            get_config_int("event_analysis_llm_retry_times", 2),
             tasks=llm_tasks,
         )
         latency_ms = int((time.perf_counter() - started_at) * 1000)
@@ -70,7 +64,7 @@ def analyze_event_sources(
                 )
             except Exception as log_exc:
                 logger.warning("事件大模型调用成功，但调用日志记录失败: %s", log_exc)
-        llm_result.mode = EVENT_ANALYSIS_MODE
+        llm_result.mode = get_config("event_analysis_mode", "hybrid")
         return llm_result
     except Exception as exc:
         logger.warning("事件大模型分析失败，回退规则分析: %s", exc)
@@ -88,7 +82,7 @@ def analyze_event_sources(
                 )
             except Exception as log_exc:
                 logger.warning("事件大模型调用失败，且失败日志记录失败: %s", log_exc)
-        if not EVENT_ANALYSIS_FALLBACK_TO_RULE:
+        if not get_config_bool("event_analysis_fallback_to_rule", True):
             raise
         rule_result.fallback_used = True
         rule_result.failure_reason = str(exc)[:500]

@@ -84,3 +84,28 @@ func (h *ContentHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	}
 	response.OK(w, result)
 }
+
+func (h *ContentHandler) DailyBriefs(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	result, err := h.service.DailyBriefs(r.Context(), limit, offset)
+	if err != nil {
+		response.InternalServerError(w, "Daily briefs query failed")
+		return
+	}
+	response.OK(w, result)
+}
+
+func (h *ContentHandler) DailyBriefByDate(w http.ResponseWriter, r *http.Request) {
+	date := r.PathValue("date")
+	if date == "" {
+		response.BadRequest(w, "Date parameter is required")
+		return
+	}
+	result, err := h.service.DailyBriefByDate(r.Context(), date)
+	if err != nil {
+		response.NotFound(w, "Daily brief not found")
+		return
+	}
+	response.OK(w, result)
+}

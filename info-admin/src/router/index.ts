@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+﻿import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { requireAdminAuth } from '@/router/guards'
 
 export const routes: RouteRecordRaw[] = [

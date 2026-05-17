@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"crypto/pbkdf2"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
@@ -18,19 +18,12 @@ const (
 	passwordKeyBytes  = 32
 )
 
-// HashPassword 生成带算法、迭代次数、盐值的密码哈希。
-//
-// 第一阶段避免引入外部依赖，使用 Go 标准库 PBKDF2；后续如果统一安全库，
-// 可以在不改变调用方的前提下替换为 bcrypt 或 argon2。
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, passwordSaltBytes)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	key, err := pbkdf2.Key(sha256.New, password, salt, passwordIter, passwordKeyBytes)
-	if err != nil {
-		return "", err
-	}
+	key := pbkdf2.Key([]byte(password), salt, passwordIter, passwordKeyBytes, sha256.New)
 	return fmt.Sprintf(
 		"%s$%d$%s$%s",
 		passwordAlgorithm,
@@ -40,7 +33,6 @@ func HashPassword(password string) (string, error) {
 	), nil
 }
 
-// CheckPasswordHash 使用常量时间比较校验密码，避免时序侧信道。
 func CheckPasswordHash(password string, encoded string) bool {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 4 || parts[0] != passwordAlgorithm {
@@ -59,9 +51,6 @@ func CheckPasswordHash(password string, encoded string) bool {
 	if err != nil {
 		return false
 	}
-	actual, err := pbkdf2.Key(sha256.New, password, salt, iter, len(expected))
-	if err != nil {
-		return false
-	}
+	actual := pbkdf2.Key([]byte(password), salt, iter, len(expected), sha256.New)
 	return subtle.ConstantTimeCompare(actual, expected) == 1
 }

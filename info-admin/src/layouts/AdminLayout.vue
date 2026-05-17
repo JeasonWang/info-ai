@@ -42,6 +42,7 @@ const navGroups = [
       { to: '/categories', label: '分类管理' },
       { to: '/llm-models', label: '大模型配置' },
       { to: '/audit-logs', label: '审计日志' },
+      { to: '/daily-brief', label: 'Daily Brief' },
     ],
   },
 ]

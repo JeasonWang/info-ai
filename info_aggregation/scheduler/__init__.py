@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import or_
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -37,6 +38,8 @@ from services.collection.detail_jobs import enqueue_low_quality_detail_jobs
 from services.collection.detail_job_worker import crawler_detail_runner, process_pending_detail_jobs
 from services.collection.detail_pipeline import DetailStrategyResult, run_detail_pipeline
 from services.analysis.event_analysis_reanalysis import rebuild_stale_event_analysis
+from services.daily_brief.tasks import generate_daily_brief as _generate_daily_brief
+from services.analysis.system_config import get_config_bool, get_config_int
 
 logger = logging.getLogger(__name__)
 

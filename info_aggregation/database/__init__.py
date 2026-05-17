@@ -4,6 +4,7 @@ from .models import (
     Channel,
     CrawlRunLog,
     CrawlTask,
+    DailyBrief,
     DataQualitySnapshot,
     DetailJob,
     Event,
@@ -21,6 +22,7 @@ from .models import (
     LLMModelConfig,
     LLMCallLog,
     RebuildCheckpoint,
+    SystemConfig,
 )
 from .session import configure_engine, get_session, init_db
 
@@ -30,6 +32,7 @@ __all__ = [
     "Channel",
     "CrawlRunLog",
     "CrawlTask",
+    "DailyBrief",
     "DataQualitySnapshot",
     "DetailJob",
     "Event",
@@ -47,6 +50,7 @@ __all__ = [
     "LLMModelConfig",
     "LLMCallLog",
     "RebuildCheckpoint",
+    "SystemConfig",
     "configure_engine",
     "get_session",
     "init_db",

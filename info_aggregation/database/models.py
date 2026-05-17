@@ -59,6 +59,7 @@ class Channel(Base):
     effective_interval_minutes = Column(Integer, default=60, comment="当前实际生效采集间隔(分钟)")
     schedule_version = Column(Integer, default=1, comment="调度配置版本，用于调度器热更新")
     is_active = Column(Integer, default=1, comment="是否启用 1-启用 0-禁用")
+    credibility_tier = Column(Integer, default=2, comment="1=official/authority, 2=professional media/tech, 3=social/UGC")
     cookies = Column(Text, default="", comment="采集Cookie凭证(JSON格式)")
     extra_credentials = Column(JSON, default=None, comment="扩展凭证(如知乎zse_93/zse_96)")
     credentials_updated_at = Column(DateTime, default=None, comment="凭证最后更新时间")
@@ -618,4 +619,46 @@ class DataQualitySnapshot(Base):
 
     __table_args__ = (
         Index("idx_data_quality_category_time", "category_code", "snapshot_at"),
+    )
+
+class SystemConfig(Base):
+    """系统配置表：存储业务可动态修改的配置项，优先于.env。"""
+
+    __tablename__ = "system_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="配置ID")
+    config_key = Column(String(80), nullable=False, unique=True, comment="配置键")
+    config_value = Column(Text, nullable=False, comment="配置值")
+    value_type = Column(String(20), nullable=False, default="string", comment="值类型: string/int/float/bool/json")
+    description = Column(String(200), default="", comment="配置描述")
+    updated_by = Column(String(50), default="", comment="最后更新人")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    def __repr__(self):
+        return f"<SystemConfig(id={self.id}, key='{self.config_key}')>"
+
+
+class DailyBrief(Base):
+    """每日情报简报"""
+
+    __tablename__ = "daily_brief"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    brief_date = Column(Date, nullable=False, unique=True, comment="简报日期")
+    headline = Column(String(200), nullable=False, default="", comment="简报标题")
+    content_md = Column(Text, comment="Markdown格式内容")
+    content_html = Column(Text, comment="HTML格式内容(公众号用)")
+    content_text = Column(Text, comment="纯文本内容")
+    event_ids = Column(JSON, comment="包含的事件ID列表")
+    event_count = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="draft", comment="draft/published/archived")
+    model_name = Column(String(100), default="", comment="生成用的模型")
+    llm_config_id = Column(Integer, default=None, comment="LLM配置ID")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_daily_brief_date", "brief_date"),
+        Index("idx_daily_brief_status", "status", "brief_date"),
     )
