@@ -288,7 +288,7 @@ func (s *ContentMySQLStore) GetDailyBriefs(ctx context.Context, limit int, offse
 	items := []content.DailyBriefItem{}
 	for rows.Next() {
 		var item content.DailyBriefItem
-		if err := rows.Scan(&item.ID, &item.BriefDate, &item.Headline, &item.Summary, &item.Content, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BriefDate, &item.Headline, &item.ContentMd, &item.ContentHtml, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return content.DailyBriefPage{}, err
 		}
 		items = append(items, item)
@@ -313,7 +313,7 @@ func (s *ContentMySQLStore) GetDailyBriefByDate(ctx context.Context, date string
 		WHERE brief_date = ?
 		LIMIT 1`,
 		date,
-	).Scan(&item.ID, &item.BriefDate, &item.Headline, &item.Summary, &item.Content, &item.Status, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.BriefDate, &item.Headline, &item.ContentMd, &item.ContentHtml, &item.Status, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return content.DailyBriefItem{}, err
 	}

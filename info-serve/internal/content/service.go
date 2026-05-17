@@ -5,18 +5,18 @@ import (
 	"strings"
 )
 
-// Store 瀹氫箟鐢ㄦ埛渚у唴瀹硅鍙栨墍闇€鐨勬暟鎹闂兘鍔涖€?
+// Store 定义用户侧内容读取所需的数据访问能力。
 type Store interface {
- 	ListCategories(ctx context.Context) ([]Category, error)
- 	ListChannels(ctx context.Context, categoryID int64) ([]Channel, error)
- 	ListInfos(ctx context.Context, params ListInfoParams) (InfoPage, error)
- 	GetInfoDetail(ctx context.Context, id int64) (InfoItem, error)
- 	GetStats(ctx context.Context) (Stats, error)
- 	GetDailyBriefs(ctx context.Context, limit int, offset int) (DailyBriefPage, error)
- 	GetDailyBriefByDate(ctx context.Context, date string) (DailyBriefItem, error)
+	ListCategories(ctx context.Context) ([]Category, error)
+	ListChannels(ctx context.Context, categoryID int64) ([]Channel, error)
+	ListInfos(ctx context.Context, params ListInfoParams) (InfoPage, error)
+	GetInfoDetail(ctx context.Context, id int64) (InfoItem, error)
+	GetStats(ctx context.Context) (Stats, error)
+	GetDailyBriefs(ctx context.Context, limit int, offset int) (DailyBriefPage, error)
+	GetDailyBriefByDate(ctx context.Context, date string) (DailyBriefItem, error)
 }
 
-// Service 灏佽鐢ㄦ埛渚у唴瀹硅鍙栬鍒欍€?
+// Service 封装用户侧内容读取规则。
 type Service struct {
 	store Store
 }
@@ -149,22 +149,22 @@ func ApplyInfoQuality(item *InfoItem) {
 	switch {
 	case status == "complete" && item.DetailScore >= 80 && contentLength >= 120:
 		item.QualityLevel = "excellent"
-		item.QualitySummary = "璇︽儏瀹屾暣搴﹂珮锛屽彲浣滀负浜嬩欢鍒嗘瀽鐨勬牳蹇冩潵婧愩€?
+		item.QualitySummary = "详情完整度高，可作为事件分析的核心来源。"
 		item.NeedsAttention = false
 		item.AttentionPriority = 0
 	case status == "complete" && item.DetailScore >= 60 && contentLength >= 80:
 		item.QualityLevel = "usable"
-		item.QualitySummary = "璇︽儏鍙敤锛屼絾浠嶅缓璁户缁瀵熸洿澶氭潵婧愩€?
+		item.QualitySummary = "详情可用，但仍建议继续观察更多来源。"
 		item.NeedsAttention = false
 		item.AttentionPriority = 0
 	case status == "failed" || status == "list_only" || status == "pending" || item.DetailScore < 60 || contentLength < 80:
 		item.QualityLevel = "weak"
-		item.QualitySummary = "璇︽儏璐ㄩ噺鍋忓急锛岀郴缁熼渶瑕佺户缁ˉ鍋挎姄鍙栥€?
+		item.QualitySummary = "详情质量偏弱，系统需要继续补偿抓取。"
 		item.NeedsAttention = true
 		item.AttentionPriority = infoAttentionPriority(status, item.DetailScore, contentLength)
 	default:
 		item.QualityLevel = "usable"
-		item.QualitySummary = "璇︽儏鍩烘湰鍙敤锛屽悗缁細闅忔柊澧炴潵婧愮户缁牎鍑嗐€?
+		item.QualitySummary = "详情基本可用，后续会随新增来源继续校准。"
 		item.NeedsAttention = false
 		item.AttentionPriority = 0
 	}
@@ -203,12 +203,13 @@ func SplitCSV(raw string) []string {
 	}
 	return items
 }
+
 type DailyBriefItem struct {
 	ID        int64  `json:"id"`
 	BriefDate string `json:"brief_date"`
 	Headline  string `json:"headline"`
-	Summary   string `json:"summary"`
-	Content   string `json:"content"`
+	ContentMd  string `json:"content_md"`
+	ContentHtml string `json:"content_html"`
 	Status    string `json:"status"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
@@ -220,15 +221,6 @@ type DailyBriefPage struct {
 }
 
 func (s *Service) DailyBriefs(ctx context.Context, limit int, offset int) (DailyBriefPage, error) {
-	if limit < 1 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
-	}
 	return s.store.GetDailyBriefs(ctx, limit, offset)
 }
 
