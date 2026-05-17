@@ -217,6 +217,7 @@ Start-Bg -Name "info-serve" `
     -Command "go" `
     -Arguments "run ./cmd/server" `
     -EnvVars @{
+        GOROOT                     = "C:\Program Files\Go"
         INFO_SERVE_HTTP_ADDR       = ":$InfoServePort"
         INFO_SERVE_MYSQL_DSN       = $MYSQL_DSN
         INFO_SERVE_SESSION_SECRET  = "info-serve-local-dev-session-secret"
